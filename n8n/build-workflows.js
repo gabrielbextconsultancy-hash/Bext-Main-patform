@@ -43,9 +43,10 @@ const HEADERS = {
 };
 
 const sources = $input.all().map(i => i.json);
-const out = [];
+const helpers = this.helpers;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-for (const s of sources) {
+async function fetchOne(s) {
   const config = typeof s.config === 'string' ? JSON.parse(s.config) : (s.config || {});
   const target = s.method === 'rss' ? (config.feed_url || s.url) : s.url;
   let articles = [], status = 'ok', error = null;
@@ -54,14 +55,27 @@ for (const s of sources) {
     let html;
     if (config.requires_browser) {
       // Imperva-protected or client-rendered — the fetcher renders it in Chromium
-      // and solves the challenge.
-      const r = await this.helpers.httpRequest({
-        method: 'POST', url: FETCHER, json: true, timeout: 90000,
-        body: { url: target, timeout: 45000 },
-      });
-      html = r.html || '';
+      // and solves the challenge. It only runs two browsers at a time and answers
+      // 503 when both are busy, so back off and try again rather than dropping
+      // the source for the whole hour.
+      let last;
+      for (let attempt = 0; attempt < 6; attempt++) {
+        try {
+          const r = await helpers.httpRequest({
+            method: 'POST', url: FETCHER, json: true, timeout: 120000,
+            body: { url: target, timeout: 60000 },
+          });
+          html = r.html || '';
+          break;
+        } catch (e) {
+          last = e;
+          if (!String(e.message || '').includes('503')) throw e;
+          await sleep(5000 + attempt * 3000);
+        }
+      }
+      if (html === undefined) throw last ?? new Error('fetcher unavailable');
     } else {
-      html = await this.helpers.httpRequest({
+      html = await helpers.httpRequest({
         method: 'GET', url: target, headers: HEADERS, timeout: 45000,
       });
     }
@@ -74,10 +88,29 @@ for (const s of sources) {
     error = String(e.message || e).slice(0, 500);
   }
 
-  out.push({ json: { source_id: s.id, slug: s.slug, status, error, articles } });
+  return { json: { source_id: s.id, slug: s.slug, status, error, articles } };
 }
 
-return out;
+// Sequentially, 64 sources take longer than the task timeout — the browser-backed
+// ones alone are tens of seconds each. Plain HTTP sources run wide; browser ones
+// are held to the fetcher's own limit so they queue here instead of thrashing it.
+async function pool(items, size, fn) {
+  const results = [];
+  const queue = [...items];
+  await Promise.all(Array.from({ length: Math.min(size, queue.length) }, async () => {
+    while (queue.length) results.push(await fn(queue.shift()));
+  }));
+  return results;
+}
+
+const needsBrowser = s => {
+  const c = typeof s.config === 'string' ? JSON.parse(s.config) : (s.config || {});
+  return !!c.requires_browser;
+};
+
+const [plain, browser] = [sources.filter(s => !needsBrowser(s)), sources.filter(needsBrowser)];
+const [a, b] = await Promise.all([pool(plain, 10, fetchOne), pool(browser, 2, fetchOne)]);
+return [...a, ...b];
 `;
 
 // ─── Assembly ────────────────────────────────────────────────────────────────
@@ -108,21 +141,23 @@ function sourceIngestWorkflow() {
         parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: INGEST_CODE },
       },
       {
-        id: 'split', name: 'One row per article', type: 'n8n-nodes-base.code',
+        id: 'split', name: 'Collect articles', type: 'n8n-nodes-base.code',
         typeVersion: 2, position: pos(360, 0),
         parameters: {
           mode: 'runOnceForAllItems', language: 'javaScript',
           jsCode: `
-// Flatten to one item per article, and carry a status row per source so the
-// health of a source that returned nothing is still recorded.
-const articles = [], statuses = [];
+// One item carrying every article as JSON. Passing them individually would mean
+// one round-trip per article, and n8n's queryReplacement splits on commas — so
+// any article title containing a comma shifts every following parameter.
+const articles = [];
 for (const item of $input.all()) {
-  const r = item.json;
-  statuses.push({ source_id: r.source_id, status: r.status, error: r.error, count: r.articles.length });
-  for (const a of r.articles) articles.push({ json: a });
+  for (const a of item.json.articles) articles.push(a);
 }
-$getWorkflowStaticData('global').lastStatuses = statuses;
-return articles;
+// Same URL can surface from two sources in one run; the database unique index
+// would reject the whole statement rather than the row.
+const seen = new Set();
+const unique = articles.filter(a => !seen.has(a.url) && seen.add(a.url));
+return [{ json: { payload: JSON.stringify(unique), count: unique.length } }];
 `,
         },
       },
@@ -132,15 +167,15 @@ return articles;
         credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
         parameters: {
           operation: 'executeQuery',
-          // ON CONFLICT makes the hourly run idempotent — the same article
-          // reappearing on an index page is not a new article.
+          // ON CONFLICT makes the run idempotent — the same article still sitting
+          // on an index page an hour later is not a new article.
           query: `INSERT INTO articles (source_id, url, title, author, published_at, summary_raw, content_hash)
-VALUES ($1, $2, $3, $4, $5::timestamptz, $6, $7)
+SELECT source_id, url, title, author, published_at, summary_raw, content_hash
+FROM json_to_recordset($1::json) AS x(
+  source_id int, url text, title text, author text,
+  published_at timestamptz, summary_raw text, content_hash text)
 ON CONFLICT (url) DO NOTHING`,
-          options: {
-            queryReplacement:
-              '={{ $json.source_id }},{{ $json.url }},{{ $json.title }},{{ $json.author }},{{ $json.published_at }},{{ $json.summary_raw }},{{ $json.content_hash }}',
-          },
+          options: { queryReplacement: '={{ $json.payload }}' },
         },
       },
       {
@@ -174,11 +209,11 @@ WHERE s.id = v.source_id`,
       'Load active sources': { main: [[{ node: 'Fetch and parse', type: 'main', index: 0 }]] },
       'Fetch and parse': {
         main: [[
-          { node: 'One row per article', type: 'main', index: 0 },
+          { node: 'Collect articles', type: 'main', index: 0 },
           { node: 'Collect statuses', type: 'main', index: 0 },
         ]],
       },
-      'One row per article': { main: [[{ node: 'Insert articles', type: 'main', index: 0 }]] },
+      'Collect articles': { main: [[{ node: 'Insert articles', type: 'main', index: 0 }]] },
       'Collect statuses': { main: [[{ node: 'Record source health', type: 'main', index: 0 }]] },
     },
   };

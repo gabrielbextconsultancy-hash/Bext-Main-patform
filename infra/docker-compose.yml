@@ -107,6 +107,15 @@ services:
       # Read by the analysis workflow's Code node as $env.GEMINI_API_KEY.
       GEMINI_API_KEY: ${GEMINI_API_KEY}
 
+      # Code nodes may not require Node builtins unless named here. The ingest
+      # parser hashes article content with crypto to deduplicate stories that are
+      # syndicated across several sources under different URLs.
+      NODE_FUNCTION_ALLOW_BUILTIN: crypto
+
+      # The ingest Code node fetches 64 sources, 15 of them through a headless
+      # browser. The 300s default is not enough even with the work parallelised.
+      N8N_RUNNERS_TASK_TIMEOUT: 900
+
       # Trim executions so Postgres does not grow without bound — the ingest
       # workflow runs hourly and the analysis workflow every 30 minutes.
       EXECUTIONS_DATA_PRUNE: "true"

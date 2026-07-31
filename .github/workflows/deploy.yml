@@ -1,0 +1,74 @@
+name: Deploy to cPanel (bext.dev-environment.site)
+
+# On every push to main: tell cPanel to pull this repo and run .cpanel.yml,
+# which builds the dashboard and reloads Passenger. No SSH dependency.
+#
+# Required repo secret:
+#   CPANEL_API_TOKEN  — cPanel API token for user "devenvir"
+# Optional repo variables (defaults below):
+#   CPANEL_HOST (dev-environment.site) · CPANEL_IP (185.2.168.30)
+#   CPANEL_REPO_ROOT (/home/devenvir/bext-platform)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: cpanel-deploy
+  cancel-in-progress: false
+
+jobs:
+  build-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - name: Install & build (sanity gate before touching the server)
+        working-directory: dashboard
+        run: |
+          npm ci
+          npx next build
+
+  deploy:
+    needs: build-check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger cPanel git pull + deployment
+        env:
+          CPANEL_USER: devenvir
+          CPANEL_TOKEN: ${{ secrets.CPANEL_API_TOKEN }}
+          CPANEL_HOST: ${{ vars.CPANEL_HOST || 'dev-environment.site' }}
+          CPANEL_IP: ${{ vars.CPANEL_IP || '185.2.168.30' }}
+          CPANEL_REPO_ROOT: ${{ vars.CPANEL_REPO_ROOT || '/home/devenvir/bext-platform' }}
+        run: |
+          set -euo pipefail
+          [ -n "${CPANEL_TOKEN:-}" ] || { echo "::error::CPANEL_API_TOKEN secret missing"; exit 1; }
+          BASE="https://${CPANEL_HOST}:2083"
+          req() {
+            curl -sS -k --resolve "${CPANEL_HOST}:2083:${CPANEL_IP}" \
+              -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_TOKEN}" \
+              --data-urlencode "repository_root=${CPANEL_REPO_ROOT}" "$@"
+          }
+          echo "==> git pull on server"
+          req "${BASE}/execute/VersionControl/update" -o update.json
+          cat update.json
+          grep -q '"status":1' update.json || { echo "::error::pull failed"; exit 1; }
+          echo "==> run .cpanel.yml deployment"
+          req "${BASE}/execute/VersionControlDeployment/create" -o deploy.json
+          cat deploy.json
+          grep -q '"status":1' deploy.json || { echo "::error::deploy failed"; exit 1; }
+
+      - name: Verify app is live
+        run: |
+          for i in $(seq 1 10); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://bext.dev-environment.site/login || true)
+            echo "attempt $i: /login -> $code"
+            [ "$code" = "200" ] && exit 0
+            sleep 15
+          done
+          echo "::warning::/login did not return 200 yet (build may still be running server-side)"

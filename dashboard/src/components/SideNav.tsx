@@ -1,0 +1,36 @@
+'use client';
+
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+
+const NAV = [
+  { href: '/health', label: 'Connection Health', hint: 'Tools & configuration' },
+  { href: '/timeline', label: 'Timeline & Plan', hint: 'Checklist, deadlines, work plan' },
+  { href: '/overview', label: 'Overview', hint: 'Engagement progress (live DB)' },
+  { href: '/deliverables', label: 'Deliverables', hint: 'Brief coverage (live DB)' },
+  { href: '/sources', label: 'Sources', hint: 'News source pipeline (live DB)' },
+];
+
+export function SideNav() {
+  const pathname = usePathname();
+
+  return (
+    <nav className="space-y-1">
+      {NAV.map(n => {
+        const active = pathname === n.href || pathname.startsWith(n.href + '/');
+        return (
+          <Link
+            key={n.href}
+            href={n.href}
+            className={`block rounded-lg px-3 py-2 transition ${
+              active ? 'bg-ink-850 text-ink-100 ring-1 ring-inset ring-ink-700' : 'text-ink-300 hover:bg-ink-850/60 hover:text-ink-100'
+            }`}
+          >
+            <span className="block text-sm font-medium">{n.label}</span>
+            <span className="block text-[11px] text-ink-400">{n.hint}</span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}

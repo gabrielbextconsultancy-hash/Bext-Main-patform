@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import type { WorkStatus } from '@/lib/types';
 import { STATUS_LABEL } from '@/lib/types';
+import type { SetupStatus } from '@/lib/platform';
+import { SETUP_LABEL } from '@/lib/platform';
 
 const STATUS_STYLE: Record<WorkStatus, string> = {
   done: 'bg-ok/12 text-ok ring-ok/25',
@@ -15,6 +17,43 @@ export function StatusPill({ status }: { status: WorkStatus }) {
       className={`inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${STATUS_STYLE[status]}`}
     >
       {STATUS_LABEL[status]}
+    </span>
+  );
+}
+
+const SETUP_STYLE: Record<SetupStatus, string> = {
+  configured: 'bg-ok/12 text-ok ring-ok/25',
+  in_progress: 'bg-progress/12 text-progress ring-progress/25',
+  pending: 'bg-warn/12 text-warn ring-warn/25',
+  optional: 'bg-ink-800 text-ink-400 ring-ink-700',
+};
+
+const SETUP_DOT: Record<SetupStatus, string> = {
+  configured: 'bg-ok',
+  in_progress: 'bg-progress',
+  pending: 'bg-warn',
+  optional: 'bg-ink-600',
+};
+
+export function SetupPill({ status }: { status: SetupStatus }) {
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${SETUP_STYLE[status]}`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${SETUP_DOT[status]}`} />
+      {SETUP_LABEL[status]}
+    </span>
+  );
+}
+
+export function CostBadge({ cost, paid }: { cost: string; paid: boolean }) {
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset ${
+        paid ? 'bg-brief-b/10 text-brief-b ring-brief-b/25' : 'bg-ink-800 text-ink-300 ring-ink-700'
+      }`}
+    >
+      {cost}
     </span>
   );
 }
