@@ -46,6 +46,28 @@ services:
     networks:
       - bext_internal
 
+  fetcher:
+    build: ../fetcher
+    image: bext-fetcher:latest
+    container_name: bext-fetcher
+    restart: always
+    environment:
+      PORT: 8080
+      # Chromium is memory-hungry; two at a time is what this VPS comfortably takes.
+      MAX_CONCURRENT: 2
+    # Chromium needs more than Docker's default 64 MB of shared memory or it
+    # crashes partway through rendering.
+    shm_size: 512mb
+    networks:
+      - bext_internal
+    # Reached only as http://fetcher:8080 from n8n. Never published.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
   n8n:
     image: docker.n8n.io/n8nio/n8n:2.32.6
     container_name: bext-n8n

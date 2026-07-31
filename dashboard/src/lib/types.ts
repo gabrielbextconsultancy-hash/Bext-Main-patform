@@ -34,6 +34,8 @@ export interface SourceRow {
   last_fetch_at: string | null;
   last_status: 'ok' | 'empty' | 'error' | 'never_run';
   consecutive_failures: number;
+  requires_browser: boolean;
+  note: string | null;
 }
 
 export const ENGAGEMENTS: Record<Engagement, { label: string; short: string; accent: string }> = {

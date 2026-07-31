@@ -61,8 +61,23 @@ export default async function Sources() {
                           inactive
                         </span>
                       )}
+                      {s.note && (
+                        <p className="mt-0.5 max-w-xl text-xs leading-relaxed text-ink-400">
+                          {s.note}
+                        </p>
+                      )}
                     </td>
-                    <td className="py-2 pr-4 text-ink-400">{s.method}</td>
+                    <td className="py-2 pr-4 text-ink-400">
+                      {s.method}
+                      {s.requires_browser && (
+                        <span
+                          className="ml-2 rounded bg-progress/12 px-1.5 py-0.5 text-[10px] text-progress"
+                          title="Refuses plain HTTP requests — rendered through the headless browser service"
+                        >
+                          browser
+                        </span>
+                      )}
+                    </td>
                     <td className="py-2 pr-4 tnum text-ink-400">
                       {s.last_fetch_at
                         ? new Date(s.last_fetch_at).toLocaleString('en-AU', {

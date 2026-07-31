@@ -85,14 +85,16 @@ sources:
     url: "https://www.reuters.com/markets/carbon/"
     method: scrape
     requires_browser: true
-    note: Returns 401 to automated requests and is subscription-gated. Needs an authenticated session or a licensed feed.
+    note: Returns 401 to every automated request; subscription-gated. Needs a licensed feed or a paid seat — raise with the client.
+    active: false
   - slug: spglobal-energy-transition
     name: "S&P Global — Energy Transition"
     category: International Industry Updates
     url: "https://www.spglobal.com/en/research-insights/market-insights/energy-transition#news"
     method: scrape
     requires_browser: true
-    note: Returns 403 to automated requests. Largely subscriber content.
+    note: Returns 403 to plain HTTP and to headless Chromium with challenge solving. Subscriber content. Raise with the client.
+    active: false
   - slug: iea-energy-efficiency
     name: IEA — Energy Efficiency
     category: International Industry Updates
@@ -109,8 +111,8 @@ sources:
     name: UNFCCC
     category: International Industry Updates
     url: "https://unfccc.int/news"
-    method: rss
-    feed_url: "https://unfccc.int/rss.xml"
+    method: scrape
+    requires_browser: true
   - slug: ec-energy
     name: European Commission — Energy
     category: International Industry Updates
@@ -148,7 +150,7 @@ sources:
   - slug: renewables-now
     name: Renewables Now
     category: International Industry Updates
-    url: "https://renewablesnow.com/regions/latin-america/"
+    url: "https://renewablesnow.com/news/"
     method: scrape
     requires_browser: true
     note: "Brief link is the Latin America region page, which looks unintended for an Australian energy brief. CONFIRM the intended region."
@@ -164,19 +166,21 @@ sources:
     name: AER — News
     category: Industry Updates
     url: "https://www.aer.gov.au/news/articles"
-    method: rss
-    feed_url: "https://www.aer.gov.au/rss.xml"
+    method: scrape
+    requires_browser: true
+    note: aer.gov.au is JavaScript-rendered and terminates HTTP/2 connections; headless Chromium then times out. Needs investigation — possibly their JSON API.
   - slug: aer-registers
     name: AER — Registers Status
     category: Industry Updates
     url: "https://www.aer.gov.au/industry/registers"
-    method: rss
-    feed_url: "https://www.aer.gov.au/rss.xml"
+    method: scrape
     filter:
       path_contains:
         - /industry/registers
         - /exemptions
         - /authorisation
+    requires_browser: true
+    note: Same as aer-news.
   - slug: aemc-news
     name: AEMC — News Centre
     category: Industry Updates
@@ -197,14 +201,12 @@ sources:
     name: Clean Energy Regulator — News
     category: Industry Updates
     url: "https://cer.gov.au/news-and-media/news#all-news"
-    method: rss
-    feed_url: "https://cer.gov.au/rss.xml"
+    method: scrape
   - slug: cer-media
     name: Clean Energy Regulator — Media Releases
     category: Industry Updates
     url: "https://cer.gov.au/news-and-media/media-centre/media-releases#all-media-releases"
-    method: rss
-    feed_url: "https://cer.gov.au/rss.xml"
+    method: scrape
     filter:
       path_contains:
         - /media-releases
@@ -283,6 +285,8 @@ sources:
     url: "https://www.dcceew.gov.au/about/news/all?f%5B0%5D=news_type%3A1863&f%5B1%5D=topic%3A1883"
     method: scrape
     requires_browser: true
+    active: false
+    note: Returns a hard 403 with no solvable challenge, to both HTTP and headless Chromium. The DCCEEW newsroom needs another route — RSS by topic, or the minister feed as a partial substitute.
   - slug: energy-gov-au
     name: Energy.gov.au — News
     category: Industry Updates
@@ -293,8 +297,7 @@ sources:
     name: Minister Bowen — Media Releases
     category: Industry Updates
     url: "https://minister.dcceew.gov.au/bowen"
-    method: rss
-    feed_url: "https://minister.dcceew.gov.au/rss.xml"
+    method: scrape
   - slug: aph-bills
     name: "Parliament of Australia — Bills & Legislation"
     category: Industry Updates
@@ -306,6 +309,7 @@ sources:
     category: Industry Updates
     url: "https://www.premier.vic.gov.au/media-centre?portfolio=Climate+Action&portfolio=Energy+and+Resources&portfolio=Industry+and+Innovation&portfolio=Resources&portfolio=Small+Business&portfolio=State+Electricity+Commission"
     method: scrape
+    requires_browser: true
   - slug: nabers
     name: NABERS
     category: Industry Updates
@@ -326,8 +330,7 @@ sources:
     name: Energy Rating / GEMS
     category: Industry Updates
     url: "https://www.energyrating.gov.au/news-and-stories"
-    method: rss
-    feed_url: "https://www.energyrating.gov.au/rss.xml"
+    method: scrape
   - slug: disr
     name: DISR
     category: Industry Updates
@@ -337,8 +340,7 @@ sources:
     name: Clean Energy Regulator — NGER
     category: Industry Updates
     url: "https://cer.gov.au/news-and-media/news?schemes=30#all-news"
-    method: rss
-    feed_url: "https://cer.gov.au/rss.xml"
+    method: scrape
     filter:
       keywords:
         - NGER
@@ -400,15 +402,13 @@ sources:
     name: Australian Alliance for Energy Productivity (AIDC)
     category: Industry Updates
     url: "https://aidc.org.au/aidc-media-releases/"
-    method: rss
-    feed_url: "https://aidc.org.au/feed/"
+    method: scrape
     note: Australian Alliance for Energy Productivity now trades as AIDC; the brief link already points at aidc.org.au.
   - slug: ahc
     name: Australian Hydrogen Council
     category: Industry Updates
-    url: "https://h2council.com.au/news/"
-    method: rss
-    feed_url: "https://aidc.org.au/feed/"
+    url: "https://aidc.org.au/media-releases/"
+    method: scrape
     note: Brief supplied no link for the Australian Hydrogen Council. h2council.com.au redirects to aidc.org.au — CONFIRM with client before relying on this.
   - slug: smart-energy-council
     name: Smart Energy Council
@@ -432,8 +432,7 @@ sources:
     name: Climate Works Centre
     category: Industry Updates
     url: "https://climateworkscentre.org/news/"
-    method: rss
-    feed_url: "https://climateworkscentre.org/feed/"
+    method: scrape
   - slug: race-2030
     name: RACE for 2030
     category: Industry Updates

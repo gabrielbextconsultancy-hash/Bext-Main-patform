@@ -57,7 +57,9 @@ export const getSourceSummary = async () => {
 export const getSources = () =>
   tryQuery<SourceRow>(
     `SELECT id, slug, name, category, method, active, last_fetch_at::text,
-            last_status, consecutive_failures
+            last_status, consecutive_failures,
+            coalesce((config->>'requires_browser')::boolean, false) AS requires_browser,
+            config->>'note' AS note
      FROM sources ORDER BY category, name`
   );
 
