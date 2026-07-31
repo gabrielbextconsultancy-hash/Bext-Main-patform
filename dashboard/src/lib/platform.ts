@@ -168,12 +168,15 @@ export const TOOLS: PlatformTool[] = [
     owner: 'You',
     status: 'pending',
     note:
-      'The free Developer Sandbox is gone — Microsoft now requires a Visual Studio ' +
-      'Professional or Enterprise annual subscription (~US$1,199/yr) to qualify. ' +
-      'But this is no longer this week’s blocker: the app registration and Graph ' +
-      'are free on a no-cost Entra tenant, and Brief A sends over SMTP. A licence ' +
-      'is only needed for Brief B build — Teams transcripts and SharePoint — so it ' +
-      'can wait until late August rather than burning a 30-day trial now.',
+      'The free Developer Sandbox is gone — Microsoft requires a Visual Studio ' +
+      'Professional or Enterprise annual subscription (~US$1,199/yr) to qualify, ' +
+      'confirmed on the developer portal. A directory is the real prerequisite: an ' +
+      'Azure free signup creates one at no cost (card needed for identity check ' +
+      'only), and that alone unlocks the app registration and Graph auth. Paid M365 ' +
+      'licences are a separate, later step — they buy the data behind Graph ' +
+      '(mailbox, SharePoint, Teams) and are needed for Brief B build, not Brief A, ' +
+      'which sends over SMTP.',
+    thisWeek: true,
   },
   {
     id: 'azure-app-reg',
@@ -185,11 +188,15 @@ export const TOOLS: PlatformTool[] = [
     owner: 'You',
     status: 'pending',
     note:
-      'FREE and doable today — it does not need a paid tenant, only an Entra ' +
-      'directory (creatable at no cost). Click-path and the nine required ' +
-      'application permissions are in graph/app-registration.md; graph/verify.js ' +
-      'runs the moment tenant/client/secret land. Doing this now proves the whole ' +
-      'auth chain before any licence is bought.',
+      'BLOCKED — verified in the portal on 31 Jul. Signing in to entra.microsoft.com ' +
+      'with the personal account gabriel.bextconsultancy@gmail.com reaches App ' +
+      'registrations, but New registration refuses: "The ability to create ' +
+      'applications outside of a directory has been deprecated." A personal account ' +
+      'has no Entra directory. Microsoft offers two routes — the M365 Developer ' +
+      'Program (already refused, needs Visual Studio Pro/Enterprise) or signing up ' +
+      'for Azure, which creates a real directory. The Azure free account costs ' +
+      'nothing but needs a card for identity verification. Once a directory exists, ' +
+      'the registration and Graph are free permanently.',
     thisWeek: true,
   },
   {

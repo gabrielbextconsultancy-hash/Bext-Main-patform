@@ -1,17 +1,41 @@
 # Azure App Registration — BEXT Automation (Dev)
 
-This is the credential that lets n8n act against the Microsoft 365 Developer Sandbox:
-Outlook mail, Teams meetings, SharePoint and OneDrive files.
+This is the credential that lets n8n act against Microsoft 365: Outlook mail, Teams
+meetings, SharePoint and OneDrive files.
 
 **You have to do this part in the browser.** It involves creating a credential and granting
 tenant-wide consent — neither of which should be automated. It takes about ten minutes.
 
 ---
 
+## 0. You need a directory first — verified blocker
+
+Checked in the portal on 31 July 2026. Signing in to `entra.microsoft.com` with the
+**personal** account `gabriel.bextconsultancy@gmail.com` reaches App registrations, but
+**New registration is refused**:
+
+> "The ability to create applications outside of a directory has been deprecated. You may
+> get a new directory by joining the M365 Developer Program or signing up for Azure."
+
+A personal Microsoft account has no Entra directory, and app registrations can no longer
+exist outside one. The portal reports tenant `f8cdef31-a31e-4b4a-93e4-5f571e91255a`, which
+is the placeholder shown for personal-account context — not a real directory.
+
+| Route | Verdict |
+|---|---|
+| **M365 Developer Program** | Refused — requires a Visual Studio Professional or Enterprise *annual* subscription (~US$1,199/yr) |
+| **Azure free signup** — https://azure.microsoft.com/free | **The viable path.** Free account that creates a real Entra directory. A card is required for identity verification; nothing is charged without an explicit upgrade |
+
+Once a directory exists, everything below works, and the app registration and Graph API are
+free permanently. Paid M365 licences remain a **separate, later** step — they buy the data
+behind Graph (mailbox, SharePoint, Teams), not access to the API.
+
+---
+
 ## 1. Register the application
 
-1. Sign in to **https://entra.microsoft.com** with the admin account of your M365 Developer
-   Sandbox tenant.
+1. Sign in to **https://entra.microsoft.com** with an account that has a real Entra
+   directory — see step 0.
 2. **Applications → App registrations → New registration**.
 3. Fill in:
    - **Name**: `BEXT Automation (Dev)`
