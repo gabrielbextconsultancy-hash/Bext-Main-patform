@@ -3,6 +3,10 @@ import { SLIDES } from './slides';
 
 export const metadata = {
   title: 'Proposal — Business Structure Efficiency | BEXT Consultancy',
+  description: 'Draft plan for an AI-enabled business operating model. Due 11 August 2026.',
+  // Reachable without signing in, so it can be sent as a link — but a client
+  // proposal should not turn up in search results.
+  robots: { index: false, follow: false },
 };
 
 export default function ProposalPage() {

@@ -8,6 +8,7 @@ import { Box, Cols, Flow, Step, Table, Tag, type Slide } from '@/components/Deck
 export const SLIDES: Slide[] = [
   // 1 ─────────────────────────────────────────────────────────────────
   {
+    section: 'Overview',
     kicker: 'BEXT Consultancy · Draft Plan · 11 August 2026',
     title: 'Business Structure Efficiency',
     lede:
@@ -38,6 +39,7 @@ export const SLIDES: Slide[] = [
 
   // 2 ─────────────────────────────────────────────────────────────────
   {
+    section: 'Overview',
     kicker: 'The ask',
     title: 'What the brief asks for',
     lede: 'Maximise time spent consulting. Minimise administration.',
@@ -75,6 +77,7 @@ export const SLIDES: Slide[] = [
 
   // 3 ─────────────────────────────────────────────────────────────────
   {
+    section: 'Current state',
     kicker: 'Current state · deliverable 1',
     title: 'Eleven platforms, no connective tissue',
     lede:
@@ -100,6 +103,7 @@ export const SLIDES: Slide[] = [
 
   // 4 ─────────────────────────────────────────────────────────────────
   {
+    section: 'Current state',
     kicker: 'Diagnosis',
     title: 'The same fact gets entered four times',
     body: (
@@ -136,6 +140,7 @@ export const SLIDES: Slide[] = [
 
   // 5 ─────────────────────────────────────────────────────────────────
   {
+    section: 'Future state',
     kicker: 'Future state · deliverable 2',
     title: 'Business Systems Integration Diagram',
     lede: 'Which system owns which fact, and how information moves.',
@@ -170,6 +175,7 @@ export const SLIDES: Slide[] = [
 
   // 6 ─────────────────────────────────────────────────────────────────
   {
+    section: 'Future state',
     kicker: 'Future state · operating model',
     title: 'One owner per fact',
     lede: 'Duplication ends when every type of information has exactly one home and everything else reads from it.',
@@ -191,6 +197,7 @@ export const SLIDES: Slide[] = [
 
   // 7 ─────────────────────────────────────────────────────────────────
   {
+    section: 'Review areas',
     kicker: 'Review area 3 · stated highest priority',
     title: 'The meeting workflow',
     lede:
@@ -230,6 +237,7 @@ export const SLIDES: Slide[] = [
 
   // 8 ─────────────────────────────────────────────────────────────────
   {
+    section: 'Review areas',
     kicker: 'Review areas 4 & 5',
     title: 'Email and documents',
     body: (
@@ -281,6 +289,7 @@ export const SLIDES: Slide[] = [
 
   // 9 ─────────────────────────────────────────────────────────────────
   {
+    section: 'Review areas',
     kicker: 'Review areas 7 & 2',
     title: 'Knowledge management — where AI stops being an assistant',
     lede:
@@ -315,6 +324,7 @@ export const SLIDES: Slide[] = [
 
   // 10 ────────────────────────────────────────────────────────────────
   {
+    section: 'Review areas',
     kicker: 'Review areas 6 & 8',
     title: 'Marketing and structured capture',
     body: (
@@ -363,6 +373,7 @@ export const SLIDES: Slide[] = [
 
   // 11 ────────────────────────────────────────────────────────────────
   {
+    section: 'Review areas',
     kicker: 'Review area 9 · deliverable 5',
     title: 'Software recommendations',
     lede:
@@ -397,6 +408,7 @@ export const SLIDES: Slide[] = [
 
   // 12 ────────────────────────────────────────────────────────────────
   {
+    section: 'Environment',
     kicker: 'Review area 9 · what is running today',
     title: 'Development environment, and what BEXT will own',
     lede:
@@ -464,6 +476,7 @@ export const SLIDES: Slide[] = [
 
   // 12 ────────────────────────────────────────────────────────────────
   {
+    section: 'Dependencies',
     kicker: 'Deliverable 4',
     title: 'Automation opportunities, ranked',
     lede: 'Ordered by return against effort. Maintenance is the ongoing cost once running.',
@@ -487,6 +500,7 @@ export const SLIDES: Slide[] = [
 
   // 13 ────────────────────────────────────────────────────────────────
   {
+    section: 'Delivery',
     kicker: 'Dependencies · please read',
     title: 'What is already provided, and what only you can provide',
     lede:
@@ -561,6 +575,7 @@ export const SLIDES: Slide[] = [
 
   // 14 ────────────────────────────────────────────────────────────────
   {
+    section: 'Delivery',
     kicker: 'Delivery',
     title: 'Path to 8 September',
     body: (
@@ -602,6 +617,7 @@ export const SLIDES: Slide[] = [
 
   // 14 ────────────────────────────────────────────────────────────────
   {
+    section: 'Close',
     kicker: 'Honest assessment',
     title: 'Risks and open questions',
     lede: 'Stated now rather than discovered in September.',
@@ -629,6 +645,7 @@ export const SLIDES: Slide[] = [
 
   // 15 ────────────────────────────────────────────────────────────────
   {
+    section: 'Close',
     kicker: 'In one line',
     title: 'The business runs itself. You approve it.',
     body: (

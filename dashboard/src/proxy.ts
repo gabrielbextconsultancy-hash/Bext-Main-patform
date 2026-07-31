@@ -20,6 +20,13 @@ export async function proxy(req: NextRequest) {
     return NextResponse.redirect(new URL(pathname + req.nextUrl.search, base), 301);
   }
 
+  // The proposal is the landing page — it is the artefact being presented at the
+  // moment, and it is public, so this has to resolve before the session check or
+  // an anonymous visitor to the root gets bounced to a login they do not need.
+  if (pathname === '/') {
+    return NextResponse.redirect(new URL('/proposal', base));
+  }
+
   if (PUBLIC.some(p => pathname === p || pathname.startsWith(p + '/'))) {
     return NextResponse.next();
   }
@@ -27,11 +34,6 @@ export async function proxy(req: NextRequest) {
   const ok = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
   if (!ok) {
     return NextResponse.redirect(new URL('/login', base));
-  }
-
-  // Landing page is Connection Health.
-  if (pathname === '/') {
-    return NextResponse.redirect(new URL('/health', base));
   }
 
   return NextResponse.next();

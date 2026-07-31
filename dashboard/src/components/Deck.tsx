@@ -8,6 +8,9 @@ export interface Slide {
   title: string;
   /** Optional standfirst under the title. */
   lede?: string;
+  /** Groups slides under a heading in the header nav, so a reader can jump
+   *  straight to a part of the plan instead of stepping through it. */
+  section: string;
   body: React.ReactNode;
 }
 
@@ -51,8 +54,34 @@ export function Deck({ slides, footer }: { slides: Slide[]; footer?: string }) {
 
   const s = slides[i];
 
+  // First slide index for each section, in slide order — the header jumps here.
+  const sections: { name: string; at: number }[] = [];
+  slides.forEach((sl, n) => {
+    if (!sections.some(x => x.name === sl.section)) sections.push({ name: sl.section, at: n });
+  });
+
   return (
     <div ref={shell} className={full ? 'flex h-screen flex-col bg-ink-950 p-8' : ''}>
+      {/* Section header — jump straight to a part of the plan */}
+      <div className="mb-3 flex flex-wrap items-center gap-1 border-b border-ink-800 pb-3">
+        {sections.map(sec => {
+          const active = s.section === sec.name;
+          return (
+            <button
+              key={sec.name}
+              onClick={() => go(sec.at)}
+              className={`rounded-lg px-2.5 py-1 text-xs transition ${
+                active
+                  ? 'bg-brief-b/15 text-brief-b ring-1 ring-inset ring-brief-b/30'
+                  : 'text-ink-400 hover:bg-ink-850 hover:text-ink-100'
+              }`}
+            >
+              {sec.name}
+            </button>
+          );
+        })}
+      </div>
+
       {/* Slide */}
       <article
         key={i}
