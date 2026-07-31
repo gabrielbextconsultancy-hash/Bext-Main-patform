@@ -61,4 +61,3 @@ See `docs/05-runbook.md` for deploy, tunnel, and migration commands.
 |---|---|
 | n8n (BEXT) | https://bext-n8n.srv1866850.hstgr.cloud |
 | Dashboard | https://bext.srv1866850.hstgr.cloud |
-| n8n (Premier Fitness — do not touch) | https://n8n.srv1866850.hstgr.cloud |

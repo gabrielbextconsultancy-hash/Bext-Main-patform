@@ -46,6 +46,25 @@ export function SetupPill({ status }: { status: SetupStatus }) {
   );
 }
 
+const LIVE_STYLE: Record<string, { ring: string; dot: string; label: string }> = {
+  up: { ring: 'bg-ok/12 text-ok ring-ok/25', dot: 'bg-ok', label: 'Live' },
+  down: { ring: 'bg-blocked/12 text-blocked ring-blocked/25', dot: 'bg-blocked', label: 'Down' },
+  degraded: { ring: 'bg-warn/12 text-warn ring-warn/25', dot: 'bg-warn', label: 'Degraded' },
+  unchecked: { ring: 'bg-ink-800 text-ink-400 ring-ink-700', dot: 'bg-ink-600', label: 'No probe' },
+};
+
+export function LivePill({ live }: { live: string }) {
+  const s = LIVE_STYLE[live] ?? LIVE_STYLE.unchecked;
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${s.ring}`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${s.dot} ${live === 'up' ? 'animate-pulse' : ''}`} />
+      {s.label}
+    </span>
+  );
+}
+
 export function CostBadge({ cost, paid }: { cost: string; paid: boolean }) {
   return (
     <span
