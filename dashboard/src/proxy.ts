@@ -1,10 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { SESSION_COOKIE, verifySession } from '@/lib/auth';
 
-// /proposal is a client-facing deliverable — it has to open from a link sent to
-// the client, so it cannot sit behind the admin session. It carries a noindex
-// meta tag instead, so it is shareable without being discoverable.
-const PUBLIC = ['/login', '/api/login', '/proposal'];
+const PUBLIC = ['/login', '/api/login'];
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
