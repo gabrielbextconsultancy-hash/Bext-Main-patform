@@ -110,7 +110,9 @@ services:
       # Code nodes may not require Node builtins unless named here. The ingest
       # parser hashes article content with crypto to deduplicate stories that are
       # syndicated across several sources under different URLs.
-      NODE_FUNCTION_ALLOW_BUILTIN: crypto
+      # crypto hashes article content to deduplicate syndicated stories; url
+      # provides the URL constructor, which the sandbox does not expose globally.
+      NODE_FUNCTION_ALLOW_BUILTIN: crypto,url
 
       # The ingest Code node fetches 64 sources, 15 of them through a headless
       # browser. The 300s default is not enough even with the work parallelised.

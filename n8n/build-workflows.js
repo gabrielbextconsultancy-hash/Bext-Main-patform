@@ -31,7 +31,10 @@ const pos = (x, y) => [x, y];
 
 const INGEST_CODE = `
 // --- shared parser, generated from n8n/lib/ingest.js — do not edit here ---
+// n8n's Code sandbox does not expose the WHATWG URL global that the parser uses
+// to resolve relative hrefs, so pull it off the url builtin explicitly.
 const crypto = require('crypto');
+const { URL } = require('url');
 ${INGEST_SRC}
 // --- end shared parser ---
 
