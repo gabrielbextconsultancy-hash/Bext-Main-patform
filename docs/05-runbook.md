@@ -97,6 +97,26 @@ grep -E '^PG_' ../.env > .env.local
 Every page reads Postgres directly through a server component. With the tunnel closed
 the pages render a "database unreachable" panel rather than erroring.
 
+## Workflows
+
+Generated and deployed from the repo, never hand-edited in the UI:
+
+```bash
+node n8n/build-workflows.js         # build, deploy, write JSON to n8n/workflows/
+node n8n/build-workflows.js --dry   # build and write JSON only
+```
+
+The parser in `n8n/lib/ingest.js` is inlined into the Code node at build time, so the
+implementation tested by `node n8n/dry-run.js` is the one that runs in production.
+
+Grouping is by **tag**, not folder: `feat:folders` requires an enterprise licence and is
+rejected on Community Edition. Every workflow is named `BEXT — ...` and carries the
+`BEXT Consultancy` tag, which the build script applies.
+
+The public API has no manual-run endpoint (`POST /workflows/{id}/run` returns 405), so a
+schedule-triggered workflow can only be tried from the UI's **Execute workflow** button
+or by waiting for its next tick.
+
 ## n8n instance MCP
 
 n8n exposes an instance-level MCP endpoint at `/mcp-server/http`, authenticated with an

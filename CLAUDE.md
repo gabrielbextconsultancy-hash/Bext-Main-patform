@@ -11,7 +11,9 @@ Two engagements, hard client deadlines between 11 Aug and 8 Sep 2026. See `READM
    (`/docker/n8n`) for a different client. BEXT lives in project `bext` (`/docker/bext`) only.
    The `n8n-pf` / `hostinger-pf` / `supabase-pf` MCP servers are PF-scoped — do not create BEXT
    workflows through `n8n-pf`.
-2. **Every BEXT workflow goes in the n8n folder "BEXT Consultancy".** No loose workflows.
+2. **Every BEXT workflow is named `BEXT — ...` and tagged `BEXT Consultancy`.** Folders
+   are an enterprise-licensed feature (`feat:folders` is rejected on Community), so tags
+   are the grouping mechanism. `n8n/build-workflows.js` applies the tag automatically.
 3. **Secrets never get committed.** `.env` is gitignored. Credentials live in n8n's credential
    store and `.env` — never inline in workflow JSON or SQL.
 4. **`N8N_ENCRYPTION_KEY` is irreplaceable.** Losing it makes every stored credential unreadable.

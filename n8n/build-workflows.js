@@ -184,6 +184,133 @@ WHERE s.id = v.source_id`,
   };
 }
 
+// ─── Workflow 2: Article Analysis ────────────────────────────────────────────
+
+// Ranking is what makes the sheet readable: 68 sources produce far more than
+// anyone wants at 5am, so each article gets a relevance score and the report
+// takes the top of each section.
+const ANALYSIS_PROMPT = `You are briefing an Australian energy and sustainability consultant.
+They advise on energy efficiency, building performance, renewables, and the regulatory
+environment across Australia, with Victoria as their main market.
+
+For each article below, return a JSON object with:
+  id               the article id, unchanged
+  summary          two sentences, plain English, what happened and why it matters to them
+  relevance_score  0-100. Score high for Australian regulatory change, funding and grant
+                   programs, energy efficiency and building performance, Victorian schemes
+                   (VEU, Solar Victoria, SEC), and market rule changes. Score low for
+                   overseas consumer news, corporate PR, and anything already routine.
+  topics           up to 4 short lowercase tags
+  entities         named organisations, schemes or people mentioned
+
+Return ONLY a JSON array, no markdown fence, no commentary.
+
+ARTICLES:
+`;
+
+function articleAnalysisWorkflow() {
+  return {
+    name: 'BEXT — Article Analysis',
+    settings: { executionOrder: 'v1', timezone: 'Australia/Melbourne' },
+    nodes: [
+      {
+        id: 'trigger', name: 'Every 30 minutes', type: 'n8n-nodes-base.scheduleTrigger',
+        typeVersion: 1.2, position: pos(-320, 0),
+        parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 30 }] } },
+      },
+      {
+        id: 'load', name: 'Load unanalysed', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(-100, 0),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        parameters: {
+          operation: 'executeQuery',
+          // Batched at 40 to stay inside the free tier's rate limit and keep any
+          // single model call small enough to stay coherent.
+          query: `SELECT a.id, a.title, a.summary_raw, s.name AS source_name, s.category
+FROM articles a
+JOIN sources s ON s.id = a.source_id
+LEFT JOIN article_analysis an ON an.article_id = a.id
+WHERE an.article_id IS NULL
+ORDER BY a.fetched_at DESC
+LIMIT 40`,
+          options: {},
+        },
+      },
+      {
+        id: 'analyse', name: 'Score with Gemini', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(140, 0),
+        parameters: {
+          mode: 'runOnceForAllItems', language: 'javaScript',
+          jsCode: `
+const rows = $input.all().map(i => i.json);
+if (rows.length === 0) return [];
+
+const MODEL = 'gemini-3.6-flash';
+const KEY = $env.GEMINI_API_KEY;
+const PROMPT = ${JSON.stringify(ANALYSIS_PROMPT)};
+
+const payload = rows.map(r => ({
+  id: r.id,
+  source: r.source_name,
+  category: r.category,
+  title: r.title,
+  excerpt: (r.summary_raw || '').slice(0, 600),
+}));
+
+const res = await this.helpers.httpRequest({
+  method: 'POST',
+  url: \`https://generativelanguage.googleapis.com/v1beta/models/\${MODEL}:generateContent?key=\${KEY}\`,
+  json: true,
+  timeout: 120000,
+  body: {
+    contents: [{ parts: [{ text: PROMPT + JSON.stringify(payload, null, 1) }] }],
+    generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
+  },
+});
+
+const text = res?.candidates?.[0]?.content?.parts?.[0]?.text ?? '[]';
+let parsed;
+try { parsed = JSON.parse(text); }
+catch { throw new Error('Gemini returned unparseable JSON: ' + text.slice(0, 300)); }
+
+const valid = new Set(rows.map(r => r.id));
+return parsed
+  .filter(p => valid.has(p.id))
+  .map(p => ({ json: {
+    article_id: p.id,
+    summary: String(p.summary ?? '').slice(0, 2000),
+    relevance_score: Math.max(0, Math.min(100, Number(p.relevance_score) || 0)),
+    topics: Array.isArray(p.topics) ? p.topics.slice(0, 4) : [],
+    entities: Array.isArray(p.entities) ? p.entities.slice(0, 10) : [],
+    model: MODEL,
+  }}));
+`,
+        },
+      },
+      {
+        id: 'save', name: 'Save analysis', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(380, 0),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        parameters: {
+          operation: 'executeQuery',
+          query: `INSERT INTO article_analysis (article_id, summary, relevance_score, topics, entities, model)
+VALUES ($1, $2, $3, string_to_array(nullif($4,''), '|'), string_to_array(nullif($5,''), '|'), $6)
+ON CONFLICT (article_id) DO NOTHING`,
+          options: {
+            queryReplacement:
+              '={{ $json.article_id }},{{ $json.summary }},{{ $json.relevance_score }},{{ $json.topics.join("|") }},{{ $json.entities.join("|") }},{{ $json.model }}',
+          },
+        },
+      },
+    ],
+    connections: {
+      'Every 30 minutes': { main: [[{ node: 'Load unanalysed', type: 'main', index: 0 }]] },
+      'Load unanalysed': { main: [[{ node: 'Score with Gemini', type: 'main', index: 0 }]] },
+      'Score with Gemini': { main: [[{ node: 'Save analysis', type: 'main', index: 0 }]] },
+    },
+  };
+}
+
 // ─── Deploy ──────────────────────────────────────────────────────────────────
 
 async function deploy(wf) {
@@ -224,4 +351,5 @@ async function deploy(wf) {
     process.exit(1);
   }
   await deploy(sourceIngestWorkflow());
+  await deploy(articleAnalysisWorkflow());
 })();

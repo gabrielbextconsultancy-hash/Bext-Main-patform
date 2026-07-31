@@ -104,6 +104,9 @@ services:
       # Irreplaceable. Losing this makes every stored credential unreadable.
       N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
 
+      # Read by the analysis workflow's Code node as $env.GEMINI_API_KEY.
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+
       # Trim executions so Postgres does not grow without bound — the ingest
       # workflow runs hourly and the analysis workflow every 30 minutes.
       EXECUTIONS_DATA_PRUNE: "true"
