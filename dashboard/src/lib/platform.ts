@@ -310,11 +310,11 @@ export const ENGAGEMENT_WORK: EngagementPlan[] = [
     title: 'A — Automated Daily Industry & Marketing Insight Summary',
     goal: 'One automated news sheet emailed every day at 5:00am AEST.',
     activities: [
-      'Monitor ~40 industry sources (RSS + scraping) across Australian News, International Industry, Industry Updates, Grants / Funding, LinkedIn',
-      'n8n source-ingest workflow pulling articles into PostgreSQL',
-      'AI article analysis with Gemini — categorise, deduplicate, summarise',
+      'Monitor 68 briefed sources (26 RSS, 29 scraped, 15 via headless browser) across Australian News, International Industry, Industry Updates, Grants / Funding, LinkedIn',
+      'n8n source-ingest workflow pulling articles into PostgreSQL — running, 1,455 articles from 46 sources',
+      'AI article analysis with Gemini 3.6 Flash — summarise, score relevance, tag',
       'Compose the daily consolidated summary sheet per the brief categories',
-      'Deliver via Microsoft Graph (Mail.Send) at 5am AEST daily',
+      'Deliver at 5am AEST daily — SMTP now, switching to Microsoft Graph once the tenant exists',
     ],
   },
   {
