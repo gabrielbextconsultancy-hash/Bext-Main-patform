@@ -12,13 +12,10 @@ export const metadata = {
 export default function ProposalPage() {
   return (
     <div className="space-y-5">
+      {/* The layout already carries the BEXT / engagement heading, so this only
+          names the document and how to move through it. */}
       <header>
-        <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-ink-400">
-          Client deliverable · Engagement B
-        </p>
-        <h1 className="mt-1 text-xl font-semibold tracking-tight text-ink-100">
-          Business Structure Efficiency — Draft Plan
-        </h1>
+        <h1 className="text-xl font-semibold tracking-tight text-ink-100">Draft Plan</h1>
         <p className="mt-1 text-sm text-ink-400">
           Due 11 August 2026. Use ← and → to present, or F for full screen.
         </p>
