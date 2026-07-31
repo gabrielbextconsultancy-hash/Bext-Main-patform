@@ -16,8 +16,12 @@ export const pool =
     user: process.env.PG_USER,
     password: process.env.PG_PASSWORD,
     max: 5,
-    connectionTimeoutMillis: 5000,
+    connectionTimeoutMillis: 3000,
   });
+
+// A failed background connection emits 'error' on the pool; without a listener
+// that crashes the whole process (kills the app on hosts with no reachable DB).
+pool.on('error', () => { /* logged by tryQuery callers as a null result */ });
 
 if (process.env.NODE_ENV !== 'production') globalForDb.pool = pool;
 

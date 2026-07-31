@@ -10,18 +10,15 @@ export async function proxy(req: NextRequest) {
   }
 
   const ok = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
+  // Relative Location headers — the internal request URL carries the
+  // Passenger backend host, so absolute redirects would leak/break it.
   if (!ok) {
-    const url = req.nextUrl.clone();
-    url.pathname = '/login';
-    url.search = '';
-    return NextResponse.redirect(url);
+    return new NextResponse(null, { status: 307, headers: { Location: '/login' } });
   }
 
   // Landing page is Connection Health.
   if (pathname === '/') {
-    const url = req.nextUrl.clone();
-    url.pathname = '/health';
-    return NextResponse.redirect(url);
+    return new NextResponse(null, { status: 307, headers: { Location: '/health' } });
   }
 
   return NextResponse.next();

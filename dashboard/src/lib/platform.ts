@@ -159,15 +159,21 @@ export const TOOLS: PlatformTool[] = [
 
   // ── Microsoft ──────────────────────────────────────────────────────────
   {
-    id: 'm365-sandbox',
-    name: 'Microsoft 365 Developer Sandbox',
+    id: 'm365-tenant',
+    name: 'Microsoft 365 tenant',
     category: 'Microsoft',
-    purpose: 'Free M365 tenant for testing (Outlook, Teams, SharePoint, OneDrive)',
-    cost: 'Free',
-    paid: false,
+    purpose: 'Real tenant for Outlook, Teams, SharePoint & OneDrive development',
+    cost: 'Trial → ~A$17/mo',
+    paid: true,
     owner: 'You',
     status: 'pending',
-    note: 'Tenant not yet created — MS_TENANT_ID unset.',
+    note:
+      'BLOCKER. The free Developer Sandbox is no longer available — Microsoft now ' +
+      'requires a Visual Studio Professional or Enterprise annual subscription ' +
+      '(~US$1,199/yr) to qualify. Route agreed instead: Microsoft 365 Business ' +
+      'Standard 30-day trial, converting to one paid seat if Brief B runs past ' +
+      'the trial. Everything else Microsoft depends on this.',
+    thisWeek: true,
   },
   {
     id: 'azure-app-reg',
@@ -178,7 +184,11 @@ export const TOOLS: PlatformTool[] = [
     paid: false,
     owner: 'You',
     status: 'pending',
-    note: 'Needs tenant first; provides client ID + secret for n8n.',
+    note:
+      'Blocked by the tenant. Click-path and the nine required application ' +
+      'permissions are written up in graph/app-registration.md; verification ' +
+      'script graph/verify.js is ready to run the moment the three values land.',
+    thisWeek: true,
   },
   {
     id: 'ms-graph',
@@ -189,27 +199,32 @@ export const TOOLS: PlatformTool[] = [
     paid: false,
     owner: 'You',
     status: 'pending',
-    note: 'Mail.Send required for the daily 5am AEST report email.',
+    note:
+      'Blocked by the app registration. Only the report *delivery* step needs it — ' +
+      'ingest, scoring and rendering all run without Microsoft, so Brief A can be ' +
+      'finished on SMTP and switched to Graph later.',
   },
   {
     id: 'power-bi',
     name: 'Power BI Desktop',
     category: 'Microsoft',
-    purpose: 'Dashboard and reporting development',
+    purpose: 'Dashboard and reporting development for Brief B',
     cost: 'Free',
     paid: false,
     owner: 'You',
-    status: 'optional',
+    status: 'configured',
+    note: 'Installed locally (2026-07 build). Pro is only needed if dashboards are shared through the cloud.',
   },
   {
     id: 'power-automate',
-    name: 'Power Automate Developer Environment',
+    name: 'Power Automate',
     category: 'Microsoft',
-    purpose: 'Test Microsoft Power Automate flows',
-    cost: 'Free',
+    purpose: 'Test Microsoft Power Automate flows for Brief B',
+    cost: 'Included in M365',
     paid: false,
     owner: 'You',
-    status: 'optional',
+    status: 'pending',
+    note: 'Comes with the M365 tenant; the separate free developer environment is tied to the same retired program.',
   },
 
   // ── Development ────────────────────────────────────────────────────────
@@ -285,7 +300,9 @@ export const ENGAGEMENT_WORK: EngagementPlan[] = [
       'iFastNet cPanel subdomain bext.dev-environment.site as the dashboard host',
       'GitHub repo (Bext-Main-patform) with CI/CD pipeline to cPanel',
       'Management dashboard with login, connection health and timeline',
-      'Microsoft 365 Developer Sandbox + Azure App Registration (next)',
+      'Headless-browser fetch service for the 15 sources that refuse plain HTTP',
+      'Power BI Desktop installed for Brief B reporting',
+      'Microsoft 365 tenant + Azure App Registration (blocked — free sandbox retired)',
     ],
   },
   {

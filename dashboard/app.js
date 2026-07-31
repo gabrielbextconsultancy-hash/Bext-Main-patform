@@ -21,4 +21,18 @@ try {
   }
 } catch { /* no local overrides */ }
 
+// Crash visibility on a host with no Passenger log configured.
+const fs = require('fs');
+const path = require('path');
+const logFatal = (tag) => (err) => {
+  try {
+    fs.appendFileSync(
+      path.join(__dirname, 'error.log'),
+      `[${new Date().toISOString()}] ${tag}: ${err && err.stack ? err.stack : err}\n`
+    );
+  } catch { /* best effort */ }
+};
+process.on('uncaughtException', logFatal('uncaughtException'));
+process.on('unhandledRejection', logFatal('unhandledRejection'));
+
 require('./.next/standalone/server.js');
