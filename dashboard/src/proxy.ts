@@ -10,15 +10,17 @@ export async function proxy(req: NextRequest) {
   }
 
   const ok = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
-  // Relative Location headers — the internal request URL carries the
-  // Passenger backend host, so absolute redirects would leak/break it.
+  // Next's proxy layer requires absolute redirect URLs. Behind Passenger the
+  // request URL carries the internal backend host, so build redirects from the
+  // canonical APP_URL (env.local.json on the host) when it is set.
+  const base = process.env.APP_URL || req.nextUrl.origin;
   if (!ok) {
-    return new NextResponse(null, { status: 307, headers: { Location: '/login' } });
+    return NextResponse.redirect(new URL('/login', base));
   }
 
   // Landing page is Connection Health.
   if (pathname === '/') {
-    return new NextResponse(null, { status: 307, headers: { Location: '/health' } });
+    return NextResponse.redirect(new URL('/health', base));
   }
 
   return NextResponse.next();

@@ -35,4 +35,11 @@ const logFatal = (tag) => (err) => {
 process.on('uncaughtException', logFatal('uncaughtException'));
 process.on('unhandledRejection', logFatal('unhandledRejection'));
 
+// Next reports render errors through console.error — tee them to the log too.
+const origError = console.error.bind(console);
+console.error = (...args) => {
+  logFatal('console.error')(args.map(a => (a && a.stack) || String(a)).join(' '));
+  origError(...args);
+};
+
 require('./.next/standalone/server.js');
