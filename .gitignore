@@ -16,3 +16,4 @@ Thumbs.db
 !.env.example
 infra/.env
 scratch/
+env.local.json
