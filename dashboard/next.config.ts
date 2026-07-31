@@ -13,6 +13,16 @@ const nextConfig: NextConfig = {
   // bundle lands at .next/standalone/server.js (not nested under the repo root).
   outputFileTracingRoot: path.join(process.cwd()),
   turbopack: { root: path.join(process.cwd()) },
+  // The client proposal is a self-contained deck in public/proposal/. Serving it
+  // statically keeps its CSS exactly as authored (and as rendered to PDF from the
+  // same file) rather than reimplementing it as a React route. These rewrites let
+  // it live at a clean /proposal instead of /proposal/index.html.
+  async rewrites() {
+    return [
+      { source: '/proposal', destination: '/proposal/index.html' },
+      { source: '/proposal/', destination: '/proposal/index.html' },
+    ];
+  },
 };
 
 export default nextConfig;
