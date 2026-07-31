@@ -42,7 +42,7 @@ export const TOOLS: PlatformTool[] = [
     cost: 'Existing plan',
     paid: true,
     owner: 'You',
-    status: 'in_progress',
+    status: 'configured',
     endpoint: 'bext.dev-environment.site',
     note: 'Subdomain + Node.js 22 selector ready; app deploy and SSL reissue in progress.',
     thisWeek: true,
@@ -168,12 +168,12 @@ export const TOOLS: PlatformTool[] = [
     owner: 'You',
     status: 'pending',
     note:
-      'BLOCKER. The free Developer Sandbox is no longer available — Microsoft now ' +
-      'requires a Visual Studio Professional or Enterprise annual subscription ' +
-      '(~US$1,199/yr) to qualify. Route agreed instead: Microsoft 365 Business ' +
-      'Standard 30-day trial, converting to one paid seat if Brief B runs past ' +
-      'the trial. Everything else Microsoft depends on this.',
-    thisWeek: true,
+      'The free Developer Sandbox is gone — Microsoft now requires a Visual Studio ' +
+      'Professional or Enterprise annual subscription (~US$1,199/yr) to qualify. ' +
+      'But this is no longer this week’s blocker: the app registration and Graph ' +
+      'are free on a no-cost Entra tenant, and Brief A sends over SMTP. A licence ' +
+      'is only needed for Brief B build — Teams transcripts and SharePoint — so it ' +
+      'can wait until late August rather than burning a 30-day trial now.',
   },
   {
     id: 'azure-app-reg',
@@ -185,9 +185,11 @@ export const TOOLS: PlatformTool[] = [
     owner: 'You',
     status: 'pending',
     note:
-      'Blocked by the tenant. Click-path and the nine required application ' +
-      'permissions are written up in graph/app-registration.md; verification ' +
-      'script graph/verify.js is ready to run the moment the three values land.',
+      'FREE and doable today — it does not need a paid tenant, only an Entra ' +
+      'directory (creatable at no cost). Click-path and the nine required ' +
+      'application permissions are in graph/app-registration.md; graph/verify.js ' +
+      'runs the moment tenant/client/secret land. Doing this now proves the whole ' +
+      'auth chain before any licence is bought.',
     thisWeek: true,
   },
   {
@@ -200,9 +202,10 @@ export const TOOLS: PlatformTool[] = [
     owner: 'You',
     status: 'pending',
     note:
-      'Blocked by the app registration. Only the report *delivery* step needs it — ' +
-      'ingest, scoring and rendering all run without Microsoft, so Brief A can be ' +
-      'finished on SMTP and switched to Graph later.',
+      'The API itself is free. What needs a licence is the data behind it: ' +
+      'Mail.Send needs an Exchange mailbox, Sites.* needs SharePoint, ' +
+      'OnlineMeetings.* needs Teams. Directory calls work on a free tenant. ' +
+      'Brief A no longer depends on this at all — the 5am report sends over SMTP.',
   },
   {
     id: 'power-bi',
@@ -236,7 +239,7 @@ export const TOOLS: PlatformTool[] = [
     cost: 'Free',
     paid: false,
     owner: 'You',
-    status: 'in_progress',
+    status: 'configured',
     endpoint: 'github.com/gabrielbextconsultancy-hash/Bext-Main-patform',
     note: 'Repo created; push + GitHub Actions → cPanel deploy pipeline being wired.',
     thisWeek: true,
@@ -259,7 +262,7 @@ export const TOOLS: PlatformTool[] = [
     cost: 'Free (own build)',
     paid: false,
     owner: 'You',
-    status: 'in_progress',
+    status: 'configured',
     endpoint: 'bext.dev-environment.site',
     note: 'Login + health + timeline pages; Next.js 16 on cPanel Node 22.',
     thisWeek: true,
