@@ -19,8 +19,9 @@ export async function POST(req: Request) {
     sameSite: 'lax',
     path: '/',
     maxAge,
-    // Site currently serves over HTTP until AutoSSL reissues; flip on once TLS is live.
-    secure: false,
+    // TLS is live (AutoSSL); an .htaccess rule forces http→https so the cookie
+    // is always sent back. Override with COOKIE_SECURE=false for plain-http dev.
+    secure: process.env.COOKIE_SECURE !== 'false',
   });
   return res;
 }

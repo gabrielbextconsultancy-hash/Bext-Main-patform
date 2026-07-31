@@ -397,6 +397,73 @@ export const SLIDES: Slide[] = [
 
   // 12 ────────────────────────────────────────────────────────────────
   {
+    kicker: 'Review area 9 · what is running today',
+    title: 'Development environment, and what BEXT will own',
+    lede:
+      'Everything is already running — but on the developer’s own accounts, at no cost to you. ' +
+      'None of it is a BEXT asset yet. Going live means moving the same stack onto accounts BEXT ' +
+      'owns and is billed for.',
+    body: (
+      <div className="space-y-3">
+        <Cols n={2}>
+          <div>
+            <h3 className="mb-2 flex items-center gap-2 text-[13px] font-semibold text-ink-100">
+              <span className="h-2 w-2 rounded-full bg-warn" />
+              Developer-provided today — temporary, not BEXT’s
+            </h3>
+            <Table
+              head={['Component', 'Running on', 'BEXT will need']}
+              rows={[
+                ['Server', 'Developer’s Hostinger VPS srv1866850', <Tag key="1" tone="c">Own VPS account</Tag>],
+                ['Domain', 'bext.dev-environment.site', <Tag key="2" tone="c">Own domain</Tag>],
+                ['Dashboard host', 'Developer’s iFastNet cPanel', <Tag key="3" tone="c">Own hosting</Tag>],
+                ['Report email', 'SMTP on the development domain', <Tag key="4" tone="c">Microsoft 365 mailbox</Tag>],
+                ['AI model', 'Developer’s Gemini key', <Tag key="5" tone="c">Own AI subscription</Tag>],
+                ['Source control', 'Developer’s GitHub repository', <Tag key="6" tone="c">Own repository</Tag>],
+                ['Dev tooling', 'VS Code, Claude Code — developer licences', <Tag key="7">Never BEXT’s cost</Tag>],
+              ]}
+            />
+            <p className="mt-2 text-[11px] leading-relaxed text-ink-600">
+              These exist so there is something working to review now. Every one of them is replaced
+              at go-live — BEXT is not billed for any of it during development, and inherits none of
+              it by default.
+            </p>
+          </div>
+          <div>
+            <h3 className="mb-2 flex items-center gap-2 text-[13px] font-semibold text-ink-100">
+              <span className="h-2 w-2 rounded-full bg-ok" />
+              Work product — transfers to BEXT in full
+            </h3>
+            <Table
+              head={['Component', 'What it is']}
+              rows={[
+                ['Automation platform', 'n8n Community — free, self-hosted, redeployed on your server'],
+                ['Database', 'PostgreSQL 16, 8 tables — schema and data'],
+                ['Knowledge base', 'Qdrant vector store'],
+                ['Browser fetch service', 'For sources that block plain requests'],
+                ['Reverse proxy + SSL', 'Traefik with auto-renewing certificates'],
+                ['Source registry', 'All 68 briefed sources — 26 RSS, 29 scraped, 15 via browser'],
+                ['Ingest workflow', 'Hourly, deduplicating — 1,455 articles from 46 sources'],
+                ['Analysis workflow', 'Summary, relevance score and tags per article'],
+                ['Management dashboard', 'Health, timeline, deliverables, sources, this deck'],
+                ['Deploy pipeline', 'Push to deploy, plus full commit history'],
+              ]}
+            />
+          </div>
+        </Cols>
+        <Box title="What “going live” actually means" accent="c">
+          The software is all open-source and self-hosted, so the transition is an account change,
+          not a rebuild — the same stack is redeployed onto BEXT-owned infrastructure and the
+          credentials are reissued in BEXT’s name. After that the recurring cost is one VPS
+          (~A$12/month), a domain, the Microsoft 365 licence and an AI subscription. No per-seat
+          platform fees, no vendor holding your data, nothing that cannot be moved again later.
+        </Box>
+      </div>
+    ),
+  },
+
+  // 12 ────────────────────────────────────────────────────────────────
+  {
     kicker: 'Deliverable 4',
     title: 'Automation opportunities, ranked',
     lede: 'Ordered by return against effort. Maintenance is the ongoing cost once running.',
