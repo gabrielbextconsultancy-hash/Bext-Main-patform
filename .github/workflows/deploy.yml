@@ -7,7 +7,7 @@ name: Deploy to cPanel (bext.dev-environment.site)
 #   CPANEL_API_TOKEN  — cPanel API token for user "devenvir"
 # Optional repo variables (defaults below):
 #   CPANEL_HOST (dev-environment.site) · CPANEL_IP (185.2.168.30)
-#   CPANEL_REPO_ROOT (/home/devenvir/bext-platform)
+#   CPANEL_REPO_ROOT (/home/devenvir/bext.dev-environment.site/bext-platform)
 
 on:
   push:
@@ -44,7 +44,7 @@ jobs:
           CPANEL_TOKEN: ${{ secrets.CPANEL_API_TOKEN }}
           CPANEL_HOST: ${{ vars.CPANEL_HOST || 'dev-environment.site' }}
           CPANEL_IP: ${{ vars.CPANEL_IP || '185.2.168.30' }}
-          CPANEL_REPO_ROOT: ${{ vars.CPANEL_REPO_ROOT || '/home/devenvir/bext-platform' }}
+          CPANEL_REPO_ROOT: ${{ vars.CPANEL_REPO_ROOT || '/home/devenvir/bext.dev-environment.site/bext-platform' }}
         run: |
           set -euo pipefail
           [ -n "${CPANEL_TOKEN:-}" ] || { echo "::error::CPANEL_API_TOKEN secret missing"; exit 1; }

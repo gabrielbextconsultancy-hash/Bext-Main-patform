@@ -2,12 +2,12 @@
 # cPanel Git Version Control deployment — runs on the server after every pull
 # triggered by the GitHub Actions workflow (.github/workflows/deploy.yml).
 #
-# Repo checkout:  /home/devenvir/bext-platform   (this file's directory)
-# Node app root:  /home/devenvir/bext-platform/dashboard  (Node.js Selector, Node 22)
+# Repo checkout:  /home/devenvir/bext.dev-environment.site/bext-platform
+# Node app root:  .../bext-platform/dashboard  (Node.js Selector, Node 22)
 # App URL:        bext.dev-environment.site
 deployment:
   tasks:
-    - export APP=/home/devenvir/bext-platform/dashboard
+    - export APP=/home/devenvir/bext.dev-environment.site/bext-platform/dashboard
     - export PATH=/opt/alt/alt-nodejs22/root/usr/bin:$PATH
     - cd $APP && npm ci
     - cd $APP && npx next build
