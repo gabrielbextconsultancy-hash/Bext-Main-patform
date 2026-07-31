@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink-950: #0a0d12;
+  --color-ink-900: #11151c;
+  --color-ink-850: #161b24;
+  --color-ink-800: #1c222c;
+  --color-ink-700: #2a323f;
+  --color-ink-600: #3d4756;
+  --color-ink-400: #7c8798;
+  --color-ink-300: #a3adbd;
+  --color-ink-100: #e3e8ef;
+
+  /* One accent per engagement, carried consistently across every page so a
+     colour always means the same workstream. */
+  --color-infra: #64748b;
+  --color-brief-a: #14b8a6;
+  --color-brief-b: #a78bfa;
+
+  --color-ok: #34d399;
+  --color-progress: #38bdf8;
+  --color-blocked: #fb7185;
+  --color-warn: #fbbf24;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, monospace;
+}
+
+:root {
+  --accent-infra: var(--color-infra);
+  --accent-a: var(--color-brief-a);
+  --accent-b: var(--color-brief-b);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-ink-950);
+  color: var(--color-ink-100);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Numbers that sit in columns should line up. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
