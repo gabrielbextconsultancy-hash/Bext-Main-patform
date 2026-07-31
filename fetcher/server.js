@@ -99,6 +99,22 @@ async function render(url, { waitFor = 'domcontentloaded', timeout = NAV_TIMEOUT
   }
 }
 
+/** Renders supplied HTML to PDF. Used for the client deliverables, which are
+ *  authored as web decks and need a PDF alongside for sending and archiving. */
+async function toPdf(html, { width = '1280px', height = '720px' } = {}) {
+  const b = await getBrowser();
+  const context = await b.newContext();
+  const page = await context.newPage();
+  try {
+    await page.setContent(html, { waitUntil: 'networkidle' });
+    // Fonts and any late layout settle before we measure pages.
+    await page.waitForTimeout(600);
+    return await page.pdf({ width, height, printBackground: true, pageRanges: '' });
+  } finally {
+    await context.close();
+  }
+}
+
 const send = (res, code, body) => {
   const payload = JSON.stringify(body);
   res.writeHead(code, { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) });
@@ -109,8 +125,22 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && req.url === '/health') {
     return send(res, 200, { ok: true, active, browser: !!browser?.isConnected() });
   }
+  if (req.method === 'POST' && req.url === '/pdf') {
+    let raw = '';
+    req.on('data', c => { raw += c; if (raw.length > 3e7) req.destroy(); });
+    req.on('end', async () => {
+      try {
+        const { html, width, height } = JSON.parse(raw);
+        if (!html) return send(res, 400, { error: 'html required' });
+        const pdf = await toPdf(html, { width, height });
+        res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Length': pdf.length });
+        res.end(pdf);
+      } catch (e) { send(res, 500, { error: e.message }); }
+    });
+    return;
+  }
   if (req.method !== 'POST' || req.url !== '/fetch') {
-    return send(res, 404, { error: 'POST /fetch or GET /health' });
+    return send(res, 404, { error: 'POST /fetch, POST /pdf, or GET /health' });
   }
   if (active >= MAX_CONCURRENT) {
     // A 2 GB container running Chromium will thrash rather than queue politely.

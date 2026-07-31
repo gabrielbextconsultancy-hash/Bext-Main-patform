@@ -1,0 +1,745 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BEXT Consultancy — Business Structure Efficiency — Draft Plan</title>
+<style>
+  :root{
+    --bg:#0a0d12; --panel:#11151c; --panel2:#161b24; --line:#1e2632;
+    --ink:#e6ebf2; --dim:#8d99ab; --faint:#5d6a7d;
+    --a:#14b8a6;   /* systems / current state */
+    --b:#a78bfa;   /* AI + future state */
+    --c:#fbbf24;   /* decisions, attention */
+    --ok:#34d399; --bad:#fb7185;
+    --slideW:1280px; --slideH:720px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);
+    font:16px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .tnum{font-variant-numeric:tabular-nums}
+
+  /* ── deck shell ─────────────────────────────────────────────── */
+  #deck{display:flex;flex-direction:column;align-items:center;gap:28px;padding:28px 20px 96px}
+  .slide{
+    width:var(--slideW);min-height:var(--slideH);flex:0 0 auto;position:relative;
+    background:linear-gradient(160deg,var(--panel) 0%,#0d1117 100%);
+    border:1px solid var(--line);border-radius:16px;padding:56px 64px 64px;
+    display:flex;flex-direction:column;scroll-margin-top:20px;overflow:hidden}
+  .slide::after{content:attr(data-n);position:absolute;right:26px;bottom:20px;
+    font-size:12px;color:var(--faint);font-variant-numeric:tabular-nums}
+  .kicker{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);margin:0 0 10px}
+  h1{font-size:52px;line-height:1.08;margin:0 0 18px;letter-spacing:-.02em;font-weight:650}
+  h2{font-size:34px;line-height:1.15;margin:0 0 8px;letter-spacing:-.015em;font-weight:620}
+  h3{font-size:15px;margin:0 0 8px;font-weight:600}
+  .lede{font-size:18px;color:var(--dim);margin:0 0 26px;max-width:62ch}
+  p{margin:0 0 12px}
+  ul{margin:0 0 12px;padding-left:18px}li{margin:0 0 7px}
+  .small{font-size:13px}.dim{color:var(--dim)}.faint{color:var(--faint)}
+  .rule{height:1px;background:var(--line);margin:18px 0}
+  .grow{flex:1}
+
+  .grid{display:grid;gap:14px}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+  .card.a{border-left:3px solid var(--a)}
+  .card.b{border-left:3px solid var(--b)}
+  .card.c{border-left:3px solid var(--c)}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th{text-align:left;font-size:10.5px;letter-spacing:.11em;text-transform:uppercase;
+    color:var(--dim);font-weight:600;padding:0 10px 8px 0;border-bottom:1px solid var(--line)}
+  td{padding:9px 10px 9px 0;border-bottom:1px solid #161d27;vertical-align:top}
+  tr:last-child td{border-bottom:0}
+
+  .tag{display:inline-block;font-size:10.5px;padding:2px 7px;border-radius:5px;
+    border:1px solid;white-space:nowrap}
+  .t-a{color:var(--a);border-color:color-mix(in srgb,var(--a) 40%,transparent);
+    background:color-mix(in srgb,var(--a) 10%,transparent)}
+  .t-b{color:var(--b);border-color:color-mix(in srgb,var(--b) 40%,transparent);
+    background:color-mix(in srgb,var(--b) 10%,transparent)}
+  .t-c{color:var(--c);border-color:color-mix(in srgb,var(--c) 40%,transparent);
+    background:color-mix(in srgb,var(--c) 10%,transparent)}
+  .t-n{color:var(--dim);border-color:var(--line);background:#12171f}
+
+  .num{font-size:38px;font-weight:650;letter-spacing:-.02em;line-height:1}
+  .num.a{color:var(--a)}.num.b{color:var(--b)}.num.c{color:var(--c)}
+
+  /* flow diagram bits */
+  .flow{display:flex;align-items:stretch;gap:10px;flex-wrap:wrap}
+  .step{flex:1 1 0;min-width:120px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:10px;padding:12px 13px;position:relative}
+  .step .n{font-size:10px;color:var(--faint);letter-spacing:.1em}
+  .arrow{align-self:center;color:var(--faint);font-size:18px}
+  .who{display:inline-block;margin-top:8px;font-size:10.5px;padding:1px 6px;border-radius:4px}
+  .who.ai{background:color-mix(in srgb,var(--b) 14%,transparent);color:var(--b)}
+  .who.you{background:color-mix(in srgb,var(--c) 14%,transparent);color:var(--c)}
+  .who.sys{background:color-mix(in srgb,var(--a) 14%,transparent);color:var(--a)}
+
+  .lane{display:grid;grid-template-columns:150px 1fr;gap:12px;align-items:start;margin-bottom:12px}
+  .laneName{font-size:12px;color:var(--dim);padding-top:11px}
+
+  /* nav */
+  #bar{position:fixed;left:0;right:0;bottom:0;height:46px;background:rgba(10,13,18,.94);
+    backdrop-filter:blur(8px);border-top:1px solid var(--line);display:flex;align-items:center;
+    gap:14px;padding:0 20px;font-size:12px;color:var(--dim);z-index:20}
+  #bar button{background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+    border-radius:7px;padding:5px 11px;font:inherit;cursor:pointer}
+  #bar button:hover{border-color:var(--dim)}
+  #dots{display:flex;gap:4px;flex:1;overflow:hidden}
+  #dots i{width:100%;max-width:26px;height:3px;border-radius:2px;background:var(--line);cursor:pointer}
+  #dots i.on{background:var(--a)}
+
+  /* ── print / PDF ────────────────────────────────────────────── */
+  @page{size:1280px 720px;margin:0}
+  @media print{
+    #bar{display:none}
+    html,body{background:#fff}
+    #deck{display:block;padding:0;gap:0}
+    .slide{width:1280px;height:720px;min-height:720px;page-break-after:always;
+      break-after:page;border:0;border-radius:0;margin:0;
+      background:linear-gradient(160deg,#11151c 0%,#0d1117 100%);
+      -webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .slide:last-child{page-break-after:auto}
+  }
+</style>
+</head>
+<body>
+<div id="deck">
+
+<!-- 1 ───────────────────────────────────────────────────────────── -->
+<section class="slide" data-n="01">
+  <p class="kicker">BEXT Consultancy · Draft Plan · 11 August 2026</p>
+  <h1>Business&nbsp;Structure<br>Efficiency</h1>
+  <p class="lede">A digital operating model where information is captured once, flows
+    between systems on its own, and AI does the drafting — leaving review and approval
+    as the only manual steps.</p>
+  <div class="grow"></div>
+  <div class="grid g3">
+    <div class="card a"><div class="num a">11</div><p class="small dim" style="margin-top:6px">
+      platforms already in use — the plan adds almost nothing</p></div>
+    <div class="card b"><div class="num b">9</div><p class="small dim" style="margin-top:6px">
+      review areas answered, meeting workflow first</p></div>
+    <div class="card c"><div class="num c">8 Sep</div><p class="small dim" style="margin-top:6px">
+      final delivery · architecture 25 Aug</p></div>
+  </div>
+  <p class="small faint" style="margin-top:20px">Responds to <em>Project Brief — Business
+    Structure Efficiency</em>, 28 July 2026. This is the draft plan; the schematic
+    architecture follows on 25 August.</p>
+</section>
+
+<!-- 2 ───────────────────────────────────────────────────────────── -->
+<section class="slide" data-n="02">
+  <p class="kicker">The ask</p>
+  <h2>What the brief asks for</h2>
+  <p class="lede">Maximise time spent consulting. Minimise administration.</p>
+  <div class="grid g2">
+    <div class="card">
+      <h3>Stated outcomes</h3>
+      <ul class="small dim">
+        <li>Single point of data entry wherever possible</li>
+        <li>Minimal duplication across systems</li>
+        <li>Maximum use of AI for administrative tasks</li>
+        <li>Highly automated document creation</li>
+        <li>Automated meeting documentation</li>
+        <li>Automated project administration, filing and organisation</li>
+        <li>High-quality draft emails and reports needing only review</li>
+        <li>Consistent processes, scalable, secure</li>
+      </ul>
+    </div>
+    <div class="card c">
+      <h3>The binding constraint</h3>
+      <p class="small dim">“Confined to the shared capability of the following tools
+        without need for third-party management platform.”</p>
+      <p class="small dim">This is the most important line in the brief. It rules out
+        Monday, Notion, Asana, Zapier and every other SaaS layer. The design therefore
+        uses <strong>what is already licensed</strong>, joined by automation you own and
+        can hand over.</p>
+      <div class="rule"></div>
+      <p class="small faint">Section 9 still asks for software recommendations — answered,
+        but deliberately short.</p>
+    </div>
+  </div>
+  <div class="grow"></div>
+  <div class="grid g3">
+    <div class="card"><h3 style="color:var(--c)">Draft Plan</h3><p class="small dim tnum">11 Aug 2026 — this document</p></div>
+    <div class="card"><h3>Schematic Architecture</h3><p class="small dim tnum">25 Aug 2026</p></div>
+    <div class="card"><h3>Final</h3><p class="small dim tnum">8 Sep 2026</p></div>
+  </div>
+</section>
+
+<!-- 3 ───────────────────────────────────────────────────────────── -->
+<section class="slide" data-n="03">
+  <p class="kicker">Current state</p>
+  <h2>Eleven platforms, no connective tissue</h2>
+  <p class="lede">Every platform is capable. None of them talk to each other, so the
+    consultant is the integration layer.</p>
+  <table>
+    <thead><tr><th style="width:22%">Platform</th><th style="width:30%">Role today</th>
+      <th style="width:34%">Where the effort goes</th><th style="width:14%">Verdict</th></tr></thead>
+    <tbody>
+      <tr><td>Microsoft 365 — Outlook, Teams, SharePoint, OneDrive, Office, Copilot</td>
+        <td>Email, meetings, files, documents</td>
+        <td>Notes typed by hand, files named and filed by hand, actions tracked in memory</td>
+        <td><span class="tag t-a">Backbone</span></td></tr>
+      <tr><td>HubSpot</td><td>CRM, pipeline</td>
+        <td>Contacts and deal stages re-entered from email threads</td>
+        <td><span class="tag t-a">Source of truth</span></td></tr>
+      <tr><td>ProjectManager</td><td>Projects, tasks</td>
+        <td>Tasks retyped from meeting outcomes</td>
+        <td><span class="tag t-a">Source of truth</span></td></tr>
+      <tr><td>Xero</td><td>Invoicing, accounts</td>
+        <td>Invoice triggers watched manually against project milestones</td>
+        <td><span class="tag t-a">Source of truth</span></td></tr>
+      <tr><td>Canva</td><td>Proposals, reports, presentations</td>
+        <td>Rebuilt from scratch each time; content re-keyed</td>
+        <td><span class="tag t-c">Template gap</span></td></tr>
+      <tr><td>Claude / Copilot</td><td>Drafting assistance</td>
+        <td>Context pasted in by hand every session; nothing is remembered</td>
+        <td><span class="tag t-c">Under-used</span></td></tr>
+      <tr><td>WordPress · LinkedIn</td><td>Website, market presence</td>
+        <td>Content written ad hoc, publishing irregular</td>
+        <td><span class="tag t-c">Manual</span></td></tr>
+      <tr><td>Adobe PDF · Chrome</td><td>Documents, browsing</td>
+        <td>Fine as-is</td><td><span class="tag t-n">No change</span></td></tr>
+    </tbody>
+  </table>
+  <div class="grow"></div>
+  <p class="small faint">Current State Assessment is a named deliverable; this is its
+    summary. The full assessment lands with the final on 8 September, after a working
+    session to confirm volumes and actual time spent.</p>
+</section>
+
+<!-- 4 ───────────────────────────────────────────────────────────── -->
+<section class="slide" data-n="04">
+  <p class="kicker">Diagnosis</p>
+  <h2>The same fact gets entered four times</h2>
+  <div class="grid g2" style="gap:22px">
+    <div>
+      <p class="small dim">A single client conversation currently produces manual work in
+        four places, because nothing carries information forward:</p>
+      <div class="flow" style="flex-direction:column;gap:8px;margin-top:14px">
+        <div class="step"><span class="n">MEETING</span><br>Discussion happens
+          <span class="who you">notes typed by hand</span></div>
+        <div class="step"><span class="n">HUBSPOT</span><br>Contact and stage updated
+          <span class="who you">re-entered</span></div>
+        <div class="step"><span class="n">PROJECTMANAGER</span><br>Actions become tasks
+          <span class="who you">re-entered</span></div>
+        <div class="step"><span class="n">OUTLOOK</span><br>Follow-up written
+          <span class="who you">written from scratch</span></div>
+        <div class="step"><span class="n">SHAREPOINT</span><br>Documents filed
+          <span class="who you">named and moved by hand</span></div>
+      </div>
+    </div>
+    <div>
+      <div class="card b">
+        <h3>The principle</h3>
+        <p class="small dim">Capture once. Distribute automatically. Review at the end,
+          not throughout.</p>
+        <p class="small dim">The meeting already produces a recording and a transcript.
+          Everything above can be derived from it — which makes the meeting workflow the
+          highest-leverage place to start, and the brief already names it as the top
+          priority.</p>
+      </div>
+      <div class="card c" style="margin-top:14px">
+        <h3>What this is not</h3>
+        <p class="small dim">Not autonomous sending. Every outbound artefact — email,
+          proposal, invoice trigger — stops at a draft for approval. The brief asks for
+          “review and refinement and final approval”, and the design keeps that gate
+          everywhere it touches a client.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 5 ───────────────────────────────────────────────────────────── -->
+<section class="slide" data-n="05">
+  <p class="kicker">Future state · deliverable 2</p>
+  <h2>Business Systems Integration Diagram</h2>
+  <p class="lede">Which system owns which fact, and how information moves. Full-fidelity
+    version is the 25 August deliverable.</p>
+  <div style="flex:1">
+    <div class="lane">
+      <div class="laneName">Capture</div>
+      <div class="flow">
+        <div class="step"><span class="n">TEAMS</span><br>Meeting + transcript<span class="who sys">system</span></div>
+        <div class="step"><span class="n">OUTLOOK</span><br>Email + enquiries<span class="who sys">system</span></div>
+        <div class="step"><span class="n">FORMS</span><br>Structured intake<span class="who sys">system</span></div>
+      </div>
+    </div>
+    <div class="lane">
+      <div class="laneName">Automation layer<br><span class="faint small">n8n — owned by you</span></div>
+      <div class="flow">
+        <div class="step b" style="border-left:3px solid var(--b)"><span class="n">ROUTE</span><br>Graph API listens, classifies, dispatches<span class="who ai">AI</span></div>
+        <div class="step" style="border-left:3px solid var(--b)"><span class="n">DRAFT</span><br>Minutes, emails, reports, posts<span class="who ai">AI</span></div>
+        <div class="step" style="border-left:3px solid var(--b)"><span class="n">RECALL</span><br>Vector search over past work<span class="who ai">AI</span></div>
+      </div>
+    </div>
+    <div class="lane">
+      <div class="laneName">Systems of record</div>
+      <div class="flow">
+        <div class="step a" style="border-left:3px solid var(--a)"><span class="n">HUBSPOT</span><br>Clients, contacts, pipeline</div>
+        <div class="step" style="border-left:3px solid var(--a)"><span class="n">PROJECTMANAGER</span><br>Projects, tasks, actions</div>
+        <div class="step" style="border-left:3px solid var(--a)"><span class="n">SHAREPOINT</span><br>Documents, knowledge</div>
+        <div class="step" style="border-left:3px solid var(--a)"><span class="n">XERO</span><br>Invoices, finance</div>
+      </div>
+    </div>
+    <div class="lane">
+      <div class="laneName">Output</div>
+      <div class="flow">
+        <div class="step"><span class="n">OUTLOOK</span><br>Drafts awaiting approval<span class="who you">you approve</span></div>
+        <div class="step"><span class="n">CANVA · OFFICE</span><br>Proposals, reports, decks<span class="who you">you approve</span></div>
+        <div class="step"><span class="n">WORDPRESS · LINKEDIN</span><br>Published content<span class="who you">you approve</span></div>
+        <div class="step"><span class="n">POWER BI</span><br>Business dashboard<span class="who sys">system</span></div>
+      </div>
+    </div>
+  </div>
+  <p class="small faint">n8n is self-hosted on infrastructure you own — it is the
+    integration layer, not a third-party management platform, which is what keeps the
+    design inside the brief's constraint.</p>
+</section>
+
+<!-- 6 ───────────────────────────────────────────────────────────── -->
+<section class="slide" data-n="06">
+  <p class="kicker">Future state · operating model</p>
+  <h2>One owner per fact</h2>
+  <p class="lede">Duplication ends when every type of information has exactly one home
+    and everything else reads from it.</p>
+  <table>
+    <thead><tr><th style="width:20%">Information</th><th style="width:20%">Source of truth</th>
+      <th style="width:34%">Flows to</th><th style="width:26%">Entered where</th></tr></thead>
+    <tbody>
+      <tr><td>Clients &amp; contacts</td><td><span class="tag t-a">HubSpot</span></td>
+        <td>ProjectManager, Xero, document metadata, mail merge</td>
+        <td>Once, at onboarding form</td></tr>
+      <tr><td>Projects &amp; actions</td><td><span class="tag t-a">ProjectManager</span></td>
+        <td>Meeting minutes, status emails, Power BI</td>
+        <td>Derived from meetings — not typed</td></tr>
+      <tr><td>Documents &amp; deliverables</td><td><span class="tag t-a">SharePoint</span></td>
+        <td>Knowledge base, Canva, proposals, client share links</td>
+        <td>Filed automatically on creation</td></tr>
+      <tr><td>Finance</td><td><span class="tag t-a">Xero</span></td>
+        <td>Power BI, project profitability</td>
+        <td>Triggered by project milestones</td></tr>
+      <tr><td>Meetings &amp; decisions</td><td><span class="tag t-a">Teams + SharePoint</span></td>
+        <td>Minutes, actions, follow-up email, knowledge base</td>
+        <td>Recording only</td></tr>
+      <tr><td>Past work &amp; methodology</td><td><span class="tag t-a">Knowledge base</span></td>
+        <td>Every AI draft, every proposal</td>
+        <td>Indexed automatically from SharePoint</td></tr>
+      <tr><td>Market presence</td><td><span class="tag t-a">WordPress</span></td>
+        <td>LinkedIn, capability statements</td>
+        <td>Drafted by AI, approved by you</td></tr>
+    </tbody>
+  </table>
+  <div class="grow"></div>
+  <p class="small faint">Scalability follows from this table rather than from extra
+    software: adding a second consultant means adding a user, not redesigning the model.</p>
+</section>
+
+<!-- 7 ───────────────────────────────────────────────────────────── -->
+<section class="slide" data-n="07">
+  <p class="kicker">Review area 3 · stated highest priority</p>
+  <h2>The meeting workflow</h2>
+  <p class="lede">“No manual note taking should be required.” One recording produces the
+    minutes, the decisions, the tasks, the follow-up and the filing.</p>
+  <div class="flow" style="margin-bottom:18px">
+    <div class="step"><span class="n">01</span><br>Record in Teams<span class="who sys">Teams</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><span class="n">02</span><br>Transcript produced<span class="who sys">Teams</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><span class="n">03</span><br>Minutes in your template<span class="who ai">AI</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><span class="n">04</span><br>Decisions extracted<span class="who ai">AI</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><span class="n">05</span><br>Actions to ProjectManager<span class="who ai">AI</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><span class="n">06</span><br>Follow-up email drafted<span class="who ai">AI</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><span class="n">07</span><br>Filed to SharePoint<span class="who ai">AI</span></div>
+    <div class="arrow">→</div>
+    <div class="step" style="border-color:var(--c)"><span class="n">08</span><br>Review &amp; send<span class="who you">you</span></div>
+  </div>
+  <div class="grid g3">
+    <div class="card a"><h3>How it is built</h3><p class="small dim">Graph API subscribes to
+      meeting-transcript events. n8n pulls the transcript, runs it through the drafting
+      prompt with your minutes template, then writes to ProjectManager, SharePoint and an
+      Outlook draft.</p></div>
+    <div class="card b"><h3>Extends to daily notes</h3><p class="small dim">The brief asks that
+      this cover personal brainstorming too. Same pipeline, different template — a voice
+      note or OneNote page in, structured and filed output back.</p></div>
+    <div class="card c"><h3>Open question</h3><p class="small dim">Teams transcription must be
+      enabled tenant-wide, and app-only transcript access needs an application access
+      policy. Confirm licensing before 25 August — this is the one place where the plan
+      depends on a setting outside our control.</p></div>
+  </div>
+</section>
+
+<!-- 8 ───────────────────────────────────────────────────────────── -->
+<section class="slide" data-n="08">
+  <p class="kicker">Review areas 4 &amp; 5</p>
+  <h2>Email and documents</h2>
+  <div class="grid g2" style="gap:22px">
+    <div>
+      <h3 style="font-size:17px;margin-bottom:12px">Email automation</h3>
+      <table>
+        <thead><tr><th style="width:52%">Case</th><th>AI produces</th></tr></thead>
+        <tbody>
+          <tr><td>New client enquiry</td><td>Classified, drafted reply, HubSpot contact created</td></tr>
+          <tr><td>Meeting follow-up</td><td>Draft with decisions and actions attached</td></tr>
+          <tr><td>Project progress update</td><td>Draft with status graphic and report attached</td></tr>
+          <tr><td>Proposal response</td><td>Draft built from the closest past proposal</td></tr>
+          <tr><td>Standard enquiry</td><td>Draft from the response library</td></tr>
+          <tr><td>Reminders</td><td>Scheduled from ProjectManager due dates</td></tr>
+          <tr><td>Commercial email filing</td><td>Prompt to file, then filed on confirmation</td></tr>
+        </tbody>
+      </table>
+      <p class="small faint" style="margin-top:10px">Everything lands in Outlook
+        <strong>Drafts</strong>. Nothing sends itself.</p>
+    </div>
+    <div>
+      <h3 style="font-size:17px;margin-bottom:12px">Document management</h3>
+      <div class="card" style="padding:14px 16px">
+        <p class="small dim" style="margin-bottom:8px">Proposed SharePoint structure —
+          predictable enough that filing can be automatic:</p>
+        <pre class="small" style="margin:0;color:var(--dim);font:12.5px/1.6 ui-monospace,monospace">/Clients
+   /{Client}
+      /{ProjectNo}-{ProjectName}
+         /01-Proposals
+         /02-Meetings
+         /03-Deliverables
+         /04-Correspondence
+         /05-Finance
+/Business
+   /Capability Statements
+   /Templates
+   /Methodologies
+   /Lessons Learned</pre>
+      </div>
+      <p class="small dim" style="margin-top:12px"><strong>Naming:</strong>
+        <code style="color:var(--a)">{YYYY-MM-DD}_{ProjectNo}_{DocType}_{Rev}</code> —
+        applied by the automation, so it is consistent by construction rather than by
+        discipline.</p>
+      <p class="small dim">Version control through SharePoint's own history. Retrieval
+        through the knowledge base on the next slide.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 9 ───────────────────────────────────────────────────────────── -->
+<section class="slide" data-n="09">
+  <p class="kicker">Review areas 7 &amp; 2</p>
+  <h2>Knowledge management — where AI stops being an assistant</h2>
+  <p class="lede">“The objective is to avoid recreating work already completed.” This is
+    the difference between AI that drafts generically and AI that drafts like you.</p>
+  <div class="grid g2" style="gap:22px">
+    <div>
+      <div class="flow" style="flex-direction:column;gap:8px">
+        <div class="step"><span class="n">INDEX</span><br>Every past proposal, report, masterplan,
+          capability statement, technical report, presentation, meeting note, template and
+          lesson learned<span class="who sys">SharePoint</span></div>
+        <div class="arrow" style="align-self:flex-start;padding-left:12px">↓</div>
+        <div class="step"><span class="n">EMBED</span><br>Chunked and vectorised into the
+          knowledge base<span class="who sys">Qdrant</span></div>
+        <div class="arrow" style="align-self:flex-start;padding-left:12px">↓</div>
+        <div class="step" style="border-left:3px solid var(--b)"><span class="n">RETRIEVE</span><br>
+          Every draft starts by finding what you already wrote on the subject<span class="who ai">AI</span></div>
+      </div>
+    </div>
+    <div>
+      <h3 style="font-size:17px">AI as worker, not assistant</h3>
+      <table>
+        <thead><tr><th style="width:46%">Task</th><th>Today → Proposed</th></tr></thead>
+        <tbody>
+          <tr><td>Meeting minutes</td><td class="dim">Manual → <span style="color:var(--b)">AI, you approve</span></td></tr>
+          <tr><td>Action extraction</td><td class="dim">Manual → <span style="color:var(--b)">AI, you approve</span></td></tr>
+          <tr><td>Email drafting</td><td class="dim">Manual → <span style="color:var(--b)">AI, you approve</span></td></tr>
+          <tr><td>Proposals &amp; briefs</td><td class="dim">Manual → <span style="color:var(--b)">AI from past work</span></td></tr>
+          <tr><td>Reports</td><td class="dim">Manual → <span style="color:var(--b)">AI first draft</span></td></tr>
+          <tr><td>Presentations</td><td class="dim">Manual → <span style="color:var(--b)">AI into Canva template</span></td></tr>
+          <tr><td>Filing &amp; naming</td><td class="dim">Manual → <span style="color:var(--a)">fully automatic</span></td></tr>
+          <tr><td>Final judgement</td><td class="dim">You → <span style="color:var(--c)">still you</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- 10 ──────────────────────────────────────────────────────────── -->
+<section class="slide" data-n="10">
+  <p class="kicker">Review areas 6 &amp; 8</p>
+  <h2>Marketing and structured capture</h2>
+  <div class="grid g2" style="gap:22px">
+    <div>
+      <h3 style="font-size:17px;margin-bottom:10px">Marketing automation</h3>
+      <div class="card a"><h3>Enquiry handling</h3><p class="small dim">Inbound enquiry
+        classified, drafted response, HubSpot contact created, follow-up scheduled.</p></div>
+      <div class="card a" style="margin-top:12px"><h3>LinkedIn industry monitoring</h3>
+        <p class="small dim">Summarising the energy industry's LinkedIn activity — posts,
+        blogs, articles — into a periodic digest.</p>
+        <p class="small" style="color:var(--c)">Flagged: LinkedIn's terms prohibit automated
+        scrolling of the feed, and their API does not expose it. Practical routes are the
+        official Pages API for company content, or a curated source list. Recommend
+        confirming appetite before committing to this one.</p></div>
+      <div class="card a" style="margin-top:12px"><h3>Content drafting</h3><p class="small dim">
+        Fortnightly LinkedIn posts and blogs drafted from your recent project work and the
+        daily industry report — the two engagements feeding each other.</p></div>
+    </div>
+    <div>
+      <h3 style="font-size:17px;margin-bottom:10px">Forms &amp; data capture</h3>
+      <p class="small dim">Free text becomes structured input, which is what makes
+        everything downstream automatable.</p>
+      <table>
+        <thead><tr><th style="width:56%">Form</th><th>Feeds</th></tr></thead>
+        <tbody>
+          <tr><td>Project initiation</td><td class="dim">PM + SharePoint</td></tr>
+          <tr><td>Client onboarding</td><td class="dim">HubSpot + Xero</td></tr>
+          <tr><td>Site inspection</td><td class="dim">Report draft</td></tr>
+          <tr><td>Meeting preparation</td><td class="dim">Agenda + minutes</td></tr>
+          <tr><td>Proposal request</td><td class="dim">Proposal draft</td></tr>
+          <tr><td>Consultant checklist</td><td class="dim">Quality record</td></tr>
+          <tr><td>Stakeholder input</td><td class="dim">Project record</td></tr>
+          <tr><td>Design review</td><td class="dim">Deliverable record</td></tr>
+          <tr><td>Defect / product issue claim</td><td class="dim">Issue register</td></tr>
+          <tr><td>Stakeholder project enquiry</td><td class="dim">HubSpot</td></tr>
+        </tbody>
+      </table>
+      <p class="small faint" style="margin-top:10px">Built in Microsoft Forms — already
+        licensed, native to the tenant, no new platform.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 11 ──────────────────────────────────────────────────────────── -->
+<section class="slide" data-n="11">
+  <p class="kicker">Review area 9 · deliverable 5</p>
+  <h2>Software recommendations</h2>
+  <p class="lede">The brief prefers adding nothing. Three additions are proposed, all
+    self-hosted or already owned — and one thing is explicitly <em>not</em> recommended.</p>
+  <table>
+    <thead><tr><th style="width:20%">Addition</th><th style="width:30%">Justification</th>
+      <th style="width:14%">Cost</th><th style="width:16%">Effort</th><th style="width:20%">Maintenance</th></tr></thead>
+    <tbody>
+      <tr><td><strong>n8n</strong> <span class="tag t-a">self-hosted</span></td>
+        <td>The integration layer. Without it, the platforms cannot talk without a
+          third-party SaaS — which the brief rules out.</td>
+        <td class="tnum">~A$12/mo VPS</td><td>Already running</td><td class="dim">Low — you own it</td></tr>
+      <tr><td><strong>Vector knowledge base</strong> <span class="tag t-a">self-hosted</span></td>
+        <td>Lets AI draft from your past work instead of generically. This is what makes
+          section 7 real.</td>
+        <td class="tnum">Included</td><td>Low</td><td class="dim">Low</td></tr>
+      <tr><td><strong>AI API</strong></td>
+        <td>Drafting engine. Claude or Gemini; you already use Claude.</td>
+        <td class="tnum">~A$30–80/mo</td><td>Low</td><td class="dim">None</td></tr>
+      <tr><td><strong>Power BI Desktop</strong> <span class="tag t-n">already free</span></td>
+        <td>Business dashboard over HubSpot, ProjectManager and Xero.</td>
+        <td class="tnum">Free</td><td>Medium</td><td class="dim">Low</td></tr>
+    </tbody>
+  </table>
+  <div class="grid g2" style="margin-top:18px">
+    <div class="card c"><h3>Not recommended</h3><p class="small dim">A dedicated practice
+      management platform. It would duplicate HubSpot, ProjectManager and Xero, cost more
+      than everything above combined, and re-introduce exactly the third-party dependency
+      the brief asks to avoid.</p></div>
+    <div class="card"><h3>Worth a decision</h3><p class="small dim">Microsoft 365 Business
+      Premium over Standard — adds Intune and better security controls for client data.
+      Relevant to the “secure handling of client and business information” outcome. Modest
+      per-seat increase.</p></div>
+  </div>
+</section>
+
+<!-- 12 ──────────────────────────────────────────────────────────── -->
+<section class="slide" data-n="12">
+  <p class="kicker">Deliverable 4</p>
+  <h2>Automation opportunities, ranked</h2>
+  <p class="lede">Ordered by return against effort. Effort is build time; maintenance is
+    the ongoing cost once running.</p>
+  <table>
+    <thead><tr><th style="width:26%">Automation</th><th style="width:26%">Integration</th>
+      <th style="width:16%">Effort</th><th style="width:16%">Maintenance</th><th style="width:16%">Return</th></tr></thead>
+    <tbody>
+      <tr><td>Meeting → minutes, actions, filing, follow-up</td>
+        <td class="dim">Graph (Teams) → n8n → PM, SharePoint, Outlook</td>
+        <td><span class="tag t-c">High</span></td><td><span class="tag t-n">Low</span></td>
+        <td><span class="tag t-b">Highest</span></td></tr>
+      <tr><td>Automatic filing &amp; naming</td><td class="dim">Graph (SharePoint/OneDrive)</td>
+        <td><span class="tag t-n">Low</span></td><td><span class="tag t-n">Low</span></td>
+        <td><span class="tag t-b">High</span></td></tr>
+      <tr><td>Email drafting &amp; enquiry triage</td><td class="dim">Graph (Outlook) → AI → HubSpot</td>
+        <td><span class="tag t-n">Medium</span></td><td><span class="tag t-n">Low</span></td>
+        <td><span class="tag t-b">High</span></td></tr>
+      <tr><td>Knowledge base over past work</td><td class="dim">SharePoint → vector store</td>
+        <td><span class="tag t-n">Medium</span></td><td><span class="tag t-n">Low</span></td>
+        <td><span class="tag t-b">High</span></td></tr>
+      <tr><td>Client onboarding, one form</td><td class="dim">Forms → HubSpot, Xero, PM, SharePoint</td>
+        <td><span class="tag t-n">Low</span></td><td><span class="tag t-n">Low</span></td>
+        <td><span class="tag t-b">Medium</span></td></tr>
+      <tr><td>Proposal &amp; report generation</td><td class="dim">Knowledge base → Canva / Word</td>
+        <td><span class="tag t-c">High</span></td><td><span class="tag t-n">Medium</span></td>
+        <td><span class="tag t-b">High</span></td></tr>
+      <tr><td>Project milestone → Xero invoice draft</td><td class="dim">PM → n8n → Xero</td>
+        <td><span class="tag t-n">Medium</span></td><td><span class="tag t-n">Low</span></td>
+        <td><span class="tag t-b">Medium</span></td></tr>
+      <tr><td>Business dashboard</td><td class="dim">HubSpot, PM, Xero → Power BI</td>
+        <td><span class="tag t-n">Medium</span></td><td><span class="tag t-n">Low</span></td>
+        <td><span class="tag t-b">Medium</span></td></tr>
+      <tr><td>LinkedIn monitoring &amp; drafting</td><td class="dim">Sources → AI → draft posts</td>
+        <td><span class="tag t-n">Medium</span></td><td><span class="tag t-c">Medium</span></td>
+        <td><span class="tag t-n">Conditional</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- 13 ──────────────────────────────────────────────────────────── -->
+<section class="slide" data-n="13">
+  <p class="kicker">Delivery</p>
+  <h2>Path to 8 September</h2>
+  <div class="grid g3" style="margin-bottom:20px">
+    <div class="card c"><p class="kicker" style="margin:0 0 6px">11 Aug — today</p>
+      <h3>Draft Plan</h3><p class="small dim">This document. Operating model, target
+        architecture, the nine review areas answered, opportunities ranked.</p></div>
+    <div class="card"><p class="kicker" style="margin:0 0 6px">25 Aug</p>
+      <h3>Schematic Architecture</h3><p class="small dim">Full Business Systems Integration
+        Diagram, process flow maps per workflow, SharePoint information architecture,
+        integration specifications.</p></div>
+    <div class="card"><p class="kicker" style="margin:0 0 6px">8 Sep</p>
+      <h3>Final</h3><p class="small dim">Complete current-state assessment, final
+        architecture, API integration schedule with effort and maintenance, software
+        recommendations, implementation sequence.</p></div>
+  </div>
+  <div class="rule"></div>
+  <h3 style="font-size:17px;margin-bottom:10px">What is needed from you between now and 25 August</h3>
+  <div class="grid g2">
+    <div>
+      <ul class="small dim">
+        <li><strong>Working session, ~90 minutes</strong> — walk through a real week so the
+          current-state assessment reflects actual volumes rather than assumption</li>
+        <li><strong>Templates</strong> — your meeting minutes, proposal and report formats,
+          so the AI drafts into the real thing</li>
+        <li><strong>Microsoft 365 tenant confirmation</strong> — licensing, and whether Teams
+          transcription is enabled</li>
+      </ul>
+    </div>
+    <div>
+      <ul class="small dim">
+        <li><strong>Decision on LinkedIn monitoring</strong> — scope it to what the platform
+          permits, or drop it</li>
+        <li><strong>Sample documents</strong> — a representative set of past proposals and
+          reports to seed the knowledge base</li>
+        <li><strong>Access</strong> — HubSpot private app token, Xero OAuth, ProjectManager
+          API token, when build starts</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 14 ──────────────────────────────────────────────────────────── -->
+<section class="slide" data-n="14">
+  <p class="kicker">Honest assessment</p>
+  <h2>Risks and open questions</h2>
+  <p class="lede">Stated now rather than discovered in September.</p>
+  <table>
+    <thead><tr><th style="width:26%">Risk</th><th style="width:44%">Detail</th><th style="width:30%">Response</th></tr></thead>
+    <tbody>
+      <tr><td>Teams transcript access</td>
+        <td>App-only access to meeting transcripts requires the right licensing and an
+          application access policy. If unavailable, the highest-priority workflow needs a
+          different trigger.</td>
+        <td class="dim">Confirm before 25 Aug. Fallback: transcript export on meeting end.</td></tr>
+      <tr><td>LinkedIn feed monitoring</td>
+        <td>The brief asks for scrolling all latest posts. The platform's terms prohibit
+          this and the API does not expose the feed.</td>
+        <td class="dim">Rescope to permitted sources, or remove from scope.</td></tr>
+      <tr><td>Canva automation depth</td>
+        <td>The Canva API supports asset and template operations but not arbitrary
+          layout generation. Fully automated deck build may be partial.</td>
+        <td class="dim">Prototype during architecture phase; Office fallback.</td></tr>
+      <tr><td>AI draft quality</td>
+        <td>Drafts are only as good as the knowledge base behind them. Thin source
+          material means generic output.</td>
+        <td class="dim">Seed with real past work early; measure on real tasks.</td></tr>
+      <tr><td>Single point of failure</td>
+        <td>The automation layer becomes business-critical.</td>
+        <td class="dim">Self-hosted with backups; every workflow degrades to the current
+          manual process rather than blocking it.</td></tr>
+    </tbody>
+  </table>
+  <div class="grow"></div>
+  <div class="card c"><p class="small dim" style="margin:0"><strong>On scope.</strong>
+    Two items in the brief — LinkedIn feed monitoring and full Canva generation — cannot be
+    delivered exactly as written because of platform limits rather than effort. Both are
+    flagged here so the scope can be adjusted deliberately rather than quietly missed.</p></div>
+</section>
+
+<!-- 15 ──────────────────────────────────────────────────────────── -->
+<section class="slide" data-n="15">
+  <p class="kicker">In one line</p>
+  <h1 style="font-size:44px;max-width:20ch">The business runs itself.<br>You approve it.</h1>
+  <div class="grid g3" style="margin-top:8px">
+    <div class="card a"><h3>Captured once</h3><p class="small dim">A meeting, an email or a
+      form is the only input. Nothing is typed twice.</p></div>
+    <div class="card b"><h3>Drafted by AI</h3><p class="small dim">Minutes, actions, emails,
+      proposals, reports and posts arrive written, using your past work and your templates.</p></div>
+    <div class="card c"><h3>Approved by you</h3><p class="small dim">Every client-facing
+      artefact waits for you. Judgement stays where it belongs.</p></div>
+  </div>
+  <div class="grow"></div>
+  <div class="rule"></div>
+  <p class="small dim">Draft Plan · Business Structure Efficiency · 11 August 2026 ·
+    responds to the project brief dated 28 July 2026</p>
+  <p class="small faint">Next: Schematic Architecture Plan, 25 August 2026.</p>
+</section>
+
+</div>
+
+<div id="bar">
+  <button id="prev">← Prev</button>
+  <button id="next">Next →</button>
+  <span id="pos" class="tnum">1 / 15</span>
+  <div id="dots"></div>
+  <button onclick="window.print()">Print / PDF</button>
+</div>
+
+<script>
+  const slides = [...document.querySelectorAll('.slide')];
+  const dots = document.getElementById('dots');
+  const pos = document.getElementById('pos');
+  let i = 0;
+
+  slides.forEach((_, n) => {
+    const d = document.createElement('i');
+    d.onclick = () => go(n);
+    dots.appendChild(d);
+  });
+
+  function paint(){
+    pos.textContent = (i + 1) + ' / ' + slides.length;
+    [...dots.children].forEach((d, n) => d.classList.toggle('on', n === i));
+  }
+  function go(n){
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides[i].scrollIntoView({behavior:'smooth', block:'start'});
+    paint();
+  }
+  document.getElementById('prev').onclick = () => go(i - 1);
+  document.getElementById('next').onclick = () => go(i + 1);
+  addEventListener('keydown', e => {
+    if (['ArrowRight','PageDown',' '].includes(e.key)) { e.preventDefault(); go(i + 1); }
+    if (['ArrowLeft','PageUp'].includes(e.key))        { e.preventDefault(); go(i - 1); }
+    if (e.key === 'Home') go(0);
+    if (e.key === 'End')  go(slides.length - 1);
+  });
+
+  // Keep the counter honest when the reader simply scrolls.
+  const io = new IntersectionObserver(es => {
+    es.forEach(e => { if (e.isIntersecting) { i = slides.indexOf(e.target); paint(); } });
+  }, {threshold:0.55});
+  slides.forEach(s => io.observe(s));
+
+  paint();
+</script>
+</body>
+</html>
