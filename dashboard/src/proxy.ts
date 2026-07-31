@@ -1,5 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { SESSION_COOKIE, verifySession } from '@/lib/auth';
+import {
+  createSession,
+  readSession,
+  SESSION_COOKIE,
+  SESSION_COOKIE_OPTIONS,
+} from '@/lib/auth';
 
 // /proposal is a client-facing deliverable — shareable by link, so it stays
 // outside the admin session (it carries its own noindex).
@@ -31,12 +36,19 @@ export async function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const ok = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
-  if (!ok) {
+  const { valid, shouldRenew } = await readSession(req.cookies.get(SESSION_COOKIE)?.value);
+  if (!valid) {
     return NextResponse.redirect(new URL('/login', base));
   }
 
-  return NextResponse.next();
+  const res = NextResponse.next();
+  // Slide the expiry forward on ordinary use, so signing in once is enough and
+  // the session ends only when the cookie is cleared.
+  if (shouldRenew) {
+    const { token } = await createSession();
+    res.cookies.set(SESSION_COOKIE, token, SESSION_COOKIE_OPTIONS);
+  }
+  return res;
 }
 
 export const config = {
