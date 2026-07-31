@@ -1,0 +1,485 @@
+# BEXT — industry source registry
+#
+# Single source of truth for what the daily report monitors. Transcribed from
+# Project Brief_Industry Daily Report_2026.07.28.pdf, including every URL embedded
+# as a hyperlink in that document. The `sources` table is seeded from this file
+# and never hand-edited.
+#
+# method:
+#   rss     — feed discovered and verified to return a valid RSS/Atom document
+#   scrape  — no feed; the article index is parsed from HTML
+#
+# requires_browser: true means a plain HTTP GET is refused (403/401) and the fetch
+# has to go through a real browser session.
+#
+# Generated 68 sources: 37 RSS, 31 scrape.
+
+# Sections deferred by the brief to a separate report.
+deferred_sections:
+  - name: Grants / Funding Updates
+    note: "Brief says: link to other report (later deliverable)."
+  - name: LinkedIn Industry Behaviour and News
+    note: "Brief says: link to other report."
+
+# Filter vocabularies the brief spells out.
+register_categories:
+  - Authorisations
+  - Network Exemptions
+  - Retail Exemptions
+  - Guidelines Schemes Models and Reviews
+  - Projects
+  - Decisions
+  - Determination and Access Arrangements
+conversation_categories:
+  - "Environment & Energy"
+  - "Energy & Transport"
+  - "Climate Change & Weather"
+  - Pollution and Human Impact
+  - Sustainable Cities
+reneweconomy_sections:
+  - Latest
+  - Energy Bytes
+  - More News
+  - Renewables
+  - Storage
+  - Commentary
+  - "Policy & Planning"
+  - Most Read
+  - Chart of the Day
+
+sources:
+
+  # ── Australian News ─────────────────────────────────────────────
+  - slug: abc-energy
+    name: ABC News — Energy
+    category: Australian News
+    url: "https://www.abc.net.au/news/topic/energy-industry"
+    method: scrape
+  - slug: abc-climate
+    name: ABC News — Climate Change
+    category: Australian News
+    url: "https://www.abc.net.au/news/topic/climate-change"
+    method: scrape
+  - slug: afr-energy
+    name: Australian Financial Review — Energy
+    category: Australian News
+    url: "https://www.afr.com/companies/energy"
+    method: scrape
+  - slug: conversation-au
+    name: "The Conversation AU — Environment & Energy"
+    category: Australian News
+    url: "https://theconversation.com/au/environment"
+    method: scrape
+    filter:
+      categories:
+        - "Environment & Energy"
+        - "Energy & Transport"
+        - "Climate Change & Weather"
+        - Pollution and Human Impact
+        - Sustainable Cities
+
+  # ── International Industry Updates ──────────────────────────────
+  - slug: reuters-carbon
+    name: Reuters — Carbon Markets
+    category: International Industry Updates
+    url: "https://www.reuters.com/markets/carbon/"
+    method: scrape
+    requires_browser: true
+    note: Returns 401 to automated requests and is subscription-gated. Needs an authenticated session or a licensed feed.
+  - slug: spglobal-energy-transition
+    name: "S&P Global — Energy Transition"
+    category: International Industry Updates
+    url: "https://www.spglobal.com/en/research-insights/market-insights/energy-transition#news"
+    method: scrape
+    requires_browser: true
+    note: Returns 403 to automated requests. Largely subscriber content.
+  - slug: iea-energy-efficiency
+    name: IEA — Energy Efficiency
+    category: International Industry Updates
+    url: "https://www.iea.org/news"
+    method: scrape
+    active: false
+    note: Brief links this to the same /news page as IEA. Kept inactive; IEA covers it. Deduplication would drop the copies anyway.
+  - slug: irena
+    name: IRENA
+    category: International Industry Updates
+    url: "https://www.irena.org/News"
+    method: scrape
+  - slug: unfccc
+    name: UNFCCC
+    category: International Industry Updates
+    url: "https://unfccc.int/news"
+    method: rss
+    feed_url: "https://unfccc.int/rss.xml"
+  - slug: ec-energy
+    name: European Commission — Energy
+    category: International Industry Updates
+    url: "https://energy.ec.europa.eu/news_en"
+    method: scrape
+  - slug: us-doe
+    name: US Department of Energy
+    category: International Industry Updates
+    url: "https://www.energy.gov/search?page=0&sort_by=date&f%5B0%5D=article_type%3A1&f%5B1%5D=offices_rest%3AEnergy.gov"
+    method: rss
+    feed_url: "https://www.energy.gov/feed/"
+  - slug: iea
+    name: IEA
+    category: International Industry Updates
+    url: "https://www.iea.org/news"
+    method: scrape
+  - slug: nz-herald-energy
+    name: NZ Herald — Energy
+    category: International Industry Updates
+    url: "https://www.nzherald.co.nz/business/companies/energy/"
+    method: scrape
+  - slug: ieefa
+    name: IEEFA
+    category: International Industry Updates
+    url: "https://ieefa.org/newsroom?keys=&content_type%5B3%5D=3&tid%5B302%5D=302"
+    method: rss
+    feed_url: "https://ieefa.org/rss.xml"
+    requires_browser: true
+  - slug: energy-tracker
+    name: Energy Tracker Asia
+    category: International Industry Updates
+    url: "https://energytracker.asia/"
+    method: rss
+    feed_url: "https://energytracker.asia/feed/"
+  - slug: renewables-now
+    name: Renewables Now
+    category: International Industry Updates
+    url: "https://renewablesnow.com/regions/latin-america/"
+    method: scrape
+    requires_browser: true
+    note: "Brief link is the Latin America region page, which looks unintended for an Australian energy brief. CONFIRM the intended region."
+
+  # ── Industry Updates ────────────────────────────────────────────
+  - slug: aemo
+    name: AEMO
+    category: Industry Updates
+    url: "https://www.aemo.com.au/newsroom/news-updates"
+    method: scrape
+    requires_browser: true
+  - slug: aer-news
+    name: AER — News
+    category: Industry Updates
+    url: "https://www.aer.gov.au/news/articles"
+    method: rss
+    feed_url: "https://www.aer.gov.au/rss.xml"
+  - slug: aer-registers
+    name: AER — Registers Status
+    category: Industry Updates
+    url: "https://www.aer.gov.au/industry/registers"
+    method: rss
+    feed_url: "https://www.aer.gov.au/rss.xml"
+    filter:
+      path_contains:
+        - /industry/registers
+        - /exemptions
+        - /authorisation
+  - slug: aemc-news
+    name: AEMC — News Centre
+    category: Industry Updates
+    url: "https://www.aemc.gov.au/news-centre"
+    method: rss
+    feed_url: "https://www.aemc.gov.au/rss.xml"
+  - slug: aemc-registers
+    name: AEMC — Rule Changes / Registers
+    category: Industry Updates
+    url: "https://www.aemc.gov.au/our-work/changing-energy-rules/rule-changes"
+    method: rss
+    feed_url: "https://www.aemc.gov.au/rss.xml"
+    filter:
+      path_contains:
+        - /rule-changes
+        - /our-work
+  - slug: cer-news
+    name: Clean Energy Regulator — News
+    category: Industry Updates
+    url: "https://cer.gov.au/news-and-media/news#all-news"
+    method: rss
+    feed_url: "https://cer.gov.au/rss.xml"
+  - slug: cer-media
+    name: Clean Energy Regulator — Media Releases
+    category: Industry Updates
+    url: "https://cer.gov.au/news-and-media/media-centre/media-releases#all-media-releases"
+    method: rss
+    feed_url: "https://cer.gov.au/rss.xml"
+    filter:
+      path_contains:
+        - /media-releases
+  - slug: arena-news
+    name: ARENA — News
+    category: Industry Updates
+    url: "https://arena.gov.au/news/"
+    method: rss
+    feed_url: "https://arena.gov.au/feed/"
+  - slug: arena-knowledge
+    name: ARENA — Knowledge Bank
+    category: Industry Updates
+    url: "https://arena.gov.au/knowledge-bank/"
+    method: rss
+    feed_url: "https://arena.gov.au/feed/"
+    filter:
+      path_contains:
+        - /knowledge-bank
+  - slug: cefc-media
+    name: CEFC — Media
+    category: Industry Updates
+    url: "https://www.cefc.com.au/media/"
+    method: scrape
+  - slug: cefc-insights
+    name: CEFC — Insights
+    category: Industry Updates
+    url: "https://www.cefc.com.au/insights/"
+    method: scrape
+  - slug: cca
+    name: Climate Change Authority
+    category: Industry Updates
+    url: "https://www.climatechangeauthority.gov.au/latest-news"
+    method: rss
+    feed_url: "https://www.climatechangeauthority.gov.au/rss.xml"
+  - slug: accc-energy
+    name: ACCC — Energy
+    category: Industry Updates
+    url: "https://www.accc.gov.au/news-centre?type=accc_news&layout=full_width&f%5B0%5D=topic%3A133"
+    method: scrape
+  - slug: veu-news
+    name: Victorian Energy Upgrades — News
+    category: Industry Updates
+    url: "https://www.energy.vic.gov.au/victorian-energy-upgrades/installers/veu-industry-latest-news"
+    method: scrape
+    requires_browser: true
+  - slug: veu-program
+    name: Victorian Energy Upgrades — Program Updates
+    category: Industry Updates
+    url: "https://www.esc.vic.gov.au/victorian-energy-upgrades-program/veu-updates-reports-reviews-and-data/updates-veu-program"
+    method: rss
+    feed_url: "https://www.esc.vic.gov.au/rss"
+    filter:
+      keywords:
+        - Victorian Energy Upgrades
+        - VEU
+  - slug: esc-media
+    name: Essential Services Commission — Media
+    category: Industry Updates
+    url: "https://www.esc.vic.gov.au/media-centre"
+    method: rss
+    feed_url: "https://www.esc.vic.gov.au/rss"
+  - slug: fma
+    name: Facility Management Association
+    category: Industry Updates
+    url: "https://fma.com.au/Web/Web/Informed/News-landing.aspx"
+    method: scrape
+  - slug: infrastructure-mag
+    name: Infrastructure Magazine — Facilities Management
+    category: Industry Updates
+    url: "https://infrastructuremagazine.com.au/facilities-management/"
+    method: rss
+    feed_url: "https://infrastructuremagazine.com.au/feed/"
+  - slug: dcceew
+    name: DCCEEW
+    category: Industry Updates
+    url: "https://www.dcceew.gov.au/about/news/all?f%5B0%5D=news_type%3A1863&f%5B1%5D=topic%3A1883"
+    method: scrape
+    requires_browser: true
+  - slug: energy-gov-au
+    name: Energy.gov.au — News
+    category: Industry Updates
+    url: "https://www.energy.gov.au/news"
+    method: rss
+    feed_url: "https://www.energy.gov.au/rss.xml"
+  - slug: minister-bowen
+    name: Minister Bowen — Media Releases
+    category: Industry Updates
+    url: "https://minister.dcceew.gov.au/bowen"
+    method: rss
+    feed_url: "https://minister.dcceew.gov.au/rss.xml"
+  - slug: aph-bills
+    name: "Parliament of Australia — Bills & Legislation"
+    category: Industry Updates
+    url: "https://www.aph.gov.au/Parliamentary_Business/Bills_Legislation"
+    method: scrape
+    note: Bills homepage — tracks legislation status rather than publishing articles. Needs bespoke parsing.
+  - slug: vic-premier
+    name: "Victorian Premier — Energy & Climate Media"
+    category: Industry Updates
+    url: "https://www.premier.vic.gov.au/media-centre?portfolio=Climate+Action&portfolio=Energy+and+Resources&portfolio=Industry+and+Innovation&portfolio=Resources&portfolio=Small+Business&portfolio=State+Electricity+Commission"
+    method: scrape
+  - slug: nabers
+    name: NABERS
+    category: Industry Updates
+    url: "https://www.nabers.gov.au/news"
+    method: scrape
+  - slug: cbd
+    name: Commercial Building Disclosure
+    category: Industry Updates
+    url: "https://www.cbd.gov.au/news-and-events"
+    method: rss
+    feed_url: "https://www.cbd.gov.au/rss.xml"
+  - slug: abcb
+    name: Australian Building Codes Board
+    category: Industry Updates
+    url: "https://www.abcb.gov.au/news"
+    method: scrape
+  - slug: energy-rating-gems
+    name: Energy Rating / GEMS
+    category: Industry Updates
+    url: "https://www.energyrating.gov.au/news-and-stories"
+    method: rss
+    feed_url: "https://www.energyrating.gov.au/rss.xml"
+  - slug: disr
+    name: DISR
+    category: Industry Updates
+    url: "https://www.industry.gov.au/news?news-topic%5B2964%5D=2964&news-topic%5B2957%5D=2957&news-topic%5B2958%5D=2958&news-topic%5B2941%5D=2941&news-topic%5B3148%5D=3148&news-topic%5B3149%5D=3149&news-topic%5B2943%5D=2943&field_news_date_value=All"
+    method: scrape
+  - slug: cer-nger
+    name: Clean Energy Regulator — NGER
+    category: Industry Updates
+    url: "https://cer.gov.au/news-and-media/news?schemes=30#all-news"
+    method: rss
+    feed_url: "https://cer.gov.au/rss.xml"
+    filter:
+      keywords:
+        - NGER
+        - National Greenhouse and Energy Reporting
+  - slug: deeca-energy
+    name: DEECA — Energy News
+    category: Industry Updates
+    url: "https://www.energy.vic.gov.au/about-energy/news"
+    method: scrape
+    requires_browser: true
+  - slug: vicgrid
+    name: VicGrid
+    category: Industry Updates
+    url: "https://www.vicgrid.com.au/about/news"
+    method: scrape
+    requires_browser: true
+  - slug: sec-victoria
+    name: SEC Victoria
+    category: Industry Updates
+    url: "https://www.secvictoria.com.au/news"
+    method: scrape
+    requires_browser: true
+  - slug: solar-victoria
+    name: Solar Victoria
+    category: Industry Updates
+    url: "https://www.solar.vic.gov.au/"
+    method: scrape
+    note: "Brief link is the site homepage, not a news index. Article discovery is best-effort until a news URL is confirmed."
+  - slug: eec
+    name: Energy Efficiency Council
+    category: Industry Updates
+    url: "https://eec.org.au/resources/news/"
+    method: rss
+    feed_url: "https://eec.org.au/feed/"
+  - slug: cec
+    name: Clean Energy Council
+    category: Industry Updates
+    url: "https://cleanenergycouncil.org.au/news-resources"
+    method: scrape
+  - slug: aec
+    name: Australian Energy Council
+    category: Industry Updates
+    url: "https://energycouncil.com.au/media/"
+    method: rss
+    feed_url: "https://energycouncil.com.au/feed/"
+  - slug: gbca
+    name: Green Building Council of Australia
+    category: Industry Updates
+    url: "https://new.gbca.org.au/news/"
+    method: scrape
+  - slug: pca
+    name: Property Council of Australia
+    category: Industry Updates
+    url: "https://www.propertycouncil.com.au/news-research/viewallnews"
+    method: rss
+    feed_url: "https://www.propertycouncil.com.au/feed"
+    requires_browser: true
+  - slug: a2ep-aidc
+    name: Australian Alliance for Energy Productivity (AIDC)
+    category: Industry Updates
+    url: "https://aidc.org.au/aidc-media-releases/"
+    method: rss
+    feed_url: "https://aidc.org.au/feed/"
+    note: Australian Alliance for Energy Productivity now trades as AIDC; the brief link already points at aidc.org.au.
+  - slug: ahc
+    name: Australian Hydrogen Council
+    category: Industry Updates
+    url: "https://h2council.com.au/news/"
+    method: rss
+    feed_url: "https://aidc.org.au/feed/"
+    note: Brief supplied no link for the Australian Hydrogen Council. h2council.com.au redirects to aidc.org.au — CONFIRM with client before relying on this.
+  - slug: smart-energy-council
+    name: Smart Energy Council
+    category: Industry Updates
+    url: "https://smartenergy.org.au/news/sec-news/"
+    method: rss
+    feed_url: "https://smartenergy.org.au/feed/"
+  - slug: euaa
+    name: Energy Users Association of Australia
+    category: Industry Updates
+    url: "https://euaa.com.au/media-hub/"
+    method: rss
+    feed_url: "https://euaa.com.au/feed/"
+  - slug: igcc
+    name: Investor Group on Climate Change
+    category: Industry Updates
+    url: "https://igcc.org.au/news/"
+    method: rss
+    feed_url: "https://igcc.org.au/feed/"
+  - slug: climateworks
+    name: Climate Works Centre
+    category: Industry Updates
+    url: "https://climateworkscentre.org/news/"
+    method: rss
+    feed_url: "https://climateworkscentre.org/feed/"
+  - slug: race-2030
+    name: RACE for 2030
+    category: Industry Updates
+    url: "https://www.racefor2030.com.au/news-and-events/"
+    method: rss
+    feed_url: "https://www.racefor2030.com.au/feed/"
+  - slug: csiro
+    name: CSIRO — Energy News
+    category: Industry Updates
+    url: "https://www.csiro.au/en/news/All"
+    method: scrape
+  - slug: reneweconomy
+    name: RenewEconomy
+    category: Industry Updates
+    url: "https://reneweconomy.com.au/"
+    method: rss
+    feed_url: "https://reneweconomy.com.au/feed/"
+  - slug: reneweconomy-leitch
+    name: RenewEconomy — David Leitch
+    category: Industry Updates
+    url: "https://reneweconomy.com.au/author/david-leitch/"
+    method: rss
+    feed_url: "https://reneweconomy.com.au/feed/"
+    filter:
+      author: David Leitch
+  - slug: pv-magazine-au
+    name: PV Magazine Australia
+    category: Industry Updates
+    url: "https://www.pv-magazine-australia.com/all-news/"
+    method: rss
+    feed_url: "https://www.pv-magazine-australia.com/feed/"
+  - slug: energy-magazine
+    name: Energy Magazine
+    category: Industry Updates
+    url: "https://www.energymagazine.com.au/news/"
+    method: rss
+    feed_url: "https://www.energymagazine.com.au/feed/"
+  - slug: fifth-estate
+    name: The Fifth Estate
+    category: Industry Updates
+    url: "https://thefifthestate.com.au/"
+    method: rss
+    feed_url: "https://thefifthestate.com.au/feed/"
+  - slug: eco-generation
+    name: Eco Generation
+    category: Industry Updates
+    url: "https://www.ecogeneration.com.au/latest-news/"
+    method: rss
+    feed_url: "https://www.ecogeneration.com.au/feed/"
