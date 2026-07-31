@@ -57,11 +57,15 @@ jobs:
 
       - name: Verify live
         run: |
+          # Hit https directly and follow redirects. The app forces HTTPS and the
+          # root now redirects to /proposal, so a bare http request answers 301 —
+          # which is correct behaviour, not a failed deploy.
           sleep 15
           for i in $(seq 1 8); do
-            c=$(curl -s -o /dev/null -w "%{http_code}" http://bext.dev-environment.site/login || true)
+            c=$(curl -sL -o /dev/null -w "%{http_code}" https://bext.dev-environment.site/ || true)
             echo "try $i: $c"
             [ "$c" = "200" ] && exit 0
             sleep 10
           done
+          echo "site did not return 200 after 8 attempts"
           exit 1
