@@ -37,8 +37,8 @@ export default async function Health() {
             <p className="text-xs text-ink-400">down</p>
           </div>
           <div>
-            <p className="text-2xl font-semibold tnum text-ink-400">{live.unchecked}</p>
-            <p className="text-xs text-ink-400">no probe</p>
+            <p className="text-2xl font-semibold tnum text-warn">{live.offHost}</p>
+            <p className="text-xs text-ink-400">off-host</p>
           </div>
           <div className="ml-auto text-right">
             <p className="text-2xl font-semibold tnum">

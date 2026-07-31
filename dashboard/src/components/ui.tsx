@@ -49,7 +49,7 @@ export function SetupPill({ status }: { status: SetupStatus }) {
 const LIVE_STYLE: Record<string, { ring: string; dot: string; label: string }> = {
   up: { ring: 'bg-ok/12 text-ok ring-ok/25', dot: 'bg-ok', label: 'Live' },
   down: { ring: 'bg-blocked/12 text-blocked ring-blocked/25', dot: 'bg-blocked', label: 'Down' },
-  degraded: { ring: 'bg-warn/12 text-warn ring-warn/25', dot: 'bg-warn', label: 'Degraded' },
+  unreachable: { ring: 'bg-warn/12 text-warn ring-warn/25', dot: 'bg-warn', label: 'Off-host' },
   unchecked: { ring: 'bg-ink-800 text-ink-400 ring-ink-700', dot: 'bg-ink-600', label: 'No probe' },
 };
 

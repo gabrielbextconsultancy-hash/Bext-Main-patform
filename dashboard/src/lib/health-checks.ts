@@ -10,7 +10,10 @@ import 'server-only';
  * labelled as "not remotely checkable".
  */
 
-export type Live = 'up' | 'down' | 'degraded' | 'unchecked';
+// 'up'/'down' come from an actual HTTP response; 'unreachable' means the probe
+// could not connect at all (timeout/DNS/refused) — the service may well be fine,
+// just not routable from this host; 'unchecked' means no probe exists.
+export type Live = 'up' | 'down' | 'unreachable' | 'unchecked';
 
 export interface CheckResult {
   live: Live;
@@ -62,6 +65,12 @@ const down = (detail: string): CheckResult => ({
   latencyMs: null,
   checkedAt: new Date().toISOString(),
 });
+const unreachable = (detail: string): CheckResult => ({
+  live: 'unreachable',
+  detail,
+  latencyMs: null,
+  checkedAt: new Date().toISOString(),
+});
 
 /** Probes keyed by tool id. A missing id => not network-probeable. */
 const PROBES: Record<string, () => Promise<CheckResult>> = {
@@ -79,8 +88,8 @@ const PROBES: Record<string, () => Promise<CheckResult>> = {
       return r.ok
         ? up(`healthz ${r.status}`, r.latencyMs)
         : down(`healthz returned ${r.status}`);
-    } catch (e) {
-      return down(`unreachable: ${(e as Error).name}`);
+    } catch {
+      return unreachable('No route from dashboard host — n8n runs on the VPS');
     }
   },
 
@@ -94,8 +103,8 @@ const PROBES: Record<string, () => Promise<CheckResult>> = {
       if (r.status === 200) return up(`models ${r.status}`, r.latencyMs);
       if (r.status === 403 || r.status === 400) return down(`key rejected (${r.status})`);
       return down(`unexpected ${r.status}`);
-    } catch (e) {
-      return down(`unreachable: ${(e as Error).name}`);
+    } catch {
+      return unreachable('No route from dashboard host');
     }
   },
 
@@ -114,8 +123,8 @@ const PROBES: Record<string, () => Promise<CheckResult>> = {
       if (r.status === 401) return down('token invalid');
       if (r.status === 404) return down('repo not visible to token');
       return down(`status ${r.status}`);
-    } catch (e) {
-      return down(`unreachable: ${(e as Error).name}`);
+    } catch {
+      return unreachable('No route from dashboard host');
     }
   },
 };
@@ -152,7 +161,8 @@ export const liveCounts = (data: Record<string, CheckResult>) => {
   return {
     up: vals.filter(v => v === 'up').length,
     down: vals.filter(v => v === 'down').length,
-    unchecked: vals.filter(v => v === 'unchecked').length,
+    // Not-routable-from-here and never-probed share a column — neither means broken.
+    offHost: vals.filter(v => v === 'unreachable' || v === 'unchecked').length,
     probed: vals.filter(v => v === 'up' || v === 'down').length,
   };
 };
