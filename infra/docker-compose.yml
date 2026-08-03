@@ -149,6 +149,37 @@ services:
       - traefik.http.middlewares.bext-n8n.headers.STSPreload=true
       - traefik.http.routers.bext-n8n.middlewares=bext-n8n@docker
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: bext-ollama
+    restart: always
+    # Loopback only. n8n reaches it as http://ollama:11434 on the internal
+    # network; 11434 on 127.0.0.1 is for benchmarking and manual pulls.
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - bext_ollama:/root/.ollama
+    environment:
+      # Keep one model in memory permanently — otherwise the ~5 GB model reloads
+      # on every call and every invocation waits 20+ seconds for cold start.
+      OLLAMA_KEEP_ALIVE: 24h
+      # Two concurrent generations would swap heavily on 8 GB RAM. One at a time
+      # is honest capacity for this VPS.
+      OLLAMA_NUM_PARALLEL: 1
+      OLLAMA_MAX_LOADED_MODELS: 1
+      # Give inference both vCPUs. Leaves everything else contending, which is
+      # fine because Postgres and n8n are near-idle between workflow ticks.
+      OLLAMA_NUM_THREADS: 2
+    # Ceiling below the model size + a little headroom; Docker OOM-kills the
+    # container rather than the whole host if a bigger model is accidentally
+    # pulled. Adjust if you switch models.
+    deploy:
+      resources:
+        limits:
+          memory: 6g
+    networks:
+      - bext_internal
+
 networks:
   bext_internal:
     driver: bridge
@@ -160,3 +191,4 @@ volumes:
   bext_qdrant:
   bext_n8n:
   bext_files:
+  bext_ollama:
