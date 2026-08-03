@@ -154,7 +154,24 @@ export const TOOLS: PlatformTool[] = [
     paid: false,
     owner: 'You',
     status: 'configured',
-    note: 'Powers the article analysis workflow (Gemini Flash).',
+    note: 'Powers the article analysis workflow today. Kept as the fast fallback alongside the self-hosted Hermes below.',
+  },
+  {
+    id: 'ollama-hermes',
+    name: 'Nous Hermes 3 (self-hosted, Ollama)',
+    category: 'AI',
+    purpose: 'Local LLM for article analysis and agent tasks — the client-owned AI path',
+    cost: 'Free (VPS compute only)',
+    paid: false,
+    owner: 'You',
+    status: 'in_progress',
+    endpoint: 'http://ollama:11434 (internal to the bext stack)',
+    note:
+      'Ollama container in the bext compose project. Nous Hermes 3 8B at Q4_K_M quantization, ' +
+      'CPU-only inference on the EPYC 9354P slice with AVX-512. Chosen so the whole AI path ' +
+      'transfers to BEXT at handover with no per-token bill. Expect 5-10 tokens/sec — usable for ' +
+      'batch summarisation and slow agent work, kept alongside Gemini for speed-sensitive calls.',
+    thisWeek: true,
   },
 
   // ── Microsoft ──────────────────────────────────────────────────────────
