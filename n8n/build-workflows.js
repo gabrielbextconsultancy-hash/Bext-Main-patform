@@ -313,16 +313,21 @@ try { parsed = JSON.parse(text); }
 catch { throw new Error('Gemini returned unparseable JSON: ' + text.slice(0, 300)); }
 
 const valid = new Set(rows.map(r => r.id));
-return parsed
+const scored = parsed
   .filter(p => valid.has(p.id))
-  .map(p => ({ json: {
+  .map(p => ({
     article_id: p.id,
     summary: String(p.summary ?? '').slice(0, 2000),
     relevance_score: Math.max(0, Math.min(100, Number(p.relevance_score) || 0)),
-    topics: Array.isArray(p.topics) ? p.topics.slice(0, 4) : [],
-    entities: Array.isArray(p.entities) ? p.entities.slice(0, 10) : [],
+    topics: (Array.isArray(p.topics) ? p.topics.slice(0, 4) : []).join('|'),
+    entities: (Array.isArray(p.entities) ? p.entities.slice(0, 10) : []).join('|'),
     model: MODEL,
-  }}));
+  }));
+
+// One item carrying the whole batch as JSON. Passing rows individually meant
+// n8n's queryReplacement split them on commas, and summaries are full of commas —
+// which pushed prose into the relevance_score integer column and failed the insert.
+return [{ json: { payload: JSON.stringify(scored), count: scored.length } }];
 `,
         },
       },
@@ -333,12 +338,18 @@ return parsed
         parameters: {
           operation: 'executeQuery',
           query: `INSERT INTO article_analysis (article_id, summary, relevance_score, topics, entities, model)
-VALUES ($1, $2, $3, string_to_array(nullif($4,''), '|'), string_to_array(nullif($5,''), '|'), $6)
+-- nullif turns an empty list into NULL, and string_to_array(NULL) is NULL, which
+-- both array columns reject. An article with no named entities is normal, so fall
+-- back to an empty array rather than failing the whole batch.
+SELECT article_id, summary, relevance_score,
+       coalesce(string_to_array(nullif(topics, ''), '|'), '{}'),
+       coalesce(string_to_array(nullif(entities, ''), '|'), '{}'),
+       model
+FROM json_to_recordset($1::json)
+  AS x(article_id bigint, summary text, relevance_score int,
+       topics text, entities text, model text)
 ON CONFLICT (article_id) DO NOTHING`,
-          options: {
-            queryReplacement:
-              '={{ $json.article_id }},{{ $json.summary }},{{ $json.relevance_score }},{{ $json.topics.join("|") }},{{ $json.entities.join("|") }},{{ $json.model }}',
-          },
+          options: { queryReplacement: '={{ $json.payload }}' },
         },
       },
     ],
@@ -426,7 +437,9 @@ try {
     body: {
       model: 'hermes3:8b',
       stream: false,
-      options: { temperature: 0.3, num_predict: 220 },
+      // 220 cut the intro off mid-sentence in testing; 3 sentences of prose needs
+      // more headroom than the token count suggests.
+      options: { temperature: 0.3, num_predict: 360 },
       prompt: \`You brief an Australian energy and sustainability consultant each morning.
 Write 2-3 sentences naming what actually matters in today's items and why — regulatory
 change, funding, and Victorian schemes matter most. No greeting, no sign-off, no bullet
@@ -496,10 +509,13 @@ const html = \`<!doctype html><html><body style="margin:0;padding:0;background:#
 </div></body></html>\`;
 
 const date = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' });
+const recipient = $env.REPORT_RECIPIENT || $env.REPORT_SENDER;
+// Built here and kept free of commas: queryReplacement splits on them, which
+// truncated this to a bare item count the first time round.
+const detail = \`Sent \${d.item_count} items to \${recipient} | intro by \${d.generated_by}\`;
 return [{ json: { html, subject: 'BEXT Industry Daily — ' + today,
                   report_date: date, item_count: d.item_count,
-                  recipient: $env.REPORT_RECIPIENT || $env.REPORT_SENDER,
-                  generated_by: d.generated_by } }];
+                  recipient, detail, generated_by: d.generated_by } }];
 `,
         },
       },
@@ -558,10 +574,7 @@ WHERE report_date = $1::date`,
           operation: 'executeQuery',
           query: `INSERT INTO integration_health (service, status, detail)
 VALUES ('daily_report', 'up', $1)`,
-          options: {
-            queryReplacement:
-              '=Sent {{ $("Render HTML").first().json.item_count }} items to {{ $("Render HTML").first().json.recipient }}, brief by {{ $("Render HTML").first().json.generated_by }}',
-          },
+          options: { queryReplacement: '={{ $("Render HTML").first().json.detail }}' },
         },
       },
     ],
