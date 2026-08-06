@@ -107,12 +107,22 @@ services:
       # Read by the analysis workflow's Code node as $env.GEMINI_API_KEY.
       GEMINI_API_KEY: ${GEMINI_API_KEY}
 
+      # Read by the daily report's render node and the SMTP send node.
+      REPORT_SENDER: ${REPORT_SENDER}
+      REPORT_RECIPIENT: ${REPORT_RECIPIENT}
+
       # Code nodes may not require Node builtins unless named here. The ingest
       # parser hashes article content with crypto to deduplicate stories that are
       # syndicated across several sources under different URLs.
       # crypto hashes article content to deduplicate syndicated stories; url
       # provides the URL constructor, which the sandbox does not expose globally.
       NODE_FUNCTION_ALLOW_BUILTIN: crypto,url
+
+      # Code nodes are denied $env by default, which silently killed the analysis
+      # workflow on every tick: it loaded 40 articles then died reading
+      # $env.GEMINI_API_KEY, so nothing was ever scored. Keys stay in the
+      # environment rather than inline in workflow JSON, so this has to be open.
+      N8N_BLOCK_ENV_ACCESS_IN_NODE: "false"
 
       # The ingest Code node fetches 64 sources, 15 of them through a headless
       # browser. The 300s default is not enough even with the work parallelised.
@@ -160,9 +170,12 @@ services:
     volumes:
       - bext_ollama:/root/.ollama
     environment:
-      # Keep one model in memory permanently — otherwise the ~5 GB model reloads
-      # on every call and every invocation waits 20+ seconds for cold start.
-      OLLAMA_KEEP_ALIVE: 24h
+      # Unload the model after a few minutes idle. Keeping it resident costs ~5 GB
+      # on a 8 GB host that also runs two other clients' stacks — that starved the
+      # box into swap and made SSH and both n8n instances unreachable. A batch of
+      # calls pays one ~10 s cold start and then runs warm, which is the right
+      # trade for scheduled work.
+      OLLAMA_KEEP_ALIVE: 5m
       # Two concurrent generations would swap heavily on 8 GB RAM. One at a time
       # is honest capacity for this VPS.
       OLLAMA_NUM_PARALLEL: 1

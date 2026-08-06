@@ -17,6 +17,7 @@ const B = process.env.N8N_URL;
 const H = { 'X-N8N-API-KEY': process.env.N8N_API_KEY, 'Content-Type': 'application/json' };
 const DRY = process.argv.includes('--dry');
 const PG_CRED = process.env.N8N_PG_CREDENTIAL_ID;
+const SMTP_CRED = process.env.N8N_SMTP_CREDENTIAL_ID;
 const TAG = 'BEXT Consultancy';
 
 // The tested parser, minus its CommonJS export line, for embedding in a Code node.
@@ -349,6 +350,233 @@ ON CONFLICT (article_id) DO NOTHING`,
   };
 }
 
+// ─── Workflow 3: Daily Report ────────────────────────────────────────────────
+
+// Section order is the brief's, not ours — the client reads it looking for these
+// headings in this sequence.
+const REPORT_SECTIONS = [
+  'Australian News',
+  'International Industry Updates',
+  'Industry Updates',
+];
+
+const REPORT_SELECT = `
+WITH ranked AS (
+  SELECT a.id, a.url, a.title, a.published_at, s.name AS source_name, s.category,
+         an.summary, an.relevance_score,
+         row_number() OVER (PARTITION BY s.category ORDER BY an.relevance_score DESC, a.published_at DESC NULLS LAST) AS rn
+  FROM articles a
+  JOIN sources s          ON s.id = a.source_id
+  JOIN article_analysis an ON an.article_id = a.id
+  WHERE a.fetched_at > now() - interval '24 hours'
+    AND an.relevance_score >= 40
+)
+SELECT id, url, title, published_at, source_name, category, summary, relevance_score
+FROM ranked
+WHERE rn <= 8
+ORDER BY category, relevance_score DESC`;
+
+function dailyReportWorkflow() {
+  return {
+    name: 'BEXT — Daily Report',
+    settings: { executionOrder: 'v1', timezone: 'Australia/Melbourne' },
+    nodes: [
+      {
+        id: 'trigger', name: 'Daily 05:00 AEST', type: 'n8n-nodes-base.scheduleTrigger',
+        typeVersion: 1.2, position: pos(-400, 0),
+        // Expressed in Australia/Melbourne (workflow timezone), so it follows DST
+        // rather than drifting an hour when daylight saving starts.
+        parameters: { rule: { interval: [{ field: 'cronExpression', expression: '0 5 * * *' }] } },
+      },
+      {
+        id: 'pull', name: 'Top articles, last 24h', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(-180, 0),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        parameters: { operation: 'executeQuery', query: REPORT_SELECT, options: {} },
+      },
+      {
+        id: 'brief', name: 'Hermes writes the brief', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(60, 0),
+        parameters: {
+          mode: 'runOnceForAllItems', language: 'javaScript',
+          jsCode: `
+const rows = $input.all().map(i => i.json);
+if (rows.length === 0) {
+  return [{ json: { empty: true, item_count: 0, sections: [], intro: '' } }];
+}
+
+// Group into the brief's section order.
+const ORDER = ${JSON.stringify(REPORT_SECTIONS)};
+const sections = ORDER
+  .map(name => ({ name, items: rows.filter(r => r.category === name) }))
+  .filter(s => s.items.length > 0);
+
+// One Hermes call for the editorial intro. Deliberately one call, not one per
+// article — at ~7.5 tokens/sec on this VPS, per-article calls would take the
+// report past its 05:00 send window.
+let intro = '';
+try {
+  const headlines = rows.slice(0, 15)
+    .map(r => \`- [\${r.relevance_score}] \${r.title} (\${r.source_name})\`).join('\\n');
+  const res = await this.helpers.httpRequest({
+    method: 'POST',
+    url: 'http://ollama:11434/api/generate',
+    json: true,
+    timeout: 180000,
+    body: {
+      model: 'hermes3:8b',
+      stream: false,
+      options: { temperature: 0.3, num_predict: 220 },
+      prompt: \`You brief an Australian energy and sustainability consultant each morning.
+Write 2-3 sentences naming what actually matters in today's items and why — regulatory
+change, funding, and Victorian schemes matter most. No greeting, no sign-off, no bullet
+points, no markdown. Plain prose only.
+
+TODAY'S ITEMS:
+\${headlines}\`,
+    },
+  });
+  intro = String(res?.response ?? '').trim();
+} catch (e) {
+  // A slow or unavailable model must not stop the report going out.
+  intro = '';
+}
+
+return [{ json: { empty: false, item_count: rows.length, sections, intro,
+                  generated_by: intro ? 'hermes3:8b' : 'none' } }];
+`,
+        },
+      },
+      {
+        id: 'render', name: 'Render HTML', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(280, 0),
+        parameters: {
+          mode: 'runOnceForAllItems', language: 'javaScript',
+          jsCode: `
+const d = $input.first().json;
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
+  ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+const today = new Date().toLocaleDateString('en-AU',
+  { weekday:'long', day:'numeric', month:'long', year:'numeric', timeZone:'Australia/Melbourne' });
+
+// Inline styles throughout — Outlook and Gmail strip <style> blocks.
+const body = d.empty
+  ? '<p style="color:#6b7280">No qualifying articles in the last 24 hours.</p>'
+  : d.sections.map(sec => \`
+      <h2 style="font:600 15px/1.3 Arial,sans-serif;color:#111827;margin:28px 0 10px;
+                 padding-bottom:6px;border-bottom:2px solid #14b8a6">\${esc(sec.name)}</h2>
+      \` + sec.items.map(a => \`
+        <div style="margin:0 0 16px">
+          <a href="\${esc(a.url)}" style="font:600 14px/1.4 Arial,sans-serif;color:#0f766e;
+             text-decoration:none">\${esc(a.title)}</a>
+          <div style="font:11px/1.4 Arial,sans-serif;color:#9ca3af;margin:3px 0 4px">
+            \${esc(a.source_name)} · relevance \${a.relevance_score}
+          </div>
+          <div style="font:13px/1.5 Arial,sans-serif;color:#374151">\${esc(a.summary)}</div>
+        </div>\`).join('')
+    ).join('');
+
+const html = \`<!doctype html><html><body style="margin:0;padding:0;background:#f3f4f6">
+<div style="max-width:680px;margin:0 auto;background:#fff;padding:28px 32px">
+  <div style="font:11px/1 Arial,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#9ca3af">
+    BEXT Consultancy · Industry Daily
+  </div>
+  <h1 style="font:600 20px/1.3 Arial,sans-serif;color:#111827;margin:6px 0 2px">\${today}</h1>
+  <div style="font:12px/1.4 Arial,sans-serif;color:#9ca3af;margin-bottom:20px">
+    \${d.item_count} items across \${d.sections.length} sections
+  </div>
+  \${d.intro ? \`<div style="background:#f0fdfa;border-left:3px solid #14b8a6;padding:12px 14px;
+       font:13px/1.6 Arial,sans-serif;color:#134e4a;margin-bottom:8px">\${esc(d.intro)}</div>\` : ''}
+  \${body}
+  <div style="margin-top:32px;padding-top:14px;border-top:1px solid #e5e7eb;
+              font:11px/1.5 Arial,sans-serif;color:#9ca3af">
+    Generated automatically from \${d.item_count} scored articles.
+    Grants / Funding and LinkedIn sections are covered in a separate report.
+  </div>
+</div></body></html>\`;
+
+const date = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' });
+return [{ json: { html, subject: 'BEXT Industry Daily — ' + today,
+                  report_date: date, item_count: d.item_count,
+                  recipient: $env.REPORT_RECIPIENT || $env.REPORT_SENDER,
+                  generated_by: d.generated_by } }];
+`,
+        },
+      },
+      {
+        id: 'save', name: 'Save report', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(500, 0),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        parameters: {
+          operation: 'executeQuery',
+          // Written before the send so a delivery failure still leaves the rendered
+          // report on record — the dashboard can show what would have gone out.
+          // One JSON parameter rather than positional ones: n8n splits
+          // queryReplacement on commas, and rendered HTML is full of them.
+          query: `INSERT INTO reports (report_date, status, html, recipient, item_count, generated_at)
+SELECT report_date::date, 'rendered', html, recipient, item_count, now()
+FROM json_to_recordset($1::json)
+  AS x(report_date text, html text, recipient text, item_count int)
+ON CONFLICT (report_date) DO UPDATE SET
+  status = 'rendered', html = EXCLUDED.html, recipient = EXCLUDED.recipient,
+  item_count = EXCLUDED.item_count, generated_at = now(), error = NULL`,
+          options: {
+            queryReplacement:
+              '={{ JSON.stringify([{ report_date: $json.report_date, html: $json.html, recipient: $json.recipient, item_count: $json.item_count }]) }}',
+          },
+        },
+      },
+      {
+        id: 'send', name: 'Send via SMTP', type: 'n8n-nodes-base.emailSend',
+        typeVersion: 2.1, position: pos(720, 0),
+        credentials: { smtp: { id: SMTP_CRED, name: 'BEXT SMTP' } },
+        parameters: {
+          fromEmail: '={{ $env.REPORT_SENDER }}',
+          toEmail: '={{ $("Render HTML").first().json.recipient }}',
+          subject: '={{ $("Render HTML").first().json.subject }}',
+          emailFormat: 'html',
+          html: '={{ $("Render HTML").first().json.html }}',
+          options: {},
+        },
+      },
+      {
+        id: 'mark', name: 'Mark sent', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(940, 0),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        parameters: {
+          operation: 'executeQuery',
+          query: `UPDATE reports SET status = 'sent', sent_at = now()
+WHERE report_date = $1::date`,
+          options: { queryReplacement: '={{ $("Render HTML").first().json.report_date }}' },
+        },
+      },
+      {
+        id: 'health', name: 'Record result', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(1160, 0),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        parameters: {
+          operation: 'executeQuery',
+          query: `INSERT INTO integration_health (service, status, detail)
+VALUES ('daily_report', 'up', $1)`,
+          options: {
+            queryReplacement:
+              '=Sent {{ $("Render HTML").first().json.item_count }} items to {{ $("Render HTML").first().json.recipient }}, brief by {{ $("Render HTML").first().json.generated_by }}',
+          },
+        },
+      },
+    ],
+    connections: {
+      'Daily 05:00 AEST': { main: [[{ node: 'Top articles, last 24h', type: 'main', index: 0 }]] },
+      'Top articles, last 24h': { main: [[{ node: 'Hermes writes the brief', type: 'main', index: 0 }]] },
+      'Hermes writes the brief': { main: [[{ node: 'Render HTML', type: 'main', index: 0 }]] },
+      'Render HTML': { main: [[{ node: 'Save report', type: 'main', index: 0 }]] },
+      'Save report': { main: [[{ node: 'Send via SMTP', type: 'main', index: 0 }]] },
+      'Send via SMTP': { main: [[{ node: 'Mark sent', type: 'main', index: 0 }]] },
+      'Mark sent': { main: [[{ node: 'Record result', type: 'main', index: 0 }]] },
+    },
+  };
+}
+
 // ─── Deploy ──────────────────────────────────────────────────────────────────
 
 async function deploy(wf) {
@@ -390,4 +618,6 @@ async function deploy(wf) {
   }
   await deploy(sourceIngestWorkflow());
   await deploy(articleAnalysisWorkflow());
+  if (!SMTP_CRED) console.error('N8N_SMTP_CREDENTIAL_ID not set — skipping the daily report.');
+  else await deploy(dailyReportWorkflow());
 })();

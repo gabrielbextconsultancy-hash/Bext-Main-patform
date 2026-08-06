@@ -63,6 +63,58 @@ export const getSources = () =>
      FROM sources ORDER BY category, name`
   );
 
+export interface ReportRow {
+  id: number;
+  report_date: string;
+  status: string;
+  item_count: number;
+  recipient: string | null;
+  generated_at: string | null;
+  sent_at: string | null;
+  error: string | null;
+}
+
+/** Every report, newest first — drives the /reports panel. */
+export const getReports = () =>
+  tryQuery<ReportRow>(
+    `SELECT id, report_date::text, status::text, item_count, recipient,
+            generated_at::text, sent_at::text, error
+     FROM reports ORDER BY report_date DESC LIMIT 60`
+  );
+
+/** The rendered HTML for one report, so the panel can preview what went out. */
+export const getReportHtml = async (date: string) => {
+  const rows = await tryQuery<{ html: string | null }>(
+    `SELECT html FROM reports WHERE report_date = $1::date`,
+    [date]
+  );
+  return rows?.[0]?.html ?? null;
+};
+
+/** Pipeline readiness — what the report will have to work with at 05:00. */
+export interface PipelineReadiness {
+  articles_24h: number;
+  analysed_24h: number;
+  qualifying: number;
+  categories: number;
+}
+
+export const getPipelineReadiness = async () => {
+  const rows = await tryQuery<PipelineReadiness>(
+    `SELECT
+       count(*) FILTER (WHERE a.fetched_at > now() - interval '24 hours')::int AS articles_24h,
+       count(an.article_id) FILTER (WHERE a.fetched_at > now() - interval '24 hours')::int AS analysed_24h,
+       count(*) FILTER (WHERE a.fetched_at > now() - interval '24 hours'
+                          AND an.relevance_score >= 40)::int AS qualifying,
+       count(DISTINCT s.category) FILTER (WHERE a.fetched_at > now() - interval '24 hours'
+                                            AND an.relevance_score >= 40)::int AS categories
+     FROM articles a
+     JOIN sources s ON s.id = a.source_id
+     LEFT JOIN article_analysis an ON an.article_id = a.id`
+  );
+  return rows?.[0] ?? null;
+};
+
 export interface TodayReport {
   report_date: string;
   status: string;

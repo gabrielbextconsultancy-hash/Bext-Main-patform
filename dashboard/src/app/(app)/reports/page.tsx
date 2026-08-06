@@ -1,0 +1,195 @@
+import { getReports, getPipelineReadiness, getHealth } from '@/lib/queries';
+import { Card, DatabaseDown, Empty } from '@/components/ui';
+
+export const dynamic = 'force-dynamic';
+
+const STATUS: Record<string, { label: string; cls: string; dot: string }> = {
+  sent: { label: 'Sent', cls: 'bg-ok/12 text-ok ring-ok/25', dot: 'bg-ok' },
+  rendered: { label: 'Rendered, not sent', cls: 'bg-warn/12 text-warn ring-warn/25', dot: 'bg-warn' },
+  draft: { label: 'Draft', cls: 'bg-ink-800 text-ink-400 ring-ink-700', dot: 'bg-ink-600' },
+  failed: { label: 'Failed', cls: 'bg-blocked/12 text-blocked ring-blocked/25', dot: 'bg-blocked' },
+};
+
+function Pill({ status }: { status: string }) {
+  const s = STATUS[status] ?? STATUS.draft;
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ring-inset ${s.cls}`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
+      {s.label}
+    </span>
+  );
+}
+
+const fmtDate = (d: string) =>
+  new Date(d + 'T00:00:00').toLocaleDateString('en-AU', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+  });
+
+const fmtTime = (t: string | null) =>
+  t
+    ? new Date(t).toLocaleString('en-AU', {
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'Australia/Melbourne',
+      })
+    : '—';
+
+export default async function ReportsPage() {
+  const [reports, ready, health] = await Promise.all([
+    getReports(),
+    getPipelineReadiness(),
+    getHealth(),
+  ]);
+
+  if (!reports) return <DatabaseDown />;
+
+  const sent = reports.filter(r => r.status === 'sent').length;
+  const failed = reports.filter(r => r.status === 'failed').length;
+  const lastRun = health?.find(h => h.service === 'daily_report');
+
+  // The report only has something to say if analysis has scored enough of the
+  // last day's articles — surfaced up front so an empty send is explainable.
+  const gate = ready
+    ? ready.qualifying > 0
+      ? { pass: true, msg: `${ready.qualifying} articles across ${ready.categories} sections would be included right now.` }
+      : ready.analysed_24h === 0
+        ? { pass: false, msg: 'Nothing analysed in the last 24 hours — the analysis workflow has not scored new articles, so the report would be empty.' }
+        : { pass: false, msg: `${ready.analysed_24h} articles analysed but none scored 40 or above, so nothing qualifies for the sheet.` }
+    : null;
+
+  return (
+    <div className="space-y-5">
+      <header>
+        <h1 className="text-xl font-semibold tracking-tight text-ink-100">Daily Report</h1>
+        <p className="mt-1 text-sm text-ink-400">
+          Scheduled 05:00 Australia/Melbourne. Sent over SMTP; switches to Microsoft Graph once
+          the tenant exists.
+        </p>
+      </header>
+
+      {/* Readiness — the pass/fail check */}
+      <Card
+        title="Next run readiness"
+        subtitle="What the 05:00 send would produce if it ran now."
+      >
+        {ready ? (
+          <>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Stat label="Fetched 24h" value={ready.articles_24h} />
+              <Stat label="Analysed" value={ready.analysed_24h} />
+              <Stat
+                label="Qualifying (≥40)"
+                value={ready.qualifying}
+                tone={ready.qualifying > 0 ? 'good' : 'bad'}
+              />
+              <Stat label="Sections" value={ready.categories} />
+            </div>
+            {gate && (
+              <div
+                className={`mt-4 flex items-start gap-2.5 rounded-lg border p-3 text-sm ${
+                  gate.pass
+                    ? 'border-ok/25 bg-ok/5 text-ink-300'
+                    : 'border-warn/25 bg-warn/5 text-ink-300'
+                }`}
+              >
+                <span className={gate.pass ? 'text-ok' : 'text-warn'}>{gate.pass ? '✓' : '!'}</span>
+                <span>{gate.msg}</span>
+              </div>
+            )}
+          </>
+        ) : (
+          <Empty>No pipeline data.</Empty>
+        )}
+      </Card>
+
+      {/* Last recorded run */}
+      <Card title="Last recorded run" subtitle="Written by the workflow itself after each send.">
+        {lastRun ? (
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+            <span className={lastRun.status === 'up' ? 'text-ok' : 'text-blocked'}>
+              {lastRun.status === 'up' ? 'Succeeded' : 'Failed'}
+            </span>
+            <span className="text-ink-400">{fmtTime(lastRun.checked_at)}</span>
+            {lastRun.detail && <span className="text-ink-300">{lastRun.detail}</span>}
+          </div>
+        ) : (
+          <Empty>
+            The workflow has not completed a run yet — nothing has been written to
+            integration_health.
+          </Empty>
+        )}
+      </Card>
+
+      {/* History */}
+      <Card
+        title="History"
+        subtitle={
+          reports.length
+            ? `${reports.length} report${reports.length === 1 ? '' : 's'} · ${sent} sent${failed ? ` · ${failed} failed` : ''}`
+            : undefined
+        }
+      >
+        {reports.length === 0 ? (
+          <Empty>
+            No reports generated yet. The first will appear after the 05:00 run, or when the
+            workflow is executed manually from n8n.
+          </Empty>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[620px] text-sm">
+              <thead>
+                <tr className="border-b border-ink-800 text-left text-[10px] uppercase tracking-wider text-ink-400">
+                  <th className="pb-2 pr-4 font-medium">Date</th>
+                  <th className="pb-2 pr-4 font-medium">Status</th>
+                  <th className="pb-2 pr-4 font-medium">Items</th>
+                  <th className="pb-2 pr-4 font-medium">Sent</th>
+                  <th className="pb-2 font-medium">Recipient</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-ink-800/60">
+                {reports.map(r => (
+                  <tr key={r.id}>
+                    <td className="py-2.5 pr-4 tnum text-ink-100">{fmtDate(r.report_date)}</td>
+                    <td className="py-2.5 pr-4">
+                      <Pill status={r.status} />
+                      {r.error && (
+                        <p className="mt-1 max-w-md text-xs text-blocked">{r.error}</p>
+                      )}
+                    </td>
+                    <td className="py-2.5 pr-4 tnum text-ink-300">{r.item_count}</td>
+                    <td className="py-2.5 pr-4 tnum text-ink-400">{fmtTime(r.sent_at)}</td>
+                    <td className="py-2.5 text-ink-400">{r.recipient ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone?: 'good' | 'bad';
+}) {
+  const colour = tone === 'good' ? 'text-ok' : tone === 'bad' ? 'text-warn' : 'text-ink-100';
+  return (
+    <div className="rounded-lg bg-ink-850 px-3 py-3 text-center">
+      <p className={`text-xl font-semibold tnum ${colour}`}>{value}</p>
+      <p className="mt-0.5 text-[11px] uppercase tracking-wider text-ink-400">{label}</p>
+    </div>
+  );
+}
