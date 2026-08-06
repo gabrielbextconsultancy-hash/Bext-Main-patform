@@ -159,6 +159,34 @@ services:
       - traefik.http.middlewares.bext-n8n.headers.STSPreload=true
       - traefik.http.routers.bext-n8n.middlewares=bext-n8n@docker
 
+  api:
+    build: ../api
+    image: bext-api:latest
+    container_name: bext-api
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: 8090
+      API_TOKEN: ${API_TOKEN}
+      PG_HOST: postgres
+      PG_DB: bext
+      # Connects as the read-only role, so a leaked token still cannot write.
+      PG_USER: bext_ro
+      PG_PASSWORD: ${PG_RO_PASSWORD}
+    networks:
+      - bext_internal
+      - n8n_default
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=n8n_default
+      - traefik.http.routers.bext-api.rule=Host(`${API_SUBDOMAIN}.${DOMAIN_NAME}`)
+      - traefik.http.routers.bext-api.entrypoints=web,websecure
+      - traefik.http.routers.bext-api.tls=true
+      - traefik.http.routers.bext-api.tls.certresolver=mytlschallenge
+      - traefik.http.services.bext-api.loadbalancer.server.port=8090
+
   ollama:
     image: ollama/ollama:latest
     container_name: bext-ollama
