@@ -159,6 +159,41 @@ services:
       - traefik.http.middlewares.bext-n8n.headers.STSPreload=true
       - traefik.http.routers.bext-n8n.middlewares=bext-n8n@docker
 
+  dashboard:
+    build: ../dashboard
+    image: bext-dashboard:latest
+    container_name: bext-dashboard
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      APP_URL: https://${DASHBOARD_DOMAIN}
+      # Direct connection on the internal network — no read API, no token, no
+      # cross-host hop. That indirection only existed because the dashboard used
+      # to run on cPanel, which blocks outbound connections.
+      PG_HOST: postgres
+      PG_PORT: 5432
+      PG_DB: bext
+      PG_USER: ${PG_USER}
+      PG_PASSWORD: ${PG_PASSWORD}
+      ADMIN_USER: ${ADMIN_USER}
+      ADMIN_PASS: ${ADMIN_PASS}
+      SESSION_SECRET: ${SESSION_SECRET}
+      N8N_URL: https://${N8N_SUBDOMAIN}.${DOMAIN_NAME}
+    networks:
+      - bext_internal
+      - n8n_default
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=n8n_default
+      - traefik.http.routers.bext-dash.rule=Host(`${DASHBOARD_DOMAIN}`)
+      - traefik.http.routers.bext-dash.entrypoints=web,websecure
+      - traefik.http.routers.bext-dash.tls=true
+      - traefik.http.routers.bext-dash.tls.certresolver=mytlschallenge
+      - traefik.http.services.bext-dash.loadbalancer.server.port=3000
+
   api:
     build: ../api
     image: bext-api:latest
