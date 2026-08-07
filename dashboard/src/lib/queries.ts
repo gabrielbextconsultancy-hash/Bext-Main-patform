@@ -155,3 +155,37 @@ export function statusOf(deliverables: Deliverable[]): WorkStatus {
   if (deliverables.some(d => d.status !== 'not_started')) return 'in_progress';
   return 'not_started';
 }
+
+/** Most recently scored articles — the live view of what the pipeline is doing. */
+export interface ScoredArticle {
+  id: number;
+  title: string;
+  url: string;
+  source_name: string;
+  category: string;
+  relevance_score: number;
+  summary: string;
+  fetched_at: string;
+}
+
+export const getRecentScored = () =>
+  tryQuery<ScoredArticle>(
+    `SELECT a.id, a.title, a.url, s.name AS source_name, s.category,
+            an.relevance_score, an.summary, a.fetched_at::text
+     FROM article_analysis an
+     JOIN articles a ON a.id = an.article_id
+     JOIN sources  s ON s.id = a.source_id
+     ORDER BY an.analysed_at DESC
+     LIMIT 25`
+  );
+
+/** Score distribution, so the panel shows the filter is doing real work. */
+export const getScoreBands = () =>
+  tryQuery<{ band: string; n: number }>(
+    `SELECT CASE WHEN relevance_score >= 80 THEN '80-100'
+                 WHEN relevance_score >= 60 THEN '60-79'
+                 WHEN relevance_score >= 40 THEN '40-59'
+                 ELSE 'below 40' END AS band,
+            count(*)::int AS n
+     FROM article_analysis GROUP BY 1 ORDER BY 1 DESC`
+  );

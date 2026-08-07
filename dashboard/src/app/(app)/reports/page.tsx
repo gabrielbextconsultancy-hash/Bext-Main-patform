@@ -1,7 +1,16 @@
-import { getReports, getPipelineReadiness, getHealth } from '@/lib/queries';
+import {
+  getReports,
+  getPipelineReadiness,
+  getHealth,
+  getRecentScored,
+  getScoreBands,
+} from '@/lib/queries';
 import { Card, DatabaseDown, Empty } from '@/components/ui';
+import { ReportViewer } from '@/components/ReportViewer';
 
 export const dynamic = 'force-dynamic';
+// Operational data — re-read on every request rather than serving a cached page.
+export const revalidate = 0;
 
 const STATUS: Record<string, { label: string; cls: string; dot: string }> = {
   sent: { label: 'Sent', cls: 'bg-ok/12 text-ok ring-ok/25', dot: 'bg-ok' },
@@ -41,10 +50,12 @@ const fmtTime = (t: string | null) =>
     : '—';
 
 export default async function ReportsPage() {
-  const [reports, ready, health] = await Promise.all([
+  const [reports, ready, health, scored, bands] = await Promise.all([
     getReports(),
     getPipelineReadiness(),
     getHealth(),
+    getRecentScored(),
+    getScoreBands(),
   ]);
 
   if (!reports) return <DatabaseDown />;
@@ -123,6 +134,77 @@ export default async function ReportsPage() {
             The workflow has not completed a run yet — nothing has been written to
             integration_health.
           </Empty>
+        )}
+      </Card>
+
+      {/* What was actually delivered */}
+      <Card
+        title="Delivered sheets"
+        subtitle="Opens the exact HTML that was emailed, not a reconstruction of it."
+      >
+        <ReportViewer dates={reports.filter(r => r.status === 'sent').map(r => r.report_date)} />
+      </Card>
+
+      {/* Live scoring */}
+      <Card
+        title="Scoring, live"
+        subtitle="The 25 most recently scored articles. This is what the 05:00 sheet is drawn from."
+      >
+        {bands && bands.length > 0 && (
+          <div className="mb-4 flex flex-wrap gap-2">
+            {bands.map(b => (
+              <span
+                key={b.band}
+                className={`rounded-lg px-2.5 py-1 text-xs tnum ${
+                  b.band === '80-100'
+                    ? 'bg-ok/12 text-ok'
+                    : b.band === 'below 40'
+                      ? 'bg-ink-800 text-ink-400'
+                      : 'bg-progress/12 text-progress'
+                }`}
+              >
+                {b.band}: {b.n}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {!scored || scored.length === 0 ? (
+          <Empty>Nothing scored yet.</Empty>
+        ) : (
+          <ul className="divide-y divide-ink-800/60">
+            {scored.map(a => (
+              <li key={a.id} className="flex gap-3 py-2.5">
+                <span
+                  className={`mt-0.5 w-9 shrink-0 rounded px-1.5 py-0.5 text-center text-[11px] font-semibold tnum ${
+                    a.relevance_score >= 80
+                      ? 'bg-ok/15 text-ok'
+                      : a.relevance_score >= 40
+                        ? 'bg-progress/15 text-progress'
+                        : 'bg-ink-800 text-ink-500'
+                  }`}
+                >
+                  {a.relevance_score}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <a
+                    href={a.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sm text-ink-100 hover:text-progress hover:underline"
+                  >
+                    {a.title}
+                  </a>
+                  <p className="mt-0.5 text-[11px] text-ink-500">
+                    {a.source_name} · {a.category}
+                  </p>
+                  {a.summary && (
+                    <p className="mt-1 text-xs leading-relaxed text-ink-400">{a.summary}</p>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
       </Card>
 
