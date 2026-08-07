@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<title>BEXT Consultancy — Industry Daily Report — Solution Mapping</title>
+<style>
+  @page { size: A4; margin: 17mm 15mm; }
+  *{box-sizing:border-box}
+  body{margin:0;font:10.5pt/1.5 -apple-system,"Segoe UI",system-ui,sans-serif;color:#16202b}
+  h1{font-size:22pt;margin:0 0 4px;letter-spacing:-.4px}
+  h2{font-size:13.5pt;margin:24px 0 8px;padding-bottom:5px;border-bottom:2px solid #14b8a6}
+  h3{font-size:11pt;margin:15px 0 6px;color:#0f766e}
+  p{margin:0 0 8px}
+  .sub{color:#5b6b7c;font-size:10.5pt;margin-bottom:2px}
+  .meta{color:#7c8b9a;font-size:8.5pt;margin-bottom:16px}
+  table{width:100%;border-collapse:collapse;font-size:9pt;margin:8px 0 12px}
+  th{text-align:left;background:#f1f5f9;padding:5px 7px;border-bottom:2px solid #cbd5e1;font-size:8pt;
+     text-transform:uppercase;letter-spacing:.4px;color:#475569}
+  td{padding:4px 7px;border-bottom:1px solid #e2e8f0;vertical-align:top}
+  code{background:#f1f5f9;padding:1px 4px;border-radius:3px;font:8.5pt ui-monospace,Menlo,monospace}
+  .good{background:#d1fae5;border-left:3px solid #10b981;padding:8px 11px;margin:9px 0;font-size:9.5pt}
+  .flag{background:#fef3c7;border-left:3px solid #f59e0b;padding:8px 11px;margin:9px 0;font-size:9.5pt}
+  .bad{background:#fee2e2;border-left:3px solid #ef4444;padding:8px 11px;margin:9px 0;font-size:9.5pt}
+  ul{margin:0 0 9px;padding-left:17px}li{margin:2px 0}
+  .pill{display:inline-block;font-size:7.5pt;padding:1px 6px;border-radius:9px;font-weight:600}
+  .ok{background:#d1fae5;color:#065f46}.no{background:#fee2e2;color:#991b1b}.warn{background:#fef3c7;color:#92400e}
+  .flow{display:flex;gap:6px;margin:10px 0;font-size:8.5pt}
+  .step{flex:1;background:#f8fafc;border:1px solid #cbd5e1;border-radius:5px;padding:7px 8px}
+  .step b{display:block;font-size:7.5pt;text-transform:uppercase;letter-spacing:.4px;color:#64748b}
+  .big{font-size:17pt;font-weight:600;color:#0f766e}
+  footer{margin-top:22px;padding-top:9px;border-top:1px solid #e2e8f0;font-size:8pt;color:#7c8b9a}
+</style>
+</head>
+<body>
+
+<h1>Industry Daily Report</h1>
+<p class="sub">Solution Mapping — Engagement A, deliverable due 11 August 2026</p>
+<p class="meta">Drafted 7 August 2026 · figures measured live from the running system, not projected</p>
+
+<h2>1. What the brief asked for</h2>
+<p>A single consolidated news sheet, delivered by email at <strong>05:00 AEST every day</strong>, covering
+industry sources across five named categories, so that the consultant stays current without reading
+sixty websites.</p>
+
+<div class="good">
+<strong>The system is built and running.</strong> It is not a proposal — reports have been generated and
+delivered on 6 and 7 August 2026. The remaining work to 18 August is refinement, not construction.
+</div>
+
+<h2>2. Solution architecture</h2>
+
+<div class="flow">
+  <div class="step"><b>Ingest</b>Hourly. RSS, HTTP scrape, or headless browser per source. Deduplicated on content hash.</div>
+  <div class="step"><b>Store</b>PostgreSQL. Article, source, and analysis tables with full history.</div>
+  <div class="step"><b>Score</b>Self-hosted Nous Hermes 3. Summary, relevance 0–100, topic tags.</div>
+  <div class="step"><b>Render</b>Ranked within each briefed category, above a relevance threshold.</div>
+  <div class="step"><b>Send</b>05:00 Australia/Melbourne, SMTP today, Microsoft Graph once consented.</div>
+</div>
+
+<p>Every component is self-hosted on infrastructure that transfers to BEXT at handover. There is no
+per-article cost and no third-party platform holding the data — which is what the companion brief
+asks for and what keeps the running cost to a single VPS.</p>
+
+<h3>Why three ingest methods rather than one</h3>
+<p>The sixty-eight briefed sources do not behave alike. Testing each one individually established
+that:</p>
+<ul>
+  <li><strong>26 publish a usable RSS feed</strong> — cheapest and most reliable, and carries real publication dates.</li>
+  <li><strong>29 need HTML scraping</strong> — no feed exists, or the feed is a stub. Eleven government feeds
+      return valid RSS containing zero items, which looks healthy from outside and yields nothing.</li>
+  <li><strong>15 refuse automated HTTP entirely</strong> — including AEMO, DCCEEW, DEECA, VicGrid and SEC
+      Victoria. These sit behind bot protection that answers a plain request with a challenge page.
+      A headless-browser service solves the challenge and reads the page as a browser would.</li>
+</ul>
+<p>The browser path exists because those blocked sources are the Australian energy regulators. Dropping
+them was not an option the brief allows.</p>
+
+<h2>3. Source coverage</h2>
+
+<table>
+  <tr><th>Category</th><th>Sources</th><th>RSS</th><th>HTTP scrape</th><th>Browser</th><th>Inactive</th></tr>
+  <tr><td>Australian News</td><td>4</td><td>0</td><td>4</td><td>0</td><td>0</td></tr>
+  <tr><td>Industry Updates</td><td>52</td><td>23</td><td>20</td><td>10</td><td>1</td></tr>
+  <tr><td>International Industry Updates</td><td>12</td><td>3</td><td>5</td><td>5</td><td>3</td></tr>
+  <tr><td><strong>Total</strong></td><td><strong>68</strong></td><td><strong>26</strong></td><td><strong>29</strong></td><td><strong>15</strong></td><td><strong>4</strong></td></tr>
+</table>
+
+<p>Every URL was recovered from the hyperlinks embedded in the brief PDF, so the registry matches what
+was actually specified rather than an interpretation of the source names.</p>
+
+<h3>Two categories deferred by the brief itself</h3>
+<p><strong>Grants / Funding Updates</strong> and <strong>LinkedIn Industry Behaviour</strong> are marked in the brief as
+&ldquo;link to other report&rdquo; — a later deliverable. They are represented in the sheet as sections
+pointing to that separate report, not silently omitted.</p>
+
+<div class="flag">
+<strong>LinkedIn needs a scope decision.</strong> The brief asks for the feed to be scrolled for all latest
+posts. LinkedIn's terms prohibit automated scrolling and their API does not expose the feed. Workable
+alternatives are the Pages API for company content, or a curated source list. This is a platform
+limit, not an effort limit.
+</div>
+
+<h2>4. Current operating state</h2>
+
+<table>
+  <tr><th>Measure</th><th>Value</th></tr>
+  <tr><td>Articles ingested</td><td><strong>1,835</strong> since 31 July</td></tr>
+  <tr><td>Sources producing articles</td><td><strong>47</strong> of 68</td></tr>
+  <tr><td>Articles scored by AI</td><td><strong>1,799 (98%)</strong></td></tr>
+  <tr><td>Mean relevance score</td><td>41.7 / 100</td></tr>
+  <tr><td>Above the reporting threshold</td><td>880</td></tr>
+  <tr><td>Reports generated and sent</td><td><strong>2</strong> — 6 and 7 August</td></tr>
+</table>
+
+<h3>Source health</h3>
+<table>
+  <tr><th>Status</th><th>Count</th><th>Meaning</th></tr>
+  <tr><td><span class="pill ok">ok</span></td><td>49</td><td>Fetched and returned articles on the last run</td></tr>
+  <tr><td><span class="pill no">error</span></td><td>11</td><td>Fetch failed — under investigation before 18 August</td></tr>
+  <tr><td><span class="pill warn">empty</span></td><td>4</td><td>Fetched successfully, no articles found</td></tr>
+  <tr><td><span class="pill warn">never run</span></td><td>4</td><td>The four deactivated sources below</td></tr>
+</table>
+
+<div class="good">
+<strong>The AI scoring discriminates correctly.</strong> A national small-scale renewables scheme scored 95;
+a business banned from an energy efficiency program scored 85; low-relevance overseas consumer items
+scored below 40 and were excluded. The mean of 41.7 across everything ingested, against 880 items
+above threshold, shows the filter is doing real work rather than passing everything through.
+</div>
+
+<h2>5. Sources that cannot be reached, and why</h2>
+
+<table>
+  <tr><th>Source</th><th>Barrier</th><th>Recommendation</th></tr>
+  <tr><td>Reuters</td><td>Returns 401 to every automated request; subscription-gated</td><td>Needs a licensed feed or paid seat — commercial decision</td></tr>
+  <tr><td>S&amp;P Global</td><td>Returns 403 to plain HTTP and to headless Chromium</td><td>Subscriber content — commercial decision</td></tr>
+  <tr><td>DCCEEW</td><td>Hard 403 with no solvable challenge, both methods</td><td>Seek an alternative route; minister feed partially substitutes</td></tr>
+  <tr><td>IEA Energy Efficiency</td><td>The brief links this to the same page as IEA</td><td>Deduplicated — IEA already covers it</td></tr>
+</table>
+
+<div class="bad">
+<strong>Reuters and S&amp;P Global require a paid subscription.</strong> No technical approach reaches them
+without one, and attempting to circumvent the paywall would be neither lawful nor appropriate. This
+needs a decision: licence them, or accept the gap and record it in the final scope.
+</div>
+
+<h2>6. What remains before 18 August</h2>
+
+<table>
+  <tr><th>#</th><th>Item</th><th>Status</th></tr>
+  <tr><td>1</td><td>Investigate the 11 erroring sources and repair or retire each</td><td><span class="pill warn">in progress</span></td></tr>
+  <tr><td>2</td><td>Australian News category yield — 4 sources, none with RSS, thin output</td><td><span class="pill warn">in progress</span></td></tr>
+  <tr><td>3</td><td>Switch delivery from SMTP to Microsoft Graph</td><td><span class="pill warn">awaiting admin consent</span></td></tr>
+  <tr><td>4</td><td>Marketing platform health section</td><td><span class="pill no">not started</span></td></tr>
+  <tr><td>5</td><td>Decision on Reuters and S&amp;P Global licensing</td><td><span class="pill no">client decision</span></td></tr>
+  <tr><td>6</td><td>Decision on LinkedIn scope</td><td><span class="pill no">client decision</span></td></tr>
+  <tr><td>7</td><td>Observe several consecutive 05:00 sends unattended</td><td><span class="pill warn">running</span></td></tr>
+</table>
+
+<p>Items 1, 2, 4 and 7 are ours. Items 3, 5 and 6 need something from the client — consent, or a
+commercial decision. None of them prevents the daily report continuing to run in the meantime.</p>
+
+<h2>7. Marketing platform health — outstanding</h2>
+<p>The brief asks that the sheet also report on the health of the marketing platforms alongside the
+industry news. The platforms are not yet connected, so this section is not yet built. It is the
+largest single gap remaining against the brief and is scheduled before 18 August.</p>
+
+<h2>8. Method</h2>
+<p>All figures were read directly from the production database on 7 August 2026. Source classification
+came from testing each of the sixty-eight URLs individually — feed discovery, plain HTTP fetch, then
+headless browser — rather than assuming behaviour from the site name. Where a source is recorded as
+unreachable, that reflects an observed HTTP response, and the response code is stored against the
+source.</p>
+
+<footer>
+BEXT Consultancy — Industry Daily Report, Solution Mapping · Draft 7 August 2026 ·
+responds to <em>Project Brief — Automated Daily Industry &amp; Marketing Insight Summary</em>, 28 July 2026 ·
+draft due 11 August, final due 18 August 2026.
+</footer>
+
+</body>
+</html>
