@@ -330,16 +330,40 @@ const payload = rows.map(r => ({
   excerpt: (r.summary_raw || '').slice(0, 600),
 }));
 
-const res = await this.helpers.httpRequest({
-  method: 'POST',
-  url: \`https://generativelanguage.googleapis.com/v1beta/models/\${MODEL}:generateContent?key=\${KEY}\`,
-  json: true,
-  timeout: 120000,
-  body: {
-    contents: [{ parts: [{ text: PROMPT + JSON.stringify(payload, null, 1) }] }],
-    generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
-  },
-});
+// Gemini drops the connection often enough that a single attempt is not
+// viable — every 30-minute run failed for five days straight on ECONNRESET,
+// each one abandoning a whole batch. Retry the transient classes only:
+// socket resets, timeouts, 429 and 5xx. A 400 or a bad key is not transient,
+// so it still fails immediately rather than burning four minutes first.
+const TRANSIENT = /ECONNRESET|ETIMEDOUT|ECONNREFUSED|EAI_AGAIN|socket hang up|network|aborted/i;
+const isRetryable = (e) => {
+  const status = e?.statusCode ?? e?.response?.statusCode;
+  if (status === 429 || (status >= 500 && status < 600)) return true;
+  return !status && TRANSIENT.test(String(e?.message || e?.code || ''));
+};
+
+let res, lastErr;
+for (let attempt = 1; attempt <= 4; attempt++) {
+  try {
+    res = await this.helpers.httpRequest({
+      method: 'POST',
+      url: \`https://generativelanguage.googleapis.com/v1beta/models/\${MODEL}:generateContent?key=\${KEY}\`,
+      json: true,
+      timeout: 120000,
+      body: {
+        contents: [{ parts: [{ text: PROMPT + JSON.stringify(payload, null, 1) }] }],
+        generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
+      },
+    });
+    break;
+  } catch (e) {
+    lastErr = e;
+    if (attempt === 4 || !isRetryable(e)) throw e;
+    // 2s, 8s, 20s — well inside the 900s task timeout and the 30-minute cadence.
+    await new Promise(r => setTimeout(r, [2000, 8000, 20000][attempt - 1]));
+  }
+}
+if (!res) throw lastErr;
 
 const text = res?.candidates?.[0]?.content?.parts?.[0]?.text ?? '[]';
 let parsed;
