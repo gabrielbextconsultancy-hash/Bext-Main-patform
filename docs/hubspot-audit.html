@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<title>BEXT Consultancy — HubSpot Audit</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  *{box-sizing:border-box}
+  body{margin:0;font:11pt/1.5 -apple-system,"Segoe UI",system-ui,sans-serif;color:#16202b}
+  h1{font-size:23pt;margin:0 0 4px;letter-spacing:-.4px}
+  h2{font-size:14pt;margin:26px 0 8px;padding-bottom:5px;border-bottom:2px solid #14b8a6}
+  h3{font-size:11.5pt;margin:16px 0 6px;color:#0f766e}
+  p{margin:0 0 9px}
+  .sub{color:#5b6b7c;font-size:10.5pt;margin-bottom:2px}
+  .meta{color:#7c8b9a;font-size:9pt;margin-bottom:18px}
+  table{width:100%;border-collapse:collapse;font-size:9.5pt;margin:8px 0 12px}
+  th{text-align:left;background:#f1f5f9;padding:6px 8px;border-bottom:2px solid #cbd5e1;font-size:8.5pt;
+     text-transform:uppercase;letter-spacing:.5px;color:#475569}
+  td{padding:5px 8px;border-bottom:1px solid #e2e8f0;vertical-align:top}
+  code{background:#f1f5f9;padding:1px 4px;border-radius:3px;font:9pt ui-monospace,Menlo,monospace}
+  .flag{background:#fef3c7;border-left:3px solid #f59e0b;padding:9px 12px;margin:10px 0;font-size:10pt}
+  .bad{background:#fee2e2;border-left:3px solid #ef4444;padding:9px 12px;margin:10px 0;font-size:10pt}
+  .good{background:#d1fae5;border-left:3px solid #10b981;padding:9px 12px;margin:10px 0;font-size:10pt}
+  .kv{display:grid;grid-template-columns:190px 1fr;gap:2px 12px;font-size:10pt;margin:8px 0}
+  .kv div:nth-child(odd){color:#5b6b7c}
+  ul{margin:0 0 10px;padding-left:18px}li{margin:3px 0}
+  .pill{display:inline-block;font-size:8pt;padding:1px 6px;border-radius:9px;font-weight:600}
+  .ok{background:#d1fae5;color:#065f46}.no{background:#fee2e2;color:#991b1b}.warn{background:#fef3c7;color:#92400e}
+  footer{margin-top:26px;padding-top:10px;border-top:1px solid #e2e8f0;font-size:8.5pt;color:#7c8b9a}
+</style>
+</head>
+<body>
+
+<h1>HubSpot Audit</h1>
+<p class="sub">BEXT Consultancy — Business Structure Efficiency, supporting deliverable</p>
+<p class="meta">Draft, 7 August 2026 · measured live through the HubSpot REST API · portal 443333225</p>
+
+<h2>1. Executive summary</h2>
+
+<p>HubSpot has been <strong>deliberately configured but never adopted</strong>. That distinction
+matters, because it changes the recommendation entirely.</p>
+
+<p>Someone invested real design effort: eight custom properties were created across contacts and
+deals, modelling exactly the things an energy consultancy needs to track — service type, billing
+model, expected outcome, engagement start date. A six-stage sales pipeline was defined and named
+sensibly. This is not an untouched trial account.</p>
+
+<p>But there is no data behind any of it. One deal exists, and it is the sample record HubSpot
+creates automatically at signup. No companies. Four contacts, none linked to a company, none created
+since 11 June 2026.</p>
+
+<div class="flag">
+<strong>Correction to the Draft Plan.</strong> The draft plan names HubSpot the source of truth for
+clients and contacts. On the evidence it is not currently a source of anything. The schema shows the
+<em>intent</em> was sound — the gap is adoption, not design.
+</div>
+
+<h2>2. Account configuration</h2>
+
+<div class="kv">
+  <div>Portal ID</div><div><code>443333225</code></div>
+  <div>Account type</div><div>STANDARD</div>
+  <div>Data centre</div><div><code>app-ap1.hubspot.com</code> (Asia-Pacific)</div>
+  <div>Time zone</div><div><strong>US/Eastern</strong></div>
+  <div>Company currency</div><div><strong>USD</strong></div>
+</div>
+
+<div class="bad">
+<strong>Two settings are wrong for an Australian consultancy.</strong> The portal reports
+<code>US/Eastern</code> and <code>USD</code>. Every date HubSpot displays is offset by 14–16 hours from
+Melbourne, and deal amounts are denominated in the wrong currency. Fix these before entering
+commercial data — currency in particular is painful to change once deals exist, because historical
+amounts do not re-denominate.
+</div>
+
+<h2>3. Data inventory</h2>
+
+<table>
+  <tr><th>Object</th><th>Count</th><th>Observation</th></tr>
+  <tr><td>Contacts</td><td>4</td><td>None has a company set. Newest created 11 June 2026.</td></tr>
+  <tr><td>Companies</td><td>0</td><td>Not readable with the current token — see §6. Zero visible.</td></tr>
+  <tr><td>Deals</td><td>1</td><td><code>HubSpot - New Deal (Sample Deal)</code>, USD 1,000 — the signup demo record</td></tr>
+  <tr><td>Tickets</td><td>0</td><td>Pipeline exists, unused</td></tr>
+  <tr><td>Custom objects</td><td>0</td><td>None defined</td></tr>
+  <tr><td>Marketing forms</td><td>0</td><td>Not readable with the current token</td></tr>
+  <tr><td>Owners / users</td><td>0 visible</td><td>Not readable with the current token</td></tr>
+</table>
+
+<p>For comparison, ProjectManager holds <strong>18 projects and 649 tasks</strong>, 17 of them for RACV.
+The operational reality of the business is recorded there, not here.</p>
+
+<h2>4. Schema — the part worth keeping</h2>
+
+<p>403 contact properties and 190 deal properties exist, the overwhelming majority HubSpot defaults.
+Eight are custom, and they are well chosen:</p>
+
+<h3>Contact — 4 custom properties</h3>
+<table>
+  <tr><th>Property</th><th>Type</th><th>Purpose in an automated flow</th></tr>
+  <tr><td><code>client_role</code></td><td>enumeration</td><td>Routes correspondence — decision maker vs technical contact</td></tr>
+  <tr><td><code>engagement_start_date</code></td><td>date</td><td>Anchors the relationship timeline; drives review reminders</td></tr>
+  <tr><td><code>preferred_communication_channel</code></td><td>enumeration</td><td>Selects the follow-up channel automatically</td></tr>
+  <tr><td><code>project_involvement</code></td><td>bool</td><td>Filters who receives project status updates</td></tr>
+</table>
+
+<h3>Deal — 4 custom properties</h3>
+<table>
+  <tr><th>Property</th><th>Type</th><th>Purpose in an automated flow</th></tr>
+  <tr><td><code>service_type</code></td><td>enumeration</td><td>Selects the proposal template and knowledge-base scope</td></tr>
+  <tr><td><code>billing_model</code></td><td>enumeration</td><td>Determines the Xero invoicing pattern — fixed fee vs time</td></tr>
+  <tr><td><code>estimated_project_duration</code></td><td>number</td><td>Feeds scheduling and capacity planning</td></tr>
+  <tr><td><code>expected_outcome</code></td><td>string</td><td>Carries into the proposal draft and closeout report</td></tr>
+</table>
+
+<div class="good">
+<strong>These map cleanly onto the automation described in the brief.</strong> <code>billing_model</code>
+answers the Xero question, <code>service_type</code> selects proposal templates, and
+<code>project_involvement</code> controls the status-update distribution list. The schema is an asset —
+it is the data that is missing.
+</div>
+
+<h2>5. Sales pipeline</h2>
+<table>
+  <tr><th>#</th><th>Stage</th><th>Stage ID</th><th>Closed</th></tr>
+  <tr><td>0</td><td>Prospecting</td><td><code>3238028775</code></td><td>no</td></tr>
+  <tr><td>1</td><td>Initial Meeting</td><td><code>3238028776</code></td><td>no</td></tr>
+  <tr><td>2</td><td>Proposal Development</td><td><code>3238028777</code></td><td>no</td></tr>
+  <tr><td>3</td><td>Negotiation</td><td><code>3238028778</code></td><td>no</td></tr>
+  <tr><td>4</td><td>Closed Won</td><td><code>closedwon</code></td><td>yes</td></tr>
+  <tr><td>5</td><td>Closed Lost</td><td><code>closedlost</code></td><td>yes</td></tr>
+</table>
+<p>A single pipeline on <code>default</code>. The stages match a consulting sales motion and give clean
+automation triggers: <em>Proposal Development</em> can generate the proposal draft, <em>Closed Won</em>
+can create the ProjectManager project and the Xero record.</p>
+
+<h2>6. API access — current token limitations</h2>
+
+<p>The private app token authenticates successfully but holds a <strong>partial scope set</strong>.
+Tested endpoint by endpoint:</p>
+
+<table>
+  <tr><th>Endpoint</th><th>Result</th><th>Consequence</th></tr>
+  <tr><td>Contacts read / write</td><td><span class="pill ok">granted</span></td><td>Onboarding can create contacts</td></tr>
+  <tr><td>Deals read / write</td><td><span class="pill ok">granted</span></td><td>Pipeline automation possible</td></tr>
+  <tr><td>Deal &amp; ticket pipelines</td><td><span class="pill ok">granted</span></td><td>Stage transitions readable</td></tr>
+  <tr><td>Contact &amp; deal properties</td><td><span class="pill ok">granted</span></td><td>Custom fields writable</td></tr>
+  <tr><td>Account details</td><td><span class="pill ok">granted</span></td><td>—</td></tr>
+  <tr><td><strong>Companies</strong></td><td><span class="pill no">denied</span></td><td><strong>Cannot create or link companies</strong></td></tr>
+  <tr><td><strong>Owners / users</strong></td><td><span class="pill no">denied</span></td><td>Cannot assign records to a user</td></tr>
+  <tr><td><strong>Marketing forms</strong></td><td><span class="pill no">denied</span></td><td>Cannot read or manage HubSpot forms</td></tr>
+  <tr><td><strong>Custom object schemas</strong></td><td><span class="pill no">denied</span></td><td>Cannot define custom objects</td></tr>
+</table>
+
+<div class="bad">
+<strong>The companies denial blocks the onboarding automation as designed.</strong> A client onboarding
+flow that creates a contact but cannot create or associate the company produces orphaned records —
+which is precisely the state the CRM is in today. Add <code>crm.objects.companies.read</code> and
+<code>crm.objects.companies.write</code> to the private app before building it.
+</div>
+
+<h2>7. What can be automated today</h2>
+<table>
+  <tr><th>Automation</th><th>Feasible now</th><th>Needs</th></tr>
+  <tr><td>Create contact from onboarding form</td><td><span class="pill ok">yes</span></td><td>—</td></tr>
+  <tr><td>Populate the 8 custom properties</td><td><span class="pill ok">yes</span></td><td>—</td></tr>
+  <tr><td>Create / advance deals through stages</td><td><span class="pill ok">yes</span></td><td>—</td></tr>
+  <tr><td>Trigger on <em>Closed Won</em> → create PM project</td><td><span class="pill ok">yes</span></td><td>—</td></tr>
+  <tr><td>Create and associate companies</td><td><span class="pill no">no</span></td><td>Companies scopes</td></tr>
+  <tr><td>Assign records to an owner</td><td><span class="pill no">no</span></td><td>Owners scope</td></tr>
+  <tr><td>Backfill CRM from ProjectManager</td><td><span class="pill warn">partial</span></td><td>Companies scopes for the client side</td></tr>
+  <tr><td>Enquiry capture from Outlook</td><td><span class="pill warn">partial</span></td><td>Azure app registration</td></tr>
+</table>
+
+<h2>8. Recommendations</h2>
+
+<h3>Immediate — before any build</h3>
+<ul>
+  <li><strong>Correct the portal time zone to Australia/Melbourne and currency to AUD.</strong>
+      Cheap now, disruptive after deals exist.</li>
+  <li><strong>Widen the private app scopes</strong> to include companies read/write and owners read.
+      Without companies the onboarding flow cannot produce complete records.</li>
+  <li><strong>Delete the sample deal</strong> so reporting starts from a true zero.</li>
+</ul>
+
+<h3>Structural — the decision for 25 August</h3>
+<p>Three options, and the integration diagram differs materially between them:</p>
+<ul>
+  <li><strong>Adopt.</strong> Backfill companies and deals from the 18 ProjectManager projects, then run
+      onboarding through HubSpot as the draft plan describes. The custom schema already supports this;
+      the work is a one-off migration plus the scope fix.</li>
+  <li><strong>Demote.</strong> ProjectManager holds the client relationship, HubSpot is retired, and the
+      architecture loses a platform. Lowest ongoing effort, and it forfeits the pipeline visibility
+      that the stage design was clearly built for.</li>
+  <li><strong>Leave as-is.</strong> Not recommended. Documenting an unused CRM as a source of truth
+      would make the architecture describe something that is not happening.</li>
+</ul>
+
+<p>On the evidence — a considered custom schema and a well-formed pipeline — <strong>adopt</strong> is the
+stronger option. The design work has already been done; what is missing is the data and the two
+scope changes.</p>
+
+<h2>9. Method</h2>
+<p>Measured on 7 August 2026 against the HubSpot REST API v3 using the private app token stored as
+<code>HUBSPOT_TOKEN</code>. Counts reflect the first page of each collection; contacts, companies, deals and
+tickets all fit within one page, so those figures are complete. Endpoints returning a scope error are
+recorded as denied rather than empty — the distinction matters, since a denied companies endpoint and
+zero companies look identical from outside.</p>
+
+<footer>
+BEXT Consultancy — HubSpot Audit · Draft 7 August 2026 · supports Business Structure Efficiency,
+deliverable 1 (Current State Assessment) and deliverable 4 (API Integration &amp; Automation list).
+</footer>
+
+</body>
+</html>
