@@ -111,7 +111,9 @@ jobs:
           ssh -i ~/.ssh/deploy -o StrictHostKeyChecking=yes \
             "root@${{ secrets.VPS_HOST }}" 'bash -s' <<'EOF'
           set -euo pipefail
-          DOMAIN=$(grep -E '^DASHBOARD_DOMAIN=' /docker/bext/.env | cut -d= -f2-)
+          # tr -d '\r' because .env was uploaded from Windows and some lines
+          # still carry CRLF. Compose strips it, a plain shell read does not.
+          DOMAIN=$(grep -E '^DASHBOARD_DOMAIN=' /docker/bext/.env | cut -d= -f2- | tr -d '\r')
           for i in $(seq 1 12); do
             c=$(curl -sL -o /dev/null -w '%{http_code}' "https://${DOMAIN}/" || true)
             echo "try $i: $c"
