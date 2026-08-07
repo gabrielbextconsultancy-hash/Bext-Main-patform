@@ -179,6 +179,34 @@ export const getRecentScored = () =>
      LIMIT 25`
   );
 
+/** An article that actually reached the recipient, with the sheet it went out in. */
+export interface SentArticle extends ScoredArticle {
+  report_date: string;
+  rank: number;
+}
+
+/**
+ * What was actually delivered — the main panel shows this rather than whatever
+ * was scored most recently, because the question being asked of this page is
+ * "what did the client receive", not "what has the scorer touched".
+ * Newest sheet first, and within a sheet the order the client read them in.
+ */
+export const getSentArticles = () =>
+  tryQuery<SentArticle>(
+    `SELECT a.id, a.title, a.url, s.name AS source_name, ri.category,
+            coalesce(an.relevance_score, 0) AS relevance_score,
+            coalesce(an.summary, '')        AS summary,
+            a.fetched_at::text,
+            r.report_date::text, ri.rank
+     FROM report_items ri
+     JOIN reports  r ON r.id = ri.report_id AND r.status = 'sent'
+     JOIN articles a ON a.id = ri.article_id
+     JOIN sources  s ON s.id = a.source_id
+     LEFT JOIN article_analysis an ON an.article_id = a.id
+     ORDER BY r.report_date DESC, ri.rank
+     LIMIT 60`
+  );
+
 /** Score distribution, so the panel shows the filter is doing real work. */
 export const getScoreBands = () =>
   tryQuery<{ band: string; n: number }>(

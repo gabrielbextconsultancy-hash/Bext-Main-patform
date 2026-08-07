@@ -2,7 +2,8 @@ import {
   getReports,
   getPipelineReadiness,
   getHealth,
-  getRecentScored,
+  getSentArticles,
+  type SentArticle,
   getScoreBands,
   getScoredCount,
   getCategories,
@@ -89,12 +90,27 @@ const fmtTime = (t: string | null) =>
       })
     : '—';
 
+/**
+ * Groups delivered articles by the sheet they went out in. The query already
+ * orders by report_date DESC then rank, so insertion order is the display
+ * order and a Map preserves it.
+ */
+function groupByDate(rows: SentArticle[]): [string, SentArticle[]][] {
+  const byDate = new Map<string, SentArticle[]>();
+  for (const r of rows) {
+    const g = byDate.get(r.report_date);
+    if (g) g.push(r);
+    else byDate.set(r.report_date, [r]);
+  }
+  return [...byDate];
+}
+
 export default async function ReportsPage() {
-  const [reports, ready, health, scored, bands, totalScored, cats] = await Promise.all([
+  const [reports, ready, health, delivered, bands, totalScored, cats] = await Promise.all([
     getReports(),
     getPipelineReadiness(),
     getHealth(),
-    getRecentScored(),
+    getSentArticles(),
     getScoreBands(),
     getScoredCount(),
     getCategories(),
@@ -202,10 +218,10 @@ export default async function ReportsPage() {
         </p>
       </Card>
 
-      {/* Live scoring */}
+      {/* What the recipient actually received */}
       <Card
-        title="Scoring, live"
-        subtitle="The most recent scores, and the full set behind them. This is what the 05:00 sheet is drawn from."
+        title="Sent to the recipient"
+        subtitle="The articles that actually went out, newest sheet first, in the order they were read. Open the browser for everything scored, sent or not."
       >
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <ScoredBrowser total={totalScored} categories={(cats ?? []).map(c => c.category)} />
@@ -230,42 +246,59 @@ export default async function ReportsPage() {
           </div>
         )}
 
-        {!scored || scored.length === 0 ? (
-          <Empty>Nothing scored yet.</Empty>
+        {!delivered || delivered.length === 0 ? (
+          <Empty>
+            Nothing delivered yet. Articles appear here once a sheet has been sent — the browser
+            above shows everything scored in the meantime.
+          </Empty>
         ) : (
-          <ul className="divide-y divide-ink-800/60">
-            {scored.slice(0, 8).map(a => (
-              <li key={a.id} className="flex gap-3 py-2.5">
-                <span
-                  className={`mt-0.5 w-9 shrink-0 rounded px-1.5 py-0.5 text-center text-[11px] font-semibold tnum ${
-                    a.relevance_score >= 80
-                      ? 'bg-ok/15 text-ok'
-                      : a.relevance_score >= 40
-                        ? 'bg-progress/15 text-progress'
-                        : 'bg-ink-800 text-ink-500'
-                  }`}
-                >
-                  {a.relevance_score}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <a
-                    href={a.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-sm text-ink-100 hover:text-progress hover:underline"
-                  >
-                    {a.title}
-                  </a>
-                  <p className="mt-0.5 text-[11px] text-ink-500">
-                    {a.source_name} · {a.category}
-                  </p>
-                  {a.summary && (
-                    <p className="mt-1 text-xs leading-relaxed text-ink-400">{a.summary}</p>
-                  )}
-                </div>
-              </li>
+          <div className="space-y-5">
+            {groupByDate(delivered).map(([date, items]) => (
+              <section key={date}>
+                <header className="mb-1.5 flex items-baseline gap-2">
+                  <span className="rounded bg-ok/12 px-2 py-0.5 text-[11px] font-medium text-ok">
+                    ✓ sent {date}
+                  </span>
+                  <span className="text-[11px] text-ink-500 tnum">
+                    {items.length} article{items.length === 1 ? '' : 's'}
+                  </span>
+                </header>
+                <ul className="divide-y divide-ink-800/60">
+                  {items.map(a => (
+                    <li key={`${date}-${a.id}`} className="flex gap-3 py-2.5">
+                      <span
+                        className={`mt-0.5 w-9 shrink-0 rounded px-1.5 py-0.5 text-center text-[11px] font-semibold tnum ${
+                          a.relevance_score >= 80
+                            ? 'bg-ok/15 text-ok'
+                            : a.relevance_score >= 40
+                              ? 'bg-progress/15 text-progress'
+                              : 'bg-ink-800 text-ink-500'
+                        }`}
+                      >
+                        {a.relevance_score}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <a
+                          href={a.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-sm text-ink-100 hover:text-progress hover:underline"
+                        >
+                          {a.title}
+                        </a>
+                        <p className="mt-0.5 text-[11px] text-ink-500">
+                          {a.source_name} · {a.category}
+                        </p>
+                        {a.summary && (
+                          <p className="mt-1 text-xs leading-relaxed text-ink-400">{a.summary}</p>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
             ))}
-          </ul>
+          </div>
         )}
       </Card>
 
