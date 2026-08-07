@@ -40,6 +40,9 @@ ${INGEST_SRC}
 // --- end shared parser ---
 
 const FETCHER = 'http://fetcher:8080/fetch';
+// Dated items older than this are ignored. Long enough that a slow-publishing
+// regulator still lands, short enough that archive pages cannot refill the table.
+const FRESHNESS_DAYS = 14;
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
   'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,application/rss+xml;q=0.9,*/*;q=0.8',
@@ -53,7 +56,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function fetchOne(s) {
   const config = typeof s.config === 'string' ? JSON.parse(s.config) : (s.config || {});
   const target = s.method === 'rss' ? (config.feed_url || s.url) : s.url;
-  let articles = [], status = 'ok', error = null;
+  let articles = [], status = 'ok', error = null, seen = 0;
 
   try {
     let html;
@@ -85,14 +88,33 @@ async function fetchOne(s) {
     }
 
     const raw = s.method === 'rss' ? parseFeed(html, target) : parseIndex(html, target);
-    articles = normalise(raw, { id: s.id, config });
-    if (articles.length === 0) status = 'empty';
+    const all = normalise(raw, { id: s.id, config });
+
+    // Only what this source has not given us before. Index pages repeat their
+    // whole contents every hour, so without this the run re-parses roughly 2,500
+    // items to find the handful that are actually new.
+    const known = new Set(
+      Array.isArray(s.known_urls)
+        ? s.known_urls
+        : JSON.parse(s.known_urls || '[]')
+    );
+    const unseen = all.filter(a => !known.has(a.url));
+
+    // Where a publication date exists, ignore anything older than the window —
+    // archive and "most read" panels otherwise keep reintroducing old stories.
+    // Undated items are kept: if the URL is new to us, the item is new to us.
+    const cutoff = Date.now() - FRESHNESS_DAYS * 86400000;
+    articles = unseen.filter(a => !a.published_at || Date.parse(a.published_at) >= cutoff);
+
+    seen = all.length;
+    if (all.length > 0 && articles.length === 0) status = 'ok';   // nothing new is normal
+    else if (all.length === 0) status = 'empty';
   } catch (e) {
     status = 'error';
     error = String(e.message || e).slice(0, 500);
   }
 
-  return { json: { source_id: s.id, slug: s.slug, status, error, articles } };
+  return { json: { source_id: s.id, slug: s.slug, status, error, articles, seen } };
 }
 
 // Sequentially, 64 sources take longer than the task timeout — the browser-backed
@@ -135,7 +157,19 @@ function sourceIngestWorkflow() {
         credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
         parameters: {
           operation: 'executeQuery',
-          query: 'SELECT id, slug, name, url, method::text AS method, config FROM sources WHERE active ORDER BY id',
+          // Carries each source's recently-seen URLs so the fetch step can skip
+          // anything already stored instead of re-parsing it every hour and
+          // relying on the unique index to reject the duplicate. 120 covers well
+          // over one page of any index we read.
+          query: `SELECT s.id, s.slug, s.name, s.url, s.method::text AS method, s.config,
+       coalesce(k.urls, '[]'::json) AS known_urls
+FROM sources s
+LEFT JOIN LATERAL (
+  SELECT json_agg(u.url) AS urls
+  FROM (SELECT url FROM articles WHERE source_id = s.id ORDER BY fetched_at DESC LIMIT 120) u
+) k ON true
+WHERE s.active
+ORDER BY s.id`,
           options: {},
         },
       },
