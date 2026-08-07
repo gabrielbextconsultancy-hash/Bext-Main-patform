@@ -189,3 +189,23 @@ export const getScoreBands = () =>
             count(*)::int AS n
      FROM article_analysis GROUP BY 1 ORDER BY 1 DESC`
   );
+
+/** Every scored article, newest first — the modal pages through these. */
+export const getScoredPage = (offset: number, limit = 20) =>
+  tryQuery<ScoredArticle>(
+    `SELECT a.id, a.title, a.url, s.name AS source_name, s.category,
+            an.relevance_score, an.summary, a.fetched_at::text
+     FROM article_analysis an
+     JOIN articles a ON a.id = an.article_id
+     JOIN sources  s ON s.id = a.source_id
+     ORDER BY an.analysed_at DESC
+     OFFSET $1 LIMIT $2`,
+    [offset, limit]
+  );
+
+export const getScoredCount = async () => {
+  const rows = await tryQuery<{ n: number }>(
+    `SELECT count(*)::int AS n FROM article_analysis`
+  );
+  return rows?.[0]?.n ?? 0;
+};

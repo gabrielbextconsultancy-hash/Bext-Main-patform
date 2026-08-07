@@ -509,7 +509,13 @@ const html = \`<!doctype html><html><body style="margin:0;padding:0;background:#
 </div></body></html>\`;
 
 const date = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' });
-const recipient = $env.REPORT_RECIPIENT || $env.REPORT_SENDER;
+// REPORT_RECIPIENT is a comma-separated list — the sheet goes to the consultant
+// and to the client, not to one hardcoded address. Falls back to the sender so a
+// misconfigured list can never send the report to nobody.
+const recipient = (($env.REPORT_RECIPIENT || '').split(',')
+  .map(s => s.trim())
+  .filter(Boolean)
+  .join(', ')) || $env.REPORT_SENDER;
 // Built here and kept free of commas: queryReplacement splits on them, which
 // truncated this to a bare item count the first time round.
 const detail = \`Sent \${d.item_count} items to \${recipient} | intro by \${d.generated_by}\`;

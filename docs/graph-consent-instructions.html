@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<title>Approval required — BEXT Automation access to Microsoft 365</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm; }
+  *{box-sizing:border-box}
+  body{margin:0;font:11pt/1.55 -apple-system,"Segoe UI",system-ui,sans-serif;color:#16202b}
+  h1{font-size:21pt;margin:0 0 4px;letter-spacing:-.3px}
+  h2{font-size:13pt;margin:22px 0 8px;padding-bottom:4px;border-bottom:2px solid #14b8a6}
+  .sub{color:#5b6b7c;font-size:11pt;margin:0 0 3px}
+  .meta{color:#7c8b9a;font-size:9pt;margin-bottom:18px}
+  p{margin:0 0 9px}
+  ol{margin:0 0 10px;padding-left:20px}ol li{margin:9px 0}
+  ul{margin:6px 0 10px;padding-left:19px}ul li{margin:3px 0}
+  table{width:100%;border-collapse:collapse;font-size:9.5pt;margin:8px 0 12px}
+  th{text-align:left;background:#f1f5f9;padding:6px 8px;border-bottom:2px solid #cbd5e1;
+     font-size:8.5pt;text-transform:uppercase;letter-spacing:.4px;color:#475569}
+  td{padding:5px 8px;border-bottom:1px solid #e2e8f0;vertical-align:top}
+  code{background:#f1f5f9;padding:1px 4px;border-radius:3px;font:9pt ui-monospace,Menlo,monospace;
+       word-break:break-all}
+  .link{background:#0f172a;color:#e2e8f0;padding:12px 14px;border-radius:6px;margin:10px 0;
+        font:9pt ui-monospace,Menlo,monospace;word-break:break-all;line-height:1.5}
+  .box{background:#eff6ff;border-left:3px solid #3b82f6;padding:10px 13px;margin:10px 0;font-size:10pt}
+  .warn{background:#fef3c7;border-left:3px solid #f59e0b;padding:10px 13px;margin:10px 0;font-size:10pt}
+  .ok{background:#d1fae5;border-left:3px solid #10b981;padding:10px 13px;margin:10px 0;font-size:10pt}
+  .step{background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:11px 14px;margin:9px 0}
+  .step b{color:#0f766e}
+  footer{margin-top:24px;padding-top:10px;border-top:1px solid #e2e8f0;font-size:8.5pt;color:#7c8b9a}
+</style>
+</head>
+<body>
+
+<h1>Approval required</h1>
+<p class="sub">Granting BEXT Automation access to Microsoft 365</p>
+<p class="meta">For Brent Craig or the Admin account · 7 August 2026 · takes about two minutes</p>
+
+<h2>What this is</h2>
+<p>As part of the Business Structure Efficiency work, an application has been registered in your
+Microsoft 365 tenant called <strong>BEXT Automation (Dev)</strong>. It is the account the automation uses to
+read and write on the business's behalf — producing meeting minutes from Teams recordings, drafting
+emails in Outlook, and filing documents into SharePoint.</p>
+
+<p>The application has been created and its permissions attached. It cannot do anything yet.
+Microsoft requires that a <strong>Global Administrator</strong> approve the permissions before they take
+effect. That approval is the only outstanding step, and it can only be done by you — the automation
+account deliberately does not have the authority to approve its own access.</p>
+
+<div class="box">
+<strong>Why you and not the developer.</strong> Microsoft separates <em>creating</em> an application from
+<em>approving</em> what it can reach. Anyone can register an app; only an administrator can grant it
+access to organisational data. That separation is a safety feature, and it is working as intended
+here.
+</div>
+
+<h2>What you will be approving</h2>
+<p>Nine permissions, each tied to something specific in the brief:</p>
+
+<table>
+  <tr><th>Permission</th><th>What it allows</th><th>Why it is needed</th></tr>
+  <tr><td><code>Mail.Send</code></td><td>Send email as a mailbox in the tenant</td><td>Delivers the 5am daily industry report</td></tr>
+  <tr><td><code>Mail.Read</code></td><td>Read mailbox contents</td><td>Identifies enquiries and threads needing follow-up</td></tr>
+  <tr><td><code>Mail.ReadWrite</code></td><td>Create and edit drafts</td><td>Writes reply drafts for review before sending</td></tr>
+  <tr><td><code>Calendars.ReadWrite</code></td><td>Read and write calendar entries</td><td>Meeting preparation and follow-up scheduling</td></tr>
+  <tr><td><code>OnlineMeetings.Read.All</code></td><td>See Teams meetings</td><td>Finds the meeting a transcript belongs to</td></tr>
+  <tr><td><code>OnlineMeetings.ReadWrite.All</code></td><td>Access meeting records and transcripts</td><td>The automated meeting minutes workflow</td></tr>
+  <tr><td><code>Sites.ReadWrite.All</code></td><td>Read and write SharePoint sites</td><td>Automatic filing of documents and deliverables</td></tr>
+  <tr><td><code>Files.ReadWrite.All</code></td><td>Read and write OneDrive files</td><td>Document creation and organisation</td></tr>
+  <tr><td><code>User.Read.All</code></td><td>Read user profiles in the directory</td><td>Resolves meeting attendees and mailbox owners</td></tr>
+</table>
+
+<div class="warn">
+<strong>Be aware of what you are agreeing to.</strong> These are tenant-wide permissions. They are not
+limited to one mailbox or one site — the application will technically be able to reach any mailbox,
+any SharePoint site and any file in the tenant. That is how Microsoft's application permissions work;
+there is no narrower option that still allows unattended automation.
+<br><br>
+This is appropriate for a development tenant with one user. <strong>Before this moves to production</strong>,
+the developer has committed to scoping <code>Mail.Send</code> down with an application access policy so
+it can only send from the one mailbox it needs. Ask for that to be confirmed at handover.
+</div>
+
+<h2>What to do</h2>
+
+<div class="step">
+<b>Step 1.</b> Sign in to Microsoft using <strong>Brent@bextconsultancy.com.au</strong> or
+<strong>Admin@bextconsultancy.com.au</strong>. These are the only two accounts in the tenant with the
+authority to approve this. If you are already signed in as a different account, sign out first, or use
+a private browsing window.
+</div>
+
+<div class="step">
+<b>Step 2.</b> Open this link in the browser where you are signed in:
+<div class="link">https://login.microsoftonline.com/9eb458d1-317d-4aae-a9a3-bb68e430d701/adminconsent?client_id=b72d1df4-06ec-4390-937a-1293f34d31be</div>
+</div>
+
+<div class="step">
+<b>Step 3.</b> A Microsoft page will appear headed <strong>&ldquo;Permissions requested&rdquo;</strong> showing
+<strong>BEXT Automation (Dev)</strong> and the list of nine permissions above. Read them, then click
+<strong>Accept</strong>.
+</div>
+
+<div class="step">
+<b>Step 4.</b> The browser will attempt to redirect afterwards and may land on an error page, or a
+page that will not load. <strong>This is normal and does not mean it failed.</strong> The application has no
+website to return you to. The approval is recorded the moment you click Accept.
+</div>
+
+<div class="step">
+<b>Step 5.</b> Let Gabriel know it is done. He will confirm it worked within a minute by running a
+verification check that requests a token, reads a user, and sends a single test email.
+</div>
+
+<h2>If something does not look right</h2>
+<ul>
+  <li><strong>The page says you need an administrator</strong> — you are signed in as an account without the
+      Global Administrator role. Sign out and use one of the two accounts named in Step 1.</li>
+  <li><strong>The app name is not &ldquo;BEXT Automation (Dev)&rdquo;</strong> — stop and check with Gabriel before
+      accepting. You should only approve an application you were expecting.</li>
+  <li><strong>You see more or fewer than nine permissions</strong> — stop and check. The list above is exactly
+      what was requested.</li>
+</ul>
+
+<h2>Undoing it later</h2>
+<p>This is fully reversible and does not require the developer. In the
+<strong>Microsoft Entra admin centre</strong> → <strong>Enterprise applications</strong> → <strong>BEXT Automation (Dev)</strong>,
+you can review the granted permissions at any time, or delete the application outright, which
+immediately revokes all of its access.</p>
+
+<div class="ok">
+<strong>Nothing is blocked while you decide.</strong> The daily industry report is already running and
+delivering by a separate email route. This approval unlocks the meeting, email and document
+workflows — the highest-value parts of the brief — but the rest of the work continues either way.
+</div>
+
+<h2>Reference</h2>
+<table>
+  <tr><td style="width:34%">Application name</td><td>BEXT Automation (Dev)</td></tr>
+  <tr><td>Application (client) ID</td><td><code>b72d1df4-06ec-4390-937a-1293f34d31be</code></td></tr>
+  <tr><td>Directory (tenant) ID</td><td><code>9eb458d1-317d-4aae-a9a3-bb68e430d701</code></td></tr>
+  <tr><td>Approvers</td><td>Brent@bextconsultancy.com.au · Admin@bextconsultancy.com.au</td></tr>
+</table>
+
+<footer>
+BEXT Consultancy — Business Structure Efficiency · prepared 7 August 2026 · this approval unlocks
+review areas 3 (meeting workflow), 4 (email automation) and 5 (document management).
+</footer>
+
+</body>
+</html>

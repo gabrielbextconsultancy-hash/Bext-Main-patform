@@ -4,9 +4,48 @@ import {
   getHealth,
   getRecentScored,
   getScoreBands,
+  getScoredCount,
 } from '@/lib/queries';
 import { Card, DatabaseDown, Empty } from '@/components/ui';
 import { ReportViewer } from '@/components/ReportViewer';
+import { ScoredBrowser } from '@/components/ScoredBrowser';
+
+/** Next 05:00 Australia/Melbourne, expressed in that zone. */
+function nextRun() {
+  const now = new Date();
+  const mel = new Date(now.toLocaleString('en-US', { timeZone: 'Australia/Melbourne' }));
+  const next = new Date(mel);
+  next.setHours(5, 0, 0, 0);
+  if (mel >= next) next.setDate(next.getDate() + 1);
+  const hrs = Math.round((next.getTime() - mel.getTime()) / 3_600_000);
+  return `${next.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })} 05:00 — in about ${hrs}h`;
+}
+
+function Sched({
+  name,
+  when,
+  detail,
+  highlight,
+}: {
+  name: string;
+  when: string;
+  detail: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-lg border p-3 ${
+        highlight ? 'border-ok/30 bg-ok/5' : 'border-ink-800 bg-ink-850/50'
+      }`}
+    >
+      <p className="text-[11px] uppercase tracking-wider text-ink-400">{name}</p>
+      <p className={`mt-0.5 text-sm font-semibold ${highlight ? 'text-ok' : 'text-ink-100'}`}>
+        {when}
+      </p>
+      <p className="mt-1 text-[11px] leading-snug text-ink-500">{detail}</p>
+    </div>
+  );
+}
 
 export const dynamic = 'force-dynamic';
 // Operational data — re-read on every request rather than serving a cached page.
@@ -50,12 +89,13 @@ const fmtTime = (t: string | null) =>
     : '—';
 
 export default async function ReportsPage() {
-  const [reports, ready, health, scored, bands] = await Promise.all([
+  const [reports, ready, health, scored, bands, totalScored] = await Promise.all([
     getReports(),
     getPipelineReadiness(),
     getHealth(),
     getRecentScored(),
     getScoreBands(),
+    getScoredCount(),
   ]);
 
   if (!reports) return <DatabaseDown />;
@@ -145,11 +185,30 @@ export default async function ReportsPage() {
         <ReportViewer dates={reports.filter(r => r.status === 'sent').map(r => r.report_date)} />
       </Card>
 
+      {/* Schedule */}
+      <Card title="Schedule" subtitle="When each workflow runs. All times Australia/Melbourne.">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Sched name="Source Ingest" when="Every hour" detail="Fetches all active sources, deduplicates" />
+          <Sched name="Article Analysis" when="Every 30 minutes" detail="Scores and summarises unanalysed articles" />
+          <Sched name="Daily Report" when="05:00 daily" detail="Renders the sheet and emails it" highlight />
+        </div>
+        <p className="mt-3 border-t border-ink-800 pt-3 text-xs text-ink-400">
+          Next report:{' '}
+          <span className="text-ink-100 tnum">{nextRun()}</span>
+          {' · '}cron <code className="rounded bg-ink-850 px-1 text-[11px]">0 5 * * *</code> in
+          Australia/Melbourne, so it follows daylight saving rather than drifting an hour in October.
+        </p>
+      </Card>
+
       {/* Live scoring */}
       <Card
         title="Scoring, live"
-        subtitle="The 25 most recently scored articles. This is what the 05:00 sheet is drawn from."
+        subtitle="The most recent scores, and the full set behind them. This is what the 05:00 sheet is drawn from."
       >
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <ScoredBrowser total={totalScored} />
+        </div>
+
         {bands && bands.length > 0 && (
           <div className="mb-4 flex flex-wrap gap-2">
             {bands.map(b => (
@@ -173,7 +232,7 @@ export default async function ReportsPage() {
           <Empty>Nothing scored yet.</Empty>
         ) : (
           <ul className="divide-y divide-ink-800/60">
-            {scored.map(a => (
+            {scored.slice(0, 8).map(a => (
               <li key={a.id} className="flex gap-3 py-2.5">
                 <span
                   className={`mt-0.5 w-9 shrink-0 rounded px-1.5 py-0.5 text-center text-[11px] font-semibold tnum ${
