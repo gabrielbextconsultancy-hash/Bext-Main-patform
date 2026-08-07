@@ -17,3 +17,4 @@ Thumbs.db
 infra/.env
 scratch/
 env.local.json
+.env.backup-*
