@@ -5,6 +5,7 @@ import {
   getRecentScored,
   getScoreBands,
   getScoredCount,
+  getCategories,
 } from '@/lib/queries';
 import { Card, DatabaseDown, Empty } from '@/components/ui';
 import { ReportViewer } from '@/components/ReportViewer';
@@ -89,13 +90,14 @@ const fmtTime = (t: string | null) =>
     : '—';
 
 export default async function ReportsPage() {
-  const [reports, ready, health, scored, bands, totalScored] = await Promise.all([
+  const [reports, ready, health, scored, bands, totalScored, cats] = await Promise.all([
     getReports(),
     getPipelineReadiness(),
     getHealth(),
     getRecentScored(),
     getScoreBands(),
     getScoredCount(),
+    getCategories(),
   ]);
 
   if (!reports) return <DatabaseDown />;
@@ -206,7 +208,7 @@ export default async function ReportsPage() {
         subtitle="The most recent scores, and the full set behind them. This is what the 05:00 sheet is drawn from."
       >
         <div className="mb-4 flex flex-wrap items-center gap-2">
-          <ScoredBrowser total={totalScored} />
+          <ScoredBrowser total={totalScored} categories={(cats ?? []).map(c => c.category)} />
         </div>
 
         {bands && bands.length > 0 && (

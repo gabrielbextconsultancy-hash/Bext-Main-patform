@@ -553,7 +553,14 @@ const recipient = (($env.REPORT_RECIPIENT || '').split(',')
 // Built here and kept free of commas: queryReplacement splits on them, which
 // truncated this to a bare item count the first time round.
 const detail = \`Sent \${d.item_count} items to \${recipient} | intro by \${d.generated_by}\`;
-return [{ json: { html, subject: 'BEXT Industry Daily — ' + today,
+// The ids of exactly what went into the sheet, so report_items can record it.
+const items = d.sections.flatMap(sec =>
+  sec.items.map((it, i) => ({
+    article_id: it.id, category: sec.name, rank: i + 1,
+    blurb: String(it.summary || '').slice(0, 500),
+  }))
+);
+return [{ json: { html, items, subject: 'BEXT Industry Daily — ' + today,
                   report_date: date, item_count: d.item_count,
                   recipient, detail, generated_by: d.generated_by } }];
 `,
@@ -579,6 +586,27 @@ ON CONFLICT (report_date) DO UPDATE SET
           options: {
             queryReplacement:
               '={{ JSON.stringify([{ report_date: $json.report_date, html: $json.html, recipient: $json.recipient, item_count: $json.item_count }]) }}',
+          },
+        },
+      },
+      {
+        id: 'items', name: 'Record items sent', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(520, 180),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        parameters: {
+          operation: 'executeQuery',
+          // Which articles went out, not just how many. Without this there is no
+          // record of what the client actually received.
+          query: `INSERT INTO report_items (report_id, article_id, category, rank, blurb)
+SELECT r.id, x.article_id, x.category, x.rank, x.blurb
+FROM json_to_recordset($1::json)
+  AS x(article_id bigint, category text, rank int, blurb text)
+CROSS JOIN LATERAL (
+  SELECT id FROM reports WHERE report_date = (now() AT TIME ZONE 'Australia/Melbourne')::date
+) r
+ON CONFLICT (report_id, article_id) DO NOTHING`,
+          options: {
+            queryReplacement: '={{ JSON.stringify($("Render HTML").first().json.items) }}',
           },
         },
       },
@@ -623,7 +651,8 @@ VALUES ('daily_report', 'up', $1)`,
       'Top articles, last 24h': { main: [[{ node: 'Hermes writes the brief', type: 'main', index: 0 }]] },
       'Hermes writes the brief': { main: [[{ node: 'Render HTML', type: 'main', index: 0 }]] },
       'Render HTML': { main: [[{ node: 'Save report', type: 'main', index: 0 }]] },
-      'Save report': { main: [[{ node: 'Send via SMTP', type: 'main', index: 0 }]] },
+      'Save report': { main: [[{ node: 'Record items sent', type: 'main', index: 0 }]] },
+      'Record items sent': { main: [[{ node: 'Send via SMTP', type: 'main', index: 0 }]] },
       'Send via SMTP': { main: [[{ node: 'Mark sent', type: 'main', index: 0 }]] },
       'Mark sent': { main: [[{ node: 'Record result', type: 'main', index: 0 }]] },
     },

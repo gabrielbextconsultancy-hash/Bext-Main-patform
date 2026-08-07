@@ -190,17 +190,77 @@ export const getScoreBands = () =>
      FROM article_analysis GROUP BY 1 ORDER BY 1 DESC`
   );
 
-/** Every scored article, newest first — the modal pages through these. */
-export const getScoredPage = (offset: number, limit = 20) =>
-  tryQuery<ScoredArticle>(
+/** Filters the scoring browser accepts. */
+export interface ScoredFilter {
+  q?: string;          // free text over title and summary
+  band?: string;       // '80', '60', '40', 'below40'
+  category?: string;
+  sentOnly?: boolean;  // only articles that made it into a delivered report
+}
+
+export interface ScoredRow extends ScoredArticle {
+  /** True when this article was included in a report that was actually sent. */
+  in_report: boolean;
+  report_date: string | null;
+}
+
+/** One page of scored articles, with the filters applied in SQL. */
+export async function getScoredFiltered(
+  f: ScoredFilter,
+  offset: number,
+  limit = 20
+): Promise<{ rows: ScoredRow[]; total: number } | null> {
+  const where: string[] = [];
+  const params: unknown[] = [];
+  const p = (v: unknown) => { params.push(v); return `$${params.length}`; };
+
+  if (f.q) {
+    const like = p(`%${f.q}%`);
+    where.push(`(a.title ILIKE ${like} OR an.summary ILIKE ${like})`);
+  }
+  if (f.band === '80') where.push('an.relevance_score >= 80');
+  else if (f.band === '60') where.push('an.relevance_score BETWEEN 60 AND 79');
+  else if (f.band === '40') where.push('an.relevance_score BETWEEN 40 AND 59');
+  else if (f.band === 'below40') where.push('an.relevance_score < 40');
+  if (f.category) where.push(`s.category = ${p(f.category)}`);
+  // Only rows that reached a report that was genuinely sent, not merely rendered.
+  if (f.sentOnly) where.push(`EXISTS (SELECT 1 FROM report_items ri JOIN reports r ON r.id = ri.report_id
+                                      WHERE ri.article_id = a.id AND r.status = 'sent')`);
+
+  const clause = where.length ? 'WHERE ' + where.join(' AND ') : '';
+
+  const rows = await tryQuery<ScoredRow>(
     `SELECT a.id, a.title, a.url, s.name AS source_name, s.category,
-            an.relevance_score, an.summary, a.fetched_at::text
+            an.relevance_score, an.summary, a.fetched_at::text,
+            EXISTS (SELECT 1 FROM report_items ri JOIN reports r ON r.id = ri.report_id
+                    WHERE ri.article_id = a.id AND r.status = 'sent') AS in_report,
+            (SELECT max(r.report_date)::text FROM report_items ri JOIN reports r ON r.id = ri.report_id
+             WHERE ri.article_id = a.id AND r.status = 'sent') AS report_date
      FROM article_analysis an
      JOIN articles a ON a.id = an.article_id
      JOIN sources  s ON s.id = a.source_id
+     ${clause}
      ORDER BY an.analysed_at DESC
-     OFFSET $1 LIMIT $2`,
-    [offset, limit]
+     OFFSET ${p(offset)} LIMIT ${p(limit)}`,
+    params
+  );
+  if (rows === null) return null;
+
+  const totalRows = await tryQuery<{ n: number }>(
+    `SELECT count(*)::int AS n
+     FROM article_analysis an
+     JOIN articles a ON a.id = an.article_id
+     JOIN sources  s ON s.id = a.source_id
+     ${clause}`,
+    params.slice(0, params.length - 2)
+  );
+  return { rows, total: totalRows?.[0]?.n ?? 0 };
+}
+
+/** Categories present, for the filter dropdown. */
+export const getCategories = () =>
+  tryQuery<{ category: string }>(
+    `SELECT DISTINCT category FROM sources ORDER BY category`
   );
 
 export const getScoredCount = async () => {

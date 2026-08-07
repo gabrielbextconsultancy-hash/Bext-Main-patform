@@ -73,7 +73,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "\nconst d = $input.first().json;\nconst esc = s => String(s ?? '').replace(/[&<>\"]/g, c =>\n  ({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;' }[c]));\nconst today = new Date().toLocaleDateString('en-AU',\n  { weekday:'long', day:'numeric', month:'long', year:'numeric', timeZone:'Australia/Melbourne' });\n\n// Inline styles throughout — Outlook and Gmail strip <style> blocks.\nconst body = d.empty\n  ? '<p style=\"color:#6b7280\">No qualifying articles in the last 24 hours.</p>'\n  : d.sections.map(sec => `\n      <h2 style=\"font:600 15px/1.3 Arial,sans-serif;color:#111827;margin:28px 0 10px;\n                 padding-bottom:6px;border-bottom:2px solid #14b8a6\">${esc(sec.name)}</h2>\n      ` + sec.items.map(a => `\n        <div style=\"margin:0 0 16px\">\n          <a href=\"${esc(a.url)}\" style=\"font:600 14px/1.4 Arial,sans-serif;color:#0f766e;\n             text-decoration:none\">${esc(a.title)}</a>\n          <div style=\"font:11px/1.4 Arial,sans-serif;color:#9ca3af;margin:3px 0 4px\">\n            ${esc(a.source_name)} · relevance ${a.relevance_score}\n          </div>\n          <div style=\"font:13px/1.5 Arial,sans-serif;color:#374151\">${esc(a.summary)}</div>\n        </div>`).join('')\n    ).join('');\n\nconst html = `<!doctype html><html><body style=\"margin:0;padding:0;background:#f3f4f6\">\n<div style=\"max-width:680px;margin:0 auto;background:#fff;padding:28px 32px\">\n  <div style=\"font:11px/1 Arial,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#9ca3af\">\n    BEXT Consultancy · Industry Daily\n  </div>\n  <h1 style=\"font:600 20px/1.3 Arial,sans-serif;color:#111827;margin:6px 0 2px\">${today}</h1>\n  <div style=\"font:12px/1.4 Arial,sans-serif;color:#9ca3af;margin-bottom:20px\">\n    ${d.item_count} items across ${d.sections.length} sections\n  </div>\n  ${d.intro ? `<div style=\"background:#f0fdfa;border-left:3px solid #14b8a6;padding:12px 14px;\n       font:13px/1.6 Arial,sans-serif;color:#134e4a;margin-bottom:8px\">${esc(d.intro)}</div>` : ''}\n  ${body}\n  <div style=\"margin-top:32px;padding-top:14px;border-top:1px solid #e5e7eb;\n              font:11px/1.5 Arial,sans-serif;color:#9ca3af\">\n    Generated automatically from ${d.item_count} scored articles.\n    Grants / Funding and LinkedIn sections are covered in a separate report.\n  </div>\n</div></body></html>`;\n\nconst date = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' });\n// REPORT_RECIPIENT is a comma-separated list — the sheet goes to the consultant\n// and to the client, not to one hardcoded address. Falls back to the sender so a\n// misconfigured list can never send the report to nobody.\nconst recipient = (($env.REPORT_RECIPIENT || '').split(',')\n  .map(s => s.trim())\n  .filter(Boolean)\n  .join(', ')) || $env.REPORT_SENDER;\n// Built here and kept free of commas: queryReplacement splits on them, which\n// truncated this to a bare item count the first time round.\nconst detail = `Sent ${d.item_count} items to ${recipient} | intro by ${d.generated_by}`;\nreturn [{ json: { html, subject: 'BEXT Industry Daily — ' + today,\n                  report_date: date, item_count: d.item_count,\n                  recipient, detail, generated_by: d.generated_by } }];\n"
+        "jsCode": "\nconst d = $input.first().json;\nconst esc = s => String(s ?? '').replace(/[&<>\"]/g, c =>\n  ({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;' }[c]));\nconst today = new Date().toLocaleDateString('en-AU',\n  { weekday:'long', day:'numeric', month:'long', year:'numeric', timeZone:'Australia/Melbourne' });\n\n// Inline styles throughout — Outlook and Gmail strip <style> blocks.\nconst body = d.empty\n  ? '<p style=\"color:#6b7280\">No qualifying articles in the last 24 hours.</p>'\n  : d.sections.map(sec => `\n      <h2 style=\"font:600 15px/1.3 Arial,sans-serif;color:#111827;margin:28px 0 10px;\n                 padding-bottom:6px;border-bottom:2px solid #14b8a6\">${esc(sec.name)}</h2>\n      ` + sec.items.map(a => `\n        <div style=\"margin:0 0 16px\">\n          <a href=\"${esc(a.url)}\" style=\"font:600 14px/1.4 Arial,sans-serif;color:#0f766e;\n             text-decoration:none\">${esc(a.title)}</a>\n          <div style=\"font:11px/1.4 Arial,sans-serif;color:#9ca3af;margin:3px 0 4px\">\n            ${esc(a.source_name)} · relevance ${a.relevance_score}\n          </div>\n          <div style=\"font:13px/1.5 Arial,sans-serif;color:#374151\">${esc(a.summary)}</div>\n        </div>`).join('')\n    ).join('');\n\nconst html = `<!doctype html><html><body style=\"margin:0;padding:0;background:#f3f4f6\">\n<div style=\"max-width:680px;margin:0 auto;background:#fff;padding:28px 32px\">\n  <div style=\"font:11px/1 Arial,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#9ca3af\">\n    BEXT Consultancy · Industry Daily\n  </div>\n  <h1 style=\"font:600 20px/1.3 Arial,sans-serif;color:#111827;margin:6px 0 2px\">${today}</h1>\n  <div style=\"font:12px/1.4 Arial,sans-serif;color:#9ca3af;margin-bottom:20px\">\n    ${d.item_count} items across ${d.sections.length} sections\n  </div>\n  ${d.intro ? `<div style=\"background:#f0fdfa;border-left:3px solid #14b8a6;padding:12px 14px;\n       font:13px/1.6 Arial,sans-serif;color:#134e4a;margin-bottom:8px\">${esc(d.intro)}</div>` : ''}\n  ${body}\n  <div style=\"margin-top:32px;padding-top:14px;border-top:1px solid #e5e7eb;\n              font:11px/1.5 Arial,sans-serif;color:#9ca3af\">\n    Generated automatically from ${d.item_count} scored articles.\n    Grants / Funding and LinkedIn sections are covered in a separate report.\n  </div>\n</div></body></html>`;\n\nconst date = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' });\n// REPORT_RECIPIENT is a comma-separated list — the sheet goes to the consultant\n// and to the client, not to one hardcoded address. Falls back to the sender so a\n// misconfigured list can never send the report to nobody.\nconst recipient = (($env.REPORT_RECIPIENT || '').split(',')\n  .map(s => s.trim())\n  .filter(Boolean)\n  .join(', ')) || $env.REPORT_SENDER;\n// Built here and kept free of commas: queryReplacement splits on them, which\n// truncated this to a bare item count the first time round.\nconst detail = `Sent ${d.item_count} items to ${recipient} | intro by ${d.generated_by}`;\n// The ids of exactly what went into the sheet, so report_items can record it.\nconst items = d.sections.flatMap(sec =>\n  sec.items.map((it, i) => ({\n    article_id: it.id, category: sec.name, rank: i + 1,\n    blurb: String(it.summary || '').slice(0, 500),\n  }))\n);\nreturn [{ json: { html, items, subject: 'BEXT Industry Daily — ' + today,\n                  report_date: date, item_count: d.item_count,\n                  recipient, detail, generated_by: d.generated_by } }];\n"
       }
     },
     {
@@ -96,6 +96,29 @@
         "query": "INSERT INTO reports (report_date, status, html, recipient, item_count, generated_at)\nSELECT report_date::date, 'rendered', html, recipient, item_count, now()\nFROM json_to_recordset($1::json)\n  AS x(report_date text, html text, recipient text, item_count int)\nON CONFLICT (report_date) DO UPDATE SET\n  status = 'rendered', html = EXCLUDED.html, recipient = EXCLUDED.recipient,\n  item_count = EXCLUDED.item_count, generated_at = now(), error = NULL",
         "options": {
           "queryReplacement": "={{ JSON.stringify([{ report_date: $json.report_date, html: $json.html, recipient: $json.recipient, item_count: $json.item_count }]) }}"
+        }
+      }
+    },
+    {
+      "id": "items",
+      "name": "Record items sent",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        520,
+        180
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "0SoqGGqUOqbwYTmJ",
+          "name": "BEXT Postgres"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO report_items (report_id, article_id, category, rank, blurb)\nSELECT r.id, x.article_id, x.category, x.rank, x.blurb\nFROM json_to_recordset($1::json)\n  AS x(article_id bigint, category text, rank int, blurb text)\nCROSS JOIN LATERAL (\n  SELECT id FROM reports WHERE report_date = (now() AT TIME ZONE 'Australia/Melbourne')::date\n) r\nON CONFLICT (report_id, article_id) DO NOTHING",
+        "options": {
+          "queryReplacement": "={{ JSON.stringify($(\"Render HTML\").first().json.items) }}"
         }
       }
     },
@@ -216,6 +239,17 @@
       ]
     },
     "Save report": {
+      "main": [
+        [
+          {
+            "node": "Record items sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record items sent": {
       "main": [
         [
           {
