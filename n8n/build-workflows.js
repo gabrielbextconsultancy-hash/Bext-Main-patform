@@ -429,15 +429,31 @@ const REPORT_SECTIONS = [
   'Industry Updates',
 ];
 
+// The sheet is generated at 05:00 and covers the whole of the *previous*
+// calendar day in Melbourne, not a rolling 24 hours. A rolling window clipped
+// the prior day's first five hours and pulled in items from the morning of the
+// send, so an article published at 09:00 could land in a sheet dated the day
+// before it appeared.
 const REPORT_SELECT = `
-WITH ranked AS (
+WITH win AS (
+  SELECT date_trunc('day', now() AT TIME ZONE 'Australia/Melbourne')
+           - interval '1 day' AS day_start
+),
+ranked AS (
   SELECT a.id, a.url, a.title, a.published_at, s.name AS source_name, s.category,
          an.summary, an.relevance_score,
          row_number() OVER (PARTITION BY s.category ORDER BY an.relevance_score DESC, a.published_at DESC NULLS LAST) AS rn
   FROM articles a
   JOIN sources s          ON s.id = a.source_id
   JOIN article_analysis an ON an.article_id = a.id
-  WHERE a.fetched_at > now() - interval '24 hours'
+  CROSS JOIN win w
+  -- Only about a quarter of these sources publish a machine-readable date, so
+  -- fall back to when we first saw the article. Ingest runs hourly, which keeps
+  -- that within an hour of publication for the sources that omit it.
+  WHERE (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')
+          >= w.day_start
+    AND (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')
+          <  w.day_start + interval '1 day'
     AND an.relevance_score >= 40
 )
 SELECT id, url, title, published_at, source_name, category, summary, relevance_score
@@ -458,7 +474,7 @@ function dailyReportWorkflow() {
         parameters: { rule: { interval: [{ field: 'cronExpression', expression: '0 5 * * *' }] } },
       },
       {
-        id: 'pull', name: 'Top articles, last 24h', type: 'n8n-nodes-base.postgres',
+        id: 'pull', name: 'Top articles, prior day', type: 'n8n-nodes-base.postgres',
         typeVersion: 2.5, position: pos(-180, 0),
         credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
         parameters: { operation: 'executeQuery', query: REPORT_SELECT, options: {} },
@@ -527,12 +543,15 @@ return [{ json: { empty: false, item_count: rows.length, sections, intro,
 const d = $input.first().json;
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
   ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
-const today = new Date().toLocaleDateString('en-AU',
+// The sheet goes out at 05:00 covering the day before, so the heading and the
+// subject line name the day being reported on, not the morning it was sent.
+// Dating it "Saturday" when every item is from Friday reads as a stale report.
+const coverage = new Date(Date.now() - 86400000).toLocaleDateString('en-AU',
   { weekday:'long', day:'numeric', month:'long', year:'numeric', timeZone:'Australia/Melbourne' });
 
 // Inline styles throughout — Outlook and Gmail strip <style> blocks.
 const body = d.empty
-  ? '<p style="color:#6b7280">No qualifying articles in the last 24 hours.</p>'
+  ? '<p style="color:#6b7280">No qualifying articles published on this day.</p>'
   : d.sections.map(sec => \`
       <h2 style="font:600 15px/1.3 Arial,sans-serif;color:#111827;margin:28px 0 10px;
                  padding-bottom:6px;border-bottom:2px solid #14b8a6">\${esc(sec.name)}</h2>
@@ -552,7 +571,7 @@ const html = \`<!doctype html><html><body style="margin:0;padding:0;background:#
   <div style="font:11px/1 Arial,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#9ca3af">
     BEXT Consultancy · Industry Daily
   </div>
-  <h1 style="font:600 20px/1.3 Arial,sans-serif;color:#111827;margin:6px 0 2px">\${today}</h1>
+  <h1 style="font:600 20px/1.3 Arial,sans-serif;color:#111827;margin:6px 0 2px">\${coverage}</h1>
   <div style="font:12px/1.4 Arial,sans-serif;color:#9ca3af;margin-bottom:20px">
     \${d.item_count} items across \${d.sections.length} sections
   </div>
@@ -584,7 +603,7 @@ const items = d.sections.flatMap(sec =>
     blurb: String(it.summary || '').slice(0, 500),
   }))
 );
-return [{ json: { html, items, subject: 'BEXT Industry Daily — ' + today,
+return [{ json: { html, items, subject: 'BEXT Industry Daily — ' + coverage,
                   report_date: date, item_count: d.item_count,
                   recipient, detail, generated_by: d.generated_by } }];
 `,
@@ -671,8 +690,8 @@ VALUES ('daily_report', 'up', $1)`,
       },
     ],
     connections: {
-      'Daily 05:00 AEST': { main: [[{ node: 'Top articles, last 24h', type: 'main', index: 0 }]] },
-      'Top articles, last 24h': { main: [[{ node: 'Hermes writes the brief', type: 'main', index: 0 }]] },
+      'Daily 05:00 AEST': { main: [[{ node: 'Top articles, prior day', type: 'main', index: 0 }]] },
+      'Top articles, prior day': { main: [[{ node: 'Hermes writes the brief', type: 'main', index: 0 }]] },
       'Hermes writes the brief': { main: [[{ node: 'Render HTML', type: 'main', index: 0 }]] },
       'Render HTML': { main: [[{ node: 'Save report', type: 'main', index: 0 }]] },
       'Save report': { main: [[{ node: 'Record items sent', type: 'main', index: 0 }]] },
