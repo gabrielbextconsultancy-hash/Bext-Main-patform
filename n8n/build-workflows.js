@@ -434,32 +434,35 @@ const REPORT_SECTIONS = [
 // the prior day's first five hours and pulled in items from the morning of the
 // send, so an article published at 09:00 could land in a sheet dated the day
 // before it appeared.
+// Everything from that day goes in, whatever it scored. Scoring still runs and
+// still orders each section best-first, but it no longer decides membership: a
+// >= 40 cut and an eight-per-category cap were together dropping most of the
+// day's intake, and the brief asks for the day's coverage, not a shortlist.
+// The join to article_analysis is therefore LEFT — an article the scorer has
+// not reached yet is still that day's news and still belongs in the sheet.
 const REPORT_SELECT = `
 WITH win AS (
   SELECT date_trunc('day', now() AT TIME ZONE 'Australia/Melbourne')
            - interval '1 day' AS day_start
-),
-ranked AS (
-  SELECT a.id, a.url, a.title, a.published_at, s.name AS source_name, s.category,
-         an.summary, an.relevance_score,
-         row_number() OVER (PARTITION BY s.category ORDER BY an.relevance_score DESC, a.published_at DESC NULLS LAST) AS rn
-  FROM articles a
-  JOIN sources s          ON s.id = a.source_id
-  JOIN article_analysis an ON an.article_id = a.id
-  CROSS JOIN win w
-  -- Only about a quarter of these sources publish a machine-readable date, so
-  -- fall back to when we first saw the article. Ingest runs hourly, which keeps
-  -- that within an hour of publication for the sources that omit it.
-  WHERE (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')
-          >= w.day_start
-    AND (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')
-          <  w.day_start + interval '1 day'
-    AND an.relevance_score >= 40
 )
-SELECT id, url, title, published_at, source_name, category, summary, relevance_score
-FROM ranked
-WHERE rn <= 8
-ORDER BY category, relevance_score DESC`;
+SELECT a.id, a.url, a.title, a.published_at,
+       s.name AS source_name, s.category,
+       coalesce(an.summary, '') AS summary,
+       an.relevance_score
+FROM articles a
+JOIN sources s               ON s.id = a.source_id
+LEFT JOIN article_analysis an ON an.article_id = a.id
+CROSS JOIN win w
+-- Only about a quarter of these sources publish a machine-readable date, so
+-- fall back to when we first saw the article. Ingest runs hourly, which keeps
+-- that within an hour of publication for the sources that omit it.
+WHERE (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')
+        >= w.day_start
+  AND (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')
+        <  w.day_start + interval '1 day'
+ORDER BY s.category,
+         an.relevance_score DESC NULLS LAST,
+         a.published_at DESC NULLS LAST`;
 
 function dailyReportWorkflow() {
   return {
@@ -502,7 +505,7 @@ const sections = ORDER
 let intro = '';
 try {
   const headlines = rows.slice(0, 15)
-    .map(r => \`- [\${r.relevance_score}] \${r.title} (\${r.source_name})\`).join('\\n');
+    .map(r => \`- [\${r.relevance_score ?? '—'}] \${r.title} (\${r.source_name})\`).join('\\n');
   const res = await this.helpers.httpRequest({
     method: 'POST',
     url: 'http://ollama:11434/api/generate',
@@ -560,9 +563,12 @@ const body = d.empty
           <a href="\${esc(a.url)}" style="font:600 14px/1.4 Arial,sans-serif;color:#0f766e;
              text-decoration:none">\${esc(a.title)}</a>
           <div style="font:11px/1.4 Arial,sans-serif;color:#9ca3af;margin:3px 0 4px">
-            \${esc(a.source_name)} · relevance \${a.relevance_score}
+            \${esc(a.source_name)} · \${a.relevance_score == null
+              ? 'not yet scored' : 'relevance ' + a.relevance_score}
           </div>
-          <div style="font:13px/1.5 Arial,sans-serif;color:#374151">\${esc(a.summary)}</div>
+          \${a.summary
+            ? \`<div style="font:13px/1.5 Arial,sans-serif;color:#374151">\${esc(a.summary)}</div>\`
+            : ''}
         </div>\`).join('')
     ).join('');
 
