@@ -221,7 +221,10 @@ sources:
     category: Industry Updates
     url: "https://arena.gov.au/knowledge-bank/"
     method: rss
-    feed_url: "https://arena.gov.au/feed/"
+    # The site-wide feed carries no /knowledge-bank URLs, so the path filter
+    # rejected all ten items on every run and this source had never produced a
+    # single article. The knowledge bank publishes its own feed.
+    feed_url: "https://arena.gov.au/knowledge-bank/feed/"
     filter:
       path_contains:
         - /knowledge-bank
@@ -455,7 +458,11 @@ sources:
     category: Industry Updates
     url: "https://reneweconomy.com.au/author/david-leitch/"
     method: rss
-    feed_url: "https://reneweconomy.com.au/feed/"
+    # Sharing the site-wide feed with the `reneweconomy` source meant whichever
+    # ran first claimed the article — articles.url is globally unique — so this
+    # one never kept a row. The author feed is disjoint from what that source
+    # takes, and yields four recent pieces instead of one contested item.
+    feed_url: "https://reneweconomy.com.au/author/david-leitch/feed/"
     filter:
       author: David Leitch
   - slug: pv-magazine-au
