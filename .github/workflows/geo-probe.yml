@@ -1,0 +1,61 @@
+name: Geo probe — can a foreign datacenter reach .gov.au?
+
+# The BEXT VPS is in Kuala Lumpur and every *.gov.au source tarpits: TCP 443
+# opens, TLS completes, then no HTTP response ever arrives. Those sites sit
+# behind GovCMS/Akamai and load instantly from an Australian browser.
+#
+# Before paying for a VPS in another region, establish which kind of block it is.
+# This runs from a GitHub Actions runner (Azure, United States) — a foreign
+# datacenter that is not Malaysia:
+#
+#   all 9 time out  -> geographic. Any non-AU region fails the same way, so a
+#                      Jakarta or Mumbai VPS would be wasted money.
+#   some succeed    -> IP/ASN reputation specific to the Hostinger MY range, so
+#                      another Hostinger region is a fair bet.
+#
+# Dispatch only. This must never run on push.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Where is this runner
+        run: curl -s --max-time 20 http://ip-api.com/json | python3 -c 'import sys,json;j=json.load(sys.stdin);print(f"  runner: {j.get(\"query\")} | {j.get(\"country\")} {j.get(\"city\")} | {j.get(\"isp\")}")'
+
+      - name: Probe the nine GovCMS sources
+        run: |
+          set -u
+          UA='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+          ok=0; fail=0
+          probe () {
+            # --max-time 30 is well past the 45s the VPS burns before giving up;
+            # a healthy fetch of these answers in under two seconds.
+            code=$(curl -s -o /tmp/body -w '%{http_code}' --max-time 30 -A "$UA" -L "$2" || echo 000)
+            if [ "$code" = "200" ]; then
+              items=$(grep -o -E '<item[ >]|<entry[ >]' /tmp/body | wc -l)
+              printf '  %-22s %-5s OK    %s items\n' "$1" "$code" "$items"; ok=$((ok+1))
+            else
+              printf '  %-22s %-5s BLOCKED/TIMEOUT\n' "$1" "$code"; fail=$((fail+1))
+            fi
+          }
+          probe aer-news           https://www.aer.gov.au/news/articles
+          probe aer-registers      https://www.aer.gov.au/industry/registers
+          probe cbd                https://www.cbd.gov.au/news-and-events
+          probe cca                https://www.climatechangeauthority.gov.au/latest-news
+          probe disr               https://www.industry.gov.au/news
+          probe energy-gov-au      https://www.energy.gov.au/rss.xml
+          probe energy-rating-gems https://www.energyrating.gov.au/news-and-stories
+          probe minister-bowen     https://minister.dcceew.gov.au/bowen
+          probe nabers             https://www.nabers.gov.au/news
+          echo
+          probe 'CONTROL non-gov'  https://reneweconomy.com.au/feed/
+          echo
+          echo "  reachable: $ok   blocked: $fail"
+          if [ "$ok" -eq 0 ]; then
+            echo "  VERDICT: geographic block — a Hostinger VPS in Jakarta or Mumbai will fail identically. Do not provision."
+          else
+            echo "  VERDICT: not purely geographic — $ok answered from a US datacenter, so another region is worth trying."
+          fi
