@@ -99,6 +99,38 @@ async function render(url, { waitFor = 'domcontentloaded', timeout = NAV_TIMEOUT
   }
 }
 
+/** Fills a Word template with the values extracted from a meeting transcript.
+ *
+ *  This lives here rather than in an n8n Code node for two reasons: the node
+ *  sandbox only exposes the builtins named in NODE_FUNCTION_ALLOW_BUILTIN, and
+ *  binary .docx handling in an environment designed around JSON is awkward
+ *  enough to be its own source of bugs. The service already runs beside n8n on
+ *  the internal network and already returns binary for /pdf.
+ *
+ *  The template is whatever document sits in SharePoint — n8n downloads it and
+ *  posts it here as base64. Swapping the company template therefore changes no
+ *  code.
+ *
+ *    POST /render-docx  { "template": "<base64 .docx>", "data": { ... } }
+ */
+function renderDocx(templateBase64, data) {
+  const PizZip = require('pizzip');
+  const Docxtemplater = require('docxtemplater');
+
+  const zip = new PizZip(Buffer.from(templateBase64, 'base64'));
+  const doc = new Docxtemplater(zip, {
+    paragraphLoop: true,
+    linebreaks: true,
+    // A template placeholder with no matching value renders empty rather than
+    // throwing. A missing attendee list should leave a gap in the minutes for
+    // the reviewer to notice, not fail the whole run and file nothing.
+    nullGetter: () => '',
+  });
+
+  doc.render(data);
+  return doc.toBuffer();
+}
+
 /** Renders supplied HTML to PDF. Used for the client deliverables, which are
  *  authored as web decks and need a PDF alongside for sending and archiving. */
 async function toPdf(html, { width = '1280px', height = '720px' } = {}) {
@@ -139,8 +171,31 @@ const server = http.createServer(async (req, res) => {
     });
     return;
   }
+  if (req.method === 'POST' && req.url === '/render-docx') {
+    let raw = '';
+    req.on('data', c => { raw += c; if (raw.length > 3e7) req.destroy(); });
+    req.on('end', async () => {
+      try {
+        const { template, data } = JSON.parse(raw);
+        if (!template) return send(res, 400, { error: 'template (base64 .docx) required' });
+        const out = renderDocx(template, data || {});
+        res.writeHead(200, {
+          'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          'Content-Length': out.length,
+        });
+        res.end(out);
+      } catch (e) {
+        // docxtemplater reports template faults as a list of per-placeholder
+        // errors; the top-level message alone says only "Multi error", which is
+        // useless when the fix is a mistyped placeholder name.
+        const detail = e.properties?.errors?.map(x => x.properties?.explanation).filter(Boolean);
+        send(res, 400, { error: e.message, detail: detail?.length ? detail : undefined });
+      }
+    });
+    return;
+  }
   if (req.method !== 'POST' || req.url !== '/fetch') {
-    return send(res, 404, { error: 'POST /fetch, POST /pdf, or GET /health' });
+    return send(res, 404, { error: 'POST /fetch, POST /render-docx, POST /pdf, or GET /health' });
   }
   if (active >= MAX_CONCURRENT) {
     // A 2 GB container running Chromium will thrash rather than queue politely.

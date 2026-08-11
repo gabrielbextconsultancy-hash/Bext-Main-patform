@@ -15,8 +15,10 @@
   "type": "commonjs",
   "private": "true",
   "dependencies": {
+    "docxtemplater": "^3.66.6",
     "dotenv": "^17.4.2",
     "pg": "^8.22.0",
+    "pizzip": "^3.2.0",
     "yaml": "^2.9.0"
   }
 }
