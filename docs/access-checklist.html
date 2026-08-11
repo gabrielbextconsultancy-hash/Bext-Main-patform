@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<title>BEXT Automation — Access &amp; Permissions Checklist</title>
+<style>
+  @page { size: A4; margin: 14mm 12mm; }
+  * { box-sizing: border-box; }
+  body {
+    font: 10pt/1.5 -apple-system, "Segoe UI", Arial, sans-serif;
+    color: #1f2937; margin: 0; padding: 0;
+  }
+  h1 { font-size: 20pt; margin: 0 0 2mm; color: #0f172a; letter-spacing: -.2pt; }
+  .sub { font-size: 9pt; color: #6b7280; margin-bottom: 6mm; }
+  h2 {
+    font-size: 12pt; margin: 8mm 0 3mm; color: #0f766e;
+    border-bottom: 1.5pt solid #14b8a6; padding-bottom: 1.5mm;
+    page-break-after: avoid;
+  }
+  h3 { font-size: 10.5pt; margin: 5mm 0 2mm; color: #0f172a; page-break-after: avoid; }
+  p { margin: 0 0 2.5mm; }
+  table { width: 100%; border-collapse: collapse; margin: 2mm 0 4mm; font-size: 8.5pt; }
+  th {
+    text-align: left; background: #f0fdfa; color: #134e4a; font-weight: 600;
+    padding: 1.8mm 2mm; border-bottom: 1pt solid #99f6e4; vertical-align: top;
+  }
+  td { padding: 1.8mm 2mm; border-bottom: .5pt solid #e5e7eb; vertical-align: top; }
+  tr { page-break-inside: avoid; }
+  code {
+    font: 8pt "Cascadia Mono", Consolas, monospace; background: #f3f4f6;
+    padding: .3mm 1mm; border-radius: 1mm; color: #0f172a; word-break: break-all;
+  }
+  .b { display: inline-block; font-size: 7pt; font-weight: 700; letter-spacing: .3pt;
+       padding: .6mm 1.6mm; border-radius: 1mm; text-transform: uppercase; white-space: nowrap; }
+  .done { background: #d1fae5; color: #065f46; }
+  .pend { background: #fee2e2; color: #991b1b; }
+  .part { background: #fef3c7; color: #92400e; }
+  .rec  { background: #e0e7ff; color: #3730a3; }
+  .card { border: .5pt solid #e5e7eb; border-left: 2.5pt solid #14b8a6;
+          padding: 3mm 3.5mm; margin: 3mm 0; page-break-inside: avoid; background: #fcfcfd; }
+  .card.blocked { border-left-color: #dc2626; background: #fffbfb; }
+  .nav { font-size: 8.5pt; color: #374151; margin: 1.5mm 0; }
+  .nav b { color: #0f172a; }
+  .lbl { font-size: 7.5pt; text-transform: uppercase; letter-spacing: .4pt;
+         color: #9ca3af; font-weight: 700; margin-top: 2.5mm; }
+  a { color: #0f766e; text-decoration: none; word-break: break-all; }
+  .foot { margin-top: 8mm; padding-top: 2mm; border-top: .5pt solid #e5e7eb;
+          font-size: 8pt; color: #9ca3af; }
+  .pb { page-break-before: always; }
+</style>
+</head>
+<body>
+
+<h1>Access &amp; Permissions Checklist</h1>
+<div class="sub">
+  BEXT Consultancy — Business Structure Efficiency (Brief B) · 11 August 2026<br>
+  Every credential, permission and platform setting the automation depends on, where to find it,
+  and which workflow stops working without it. Status verified against the live APIs, not assumed.
+</div>
+
+<h2>1. Status at a glance</h2>
+<table>
+  <tr><th style="width:29%">Item</th><th style="width:11%">Status</th><th style="width:22%">Owner</th><th>Blocks</th></tr>
+  <tr><td>Entra app registration</td><td><span class="b done">Done</span></td><td>Complete</td><td>—</td></tr>
+  <tr><td>Graph permissions (10) + consent</td><td><span class="b done">Done</span></td><td>Complete</td><td>—</td></tr>
+  <tr><td>Teams transcription policy</td><td><span class="b done">Done</span></td><td>Complete</td><td>—</td></tr>
+  <tr><td>SharePoint folders</td><td><span class="b done">Done</span></td><td>Complete</td><td>—</td></tr>
+  <tr><td><b>Teams application access policy</b></td><td><span class="b pend">Blocked</span></td><td>Brent — Teams admin</td><td>Meeting Intake — all of it</td></tr>
+  <tr><td>HubSpot companies scope</td><td><span class="b part">Partial</span></td><td>HubSpot app owner</td><td>Client matching, filing, drafts</td></tr>
+  <tr><td>Xero connection</td><td><span class="b pend">Not started</span></td><td>Brent — Xero admin</td><td>Finance automation</td></tr>
+  <tr><td>ProjectManager hourly rates</td><td><span class="b pend">Not set</span></td><td>Brent — data entry</td><td>Profitability reporting</td></tr>
+  <tr><td>Company minutes template</td><td><span class="b part">Stand-in</span></td><td>Gabriel / Brent</td><td>Branded output only</td></tr>
+  <tr><td>Teams Administrator role</td><td><span class="b rec">Recommended</span></td><td>Brent</td><td>Future admin tasks</td></tr>
+</table>
+
+<h2>2. Microsoft 365 — the core of the build</h2>
+
+<p><b>Tenant:</b> <code>bextconsultancy.com.au</code> · <code>9eb458d1-317d-4aae-a9a3-bb68e430d701</code><br>
+<b>Application:</b> BEXT Automation (Dev) · <code>b72d1df4-06ec-4390-937a-1293f34d31be</code><br>
+<b>Service account:</b> <code>Admin.bext-automation@bextconsultancy.com.au</code></p>
+
+<h3>2.1 App registration and client secret <span class="b done">Done</span></h3>
+<div class="card">
+  <div class="nav"><b>Where:</b> Microsoft Entra admin center → Applications → App registrations
+    → <i>BEXT Automation (Dev)</i> → Certificates &amp; secrets</div>
+  <div class="nav"><b>Link:</b> <a href="https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade">entra.microsoft.com → App registrations</a></div>
+  <div class="lbl">How it connects</div>
+  <div class="nav">The client secret is exchanged for an access token via the OAuth2
+    client-credentials flow. Every Microsoft call in every workflow starts here. Credentials
+    live in <code>.env</code> and are passed to the n8n container as <code>MS_*</code>
+    environment variables — never inline in workflow JSON.</div>
+  <div class="lbl">Reference</div>
+  <div class="nav"><a href="https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-client-creds-grant-flow">Client credentials flow — Microsoft Learn</a></div>
+  <div class="lbl">Watch</div>
+  <div class="nav">Secrets expire. When this one does, every Microsoft workflow stops at once.
+    <i>BEXT — Graph Health</i> checks daily and emails on failure, which is the early warning.</div>
+</div>
+
+<h3>2.2 Graph API permissions — all ten consented <span class="b done">Done</span></h3>
+<div class="nav"><b>Where:</b> Entra admin center → App registrations → <i>BEXT Automation (Dev)</i> → API permissions.
+  All are <b>Application</b> permissions, not Delegated — the workflows run unattended with nobody signed in.</div>
+<table>
+  <tr><th style="width:30%">Permission</th><th style="width:34%">What it enables</th><th>Workflow that needs it</th></tr>
+  <tr><td><code>Mail.Send</code></td><td>Send mail as a user</td><td>Daily Report (05:00), Graph Health alerts</td></tr>
+  <tr><td><code>Mail.ReadWrite</code></td><td>Create drafts, move messages</td><td>Meeting Intake — follow-up drafts; email filing (B.4)</td></tr>
+  <tr><td><code>Mail.Read</code></td><td>Read mailbox content</td><td>Email automation review (B.4)</td></tr>
+  <tr><td><code>Calendars.ReadWrite</code></td><td>Read and write calendar events</td><td>Meeting Intake — <b>meeting discovery</b></td></tr>
+  <tr><td><code>OnlineMeetings.Read.All</code></td><td>Find Teams meetings</td><td>Meeting Intake — resolve event to meeting</td></tr>
+  <tr><td><code>OnlineMeetings.ReadWrite.All</code></td><td>Meeting records</td><td>Meeting Intake</td></tr>
+  <tr><td><code>OnlineMeetingTranscript.Read.All</code></td><td>Download the transcript itself</td><td>Meeting Intake — <b>needs §2.4 as well</b></td></tr>
+  <tr><td><code>Sites.ReadWrite.All</code></td><td>SharePoint sites and libraries</td><td>Minutes filing, template retrieval, document management (B.5)</td></tr>
+  <tr><td><code>Files.ReadWrite.All</code></td><td>OneDrive and drive items</td><td>Document filing (B.5)</td></tr>
+  <tr><td><code>User.Read.All</code></td><td>Resolve users and attendees</td><td>All — the meetings API needs the user's object GUID</td></tr>
+</table>
+<div class="nav"><b>Reference:</b>
+  <a href="https://learn.microsoft.com/en-us/graph/permissions-reference">Graph permissions reference</a> ·
+  <a href="https://learn.microsoft.com/en-us/graph/api/overview">Graph API overview</a></div>
+<div class="nav"><b>Note:</b> consent was granted by <code>Brent@bextconsultancy.com.au</code>.
+  The service account holds no directory roles and cannot grant consent itself — see §2.5.</div>
+
+<h3>2.3 Teams transcription policy <span class="b done">Done</span></h3>
+<div class="card">
+  <div class="nav"><b>Where:</b> Teams admin center → Meetings → Meeting policies → <i>Global (Org-wide default)</i>
+    → Recording &amp; transcription → <b>Transcription: On</b></div>
+  <div class="nav"><b>Link:</b> <a href="https://admin.teams.microsoft.com/policies/meetings">admin.teams.microsoft.com/policies/meetings</a></div>
+  <div class="lbl">How it connects</div>
+  <div class="nav">Decides whether Teams <i>produces</i> a transcript at all. Without it there is
+    nothing for the workflow to read, no matter what permissions exist. Applies only to meetings
+    held after it was switched on.</div>
+  <div class="lbl">Reference</div>
+  <div class="nav"><a href="https://learn.microsoft.com/en-us/microsoftteams/meeting-transcription-captions">Teams transcription — Microsoft Learn</a></div>
+</div>
+
+<h3>2.4 Teams application access policy <span class="b pend">Blocked — action required</span></h3>
+<div class="card blocked">
+  <div class="nav"><b>Verified error:</b> <code>403 — No application access policy found for this app
+    b72d1df4-06ec-4390-937a-1293f34d31be on the user</code></div>
+  <div class="lbl">Why it exists</div>
+  <div class="nav">Separate from consent by design. A tenant-wide transcript permission would
+    otherwise let the application read <i>every</i> meeting in the organisation, so Microsoft
+    requires an administrator to name which users an application may read. Consent alone always
+    returns 403 — this is not a misconfiguration.</div>
+  <div class="lbl">Where</div>
+  <div class="nav">PowerShell only. There is no portal page and no Graph API for it — the sole
+    interface is the MicrosoftTeams PowerShell module, signed in as a Teams administrator.</div>
+  <div class="lbl">Commands (run by Brent, once)</div>
+  <div class="nav">
+    <code>Install-Module MicrosoftTeams -Scope CurrentUser -Force -AllowClobber</code><br>
+    <code>Connect-MicrosoftTeams -AccountId Brent@bextconsultancy.com.au</code><br>
+    <code>New-CsApplicationAccessPolicy -Identity BEXT-Automation-Policy -AppIds "b72d1df4-06ec-4390-937a-1293f34d31be" -Description "BEXT Automation transcript access"</code><br>
+    <code>Grant-CsApplicationAccessPolicy -PolicyName BEXT-Automation-Policy -Identity Admin.bext-automation@bextconsultancy.com.au</code>
+  </div>
+  <div class="nav">Scripted and idempotent at <code>graph/teams-access-policy.ps1</code>. Allow up to 30 minutes to take effect.</div>
+  <div class="lbl">Reference</div>
+  <div class="nav"><a href="https://learn.microsoft.com/en-us/graph/cloud-communication-online-meeting-application-access-policy">Application access policy — Microsoft Learn</a> ·
+    <a href="https://learn.microsoft.com/en-us/graph/api/onlinemeeting-list-transcripts">List transcripts API</a></div>
+  <div class="lbl">Blocks</div>
+  <div class="nav">The entire meeting workflow: transcript retrieval, minutes generation,
+    action extraction, follow-up drafts. Brief B review area 3 — the client's stated highest priority.</div>
+</div>
+
+<h3>2.5 Teams Administrator role <span class="b rec">Recommended</span></h3>
+<div class="card">
+  <div class="nav"><b>Where:</b> Entra admin center → Users → <i>Admin.bext-automation</i>
+    → Assigned roles → Add assignments → <b>Teams Administrator</b></div>
+  <div class="nav"><b>Link:</b> <a href="https://entra.microsoft.com/#view/Microsoft_AAD_UsersAndTenants/UserManagementMenuBlade">entra.microsoft.com → Users</a></div>
+  <div class="lbl">Why</div>
+  <div class="nav">The service account currently holds <b>no</b> directory roles, which is why the
+    Teams admin center returns <code>INVALID_PRIVILEGE</code> and why every Teams task has to be
+    escalated to Brent. Teams Administrator is sufficient for meeting and application policies and
+    does not give a service account control of the tenant — deliberately not Global Administrator.</div>
+  <div class="lbl">Reference</div>
+  <div class="nav"><a href="https://learn.microsoft.com/en-us/entra/identity/role-based-access-control/permissions-reference">Entra built-in roles</a></div>
+</div>
+
+<div class="pb"></div>
+<h2>3. SharePoint — where documents live</h2>
+
+<h3>3.1 Existing structure <span class="b done">Verified</span></h3>
+<p>The tenant already carried a considered architecture. It was extended, not replaced.</p>
+<table>
+  <tr><th style="width:24%">Site</th><th style="width:38%">Structure</th><th>Role</th></tr>
+  <tr><td><b>BEXTHQ</b></td><td>API Automation Folder → Knowledge Hub - Industry, Meeting Recordings, Shared Documents</td><td>Internal and automation working area</td></tr>
+  <tr><td><b>CRM</b></td><td>Clients → Clients, Opportunities (Arup, Caterpillar, Deakin, RACV, Sustainnovate)</td><td>Pre-contract pipeline</td></tr>
+  <tr><td><b>ProgramManagement</b></td><td>Client NNN → Project → 00. Admin + Gate 01–11</td><td>Post-contract delivery</td></tr>
+  <tr><td><b>CommercialManagement</b></td><td>Finance Mgt → Cash Inflows, Cash Outflows</td><td>Finance — the Xero boundary</td></tr>
+</table>
+
+<h3>3.2 Folders added for the meeting workflow <span class="b done">Done</span></h3>
+<table>
+  <tr><th style="width:38%">Path (under BEXTHQ)</th><th>Holds</th></tr>
+  <tr><td><code>API Automation Folder/Templates/</code></td><td>The minutes template the workflow fills</td></tr>
+  <tr><td><code>API Automation Folder/Meeting Transcripts/</code></td><td>Raw Teams VTT, archived before processing</td></tr>
+  <tr><td><code>API Automation Folder/Meeting Minutes/</code></td><td>Generated minutes, awaiting review</td></tr>
+</table>
+<div class="nav"><b>Created by:</b> <code>node graph/provision-sharepoint.js</code> — idempotent, refuses to overwrite.</div>
+<div class="nav"><b>API:</b> <code>GET /sites/{host}:/sites/BEXTHQ</code> → <code>/drives</code> →
+  <code>PUT /drives/{id}/root:/{path}:/content</code> ·
+  <a href="https://learn.microsoft.com/en-us/graph/api/resources/driveitem">DriveItem reference</a></div>
+<div class="nav"><b>Open decisions:</b> where client minutes finally file, naming convention,
+  transcript retention — <code>docs/sharepoint-ia.md</code></div>
+
+<h2>4. Third-party platforms</h2>
+
+<h3>4.1 HubSpot <span class="b part">Partial — scope missing</span></h3>
+<div class="card blocked">
+  <div class="nav"><b>Verified:</b> contacts and deals return 200. Companies returns
+    <code>403 — This app hasn't been granted all required scopes to make this call.</code></div>
+  <div class="nav"><b>Portal:</b> HubSpot → Settings (gear) → Integrations → <b>Private Apps</b>
+    → the app → <b>Scopes</b> tab → add <code>crm.objects.companies.read</code>
+    (and <code>.write</code> if the automation should create records) → Save → the token stays valid.</div>
+  <div class="nav"><b>Link:</b> <a href="https://app.hubspot.com/private-apps">app.hubspot.com/private-apps</a>
+    · Portal ID <code>443333225</code></div>
+  <div class="lbl">How it connects</div>
+  <div class="nav">Companies is how any workflow answers "which client is this?" — the lookup behind
+    filing a document to the right folder, matching a meeting to an engagement, and addressing a
+    client update. Contacts and deals alone cannot resolve that.</div>
+  <div class="lbl">Reference</div>
+  <div class="nav"><a href="https://developers.hubspot.com/docs/api/crm/companies">Companies API</a> ·
+    <a href="https://developers.hubspot.com/scopes">Scopes reference</a></div>
+  <div class="nav"><b>Also outstanding:</b> the portal holds 1 sample deal and 0 companies. Until real
+    data exists, client matching has nothing to match against.</div>
+</div>
+
+<h3>4.2 Xero <span class="b pend">Not started</span></h3>
+<div class="card blocked">
+  <div class="nav"><b>Steps:</b> <a href="https://developer.xero.com/app/manage">developer.xero.com/app/manage</a>
+    → New app → Web app → OAuth 2.0 → note Client ID and Secret → connect it to the BEXT organisation
+    and authorise the scopes.</div>
+  <div class="nav"><b>Scopes needed:</b> <code>accounting.transactions</code>,
+    <code>accounting.contacts</code>, <code>offline_access</code> (refresh tokens — without it the
+    connection dies after 30 minutes).</div>
+  <div class="lbl">How it connects</div>
+  <div class="nav">Xero owns invoices and expenses in the architecture. It feeds the
+    CommercialManagement site and, combined with ProjectManager time, project profitability.</div>
+  <div class="lbl">Reference</div>
+  <div class="nav"><a href="https://developer.xero.com/documentation/guides/oauth2/overview">Xero OAuth 2.0</a> ·
+    <a href="https://developer.xero.com/documentation/api/accounting/overview">Accounting API</a></div>
+  <div class="nav"><b>Owner:</b> Brent — financial data, authorised by an organisation administrator.</div>
+</div>
+
+<h3>4.3 ProjectManager <span class="b part">Connected — data incomplete</span></h3>
+<div class="card">
+  <div class="nav"><b>Verified:</b> token works, 13 projects readable. <b>All 13 have
+    <code>hourlyRate = 0</code>.</b></div>
+  <div class="nav"><b>Where:</b> ProjectManager → Account → API, and per project → Settings → Rate</div>
+  <div class="lbl">How it connects</div>
+  <div class="nav">ProjectManager is the real system of record for delivery. Its project list is what
+    lets automated filing resolve a destination folder. Without hourly rates, profitability cannot be
+    computed — which is the main purpose of the Xero–ProjectManager integration. Either rates are
+    entered, or that integration is descoped and the final report says why.</div>
+  <div class="lbl">Reference</div>
+  <div class="nav"><a href="https://developer.projectmanager.com/">developer.projectmanager.com</a></div>
+</div>
+
+<h3>4.4 WordPress, LinkedIn, Canva <span class="b pend">Decisions needed</span></h3>
+<table>
+  <tr><th style="width:20%">Platform</th><th style="width:40%">What is required</th><th>Constraint</th></tr>
+  <tr><td>WordPress</td><td>Application password: WP Admin → Users → Profile → Application Passwords; REST API at <code>/wp-json/wp/v2/</code></td><td>Straightforward once credentials are issued</td></tr>
+  <tr><td>LinkedIn</td><td>App at <a href="https://developer.linkedin.com/">developer.linkedin.com</a>, Marketing Developer Platform access</td><td><b>Feed scraping is not permitted.</b> Monitoring as briefed is not available through the API — scope needs an honest decision before 25 Aug</td></tr>
+  <tr><td>Canva</td><td>Connect API — <a href="https://www.canva.dev/docs/connect/">canva.dev/docs/connect</a></td><td>Template automation is limited; Word output is the more reliable path</td></tr>
+</table>
+
+<h2>5. Internal services — all operational</h2>
+<table>
+  <tr><th style="width:22%">Service</th><th style="width:30%">Where</th><th>Role</th></tr>
+  <tr><td>n8n 2.32.6</td><td><code>bext-n8n.srv1866850.hstgr.cloud</code></td><td>Runs every workflow. Repo is source of truth, not the UI</td></tr>
+  <tr><td>PostgreSQL 16</td><td>VPS, loopback only</td><td>Articles, reports, meeting minutes, health</td></tr>
+  <tr><td>fetcher</td><td>Internal Docker network</td><td>Headless browser; <code>/render-docx</code> fills the minutes template</td></tr>
+  <tr><td>Gemini</td><td>Google AI API</td><td>Article scoring; transcript extraction</td></tr>
+  <tr><td>SMTP</td><td>Credential in n8n</td><td>05:00 daily report and alerts</td></tr>
+  <tr><td>Dashboard</td><td><code>bext.dev-environment.site</code></td><td>Status, reports, proposal deck</td></tr>
+</table>
+
+<h2>6. Licensing — needs Brent's attention</h2>
+<table>
+  <tr><th style="width:44%">Subscription</th><th style="width:18%">Purchased</th><th>Assigned</th></tr>
+  <tr><td>Business Premium + Copilot</td><td>2</td><td>2</td></tr>
+  <tr><td><b>O365 Business Premium</b></td><td><b>0</b></td><td><b>1</b></td></tr>
+</table>
+<p>One licence is assigned from a subscription with no purchased units — the signature of a lapsed
+or cancelled subscription with the assignment still attached. It sits on
+<code>Admin.bext-automation@</code>, the mailbox that sends the 05:00 report, and a lapsed licence
+degrades mail and Teams access quietly rather than all at once. Check at
+<a href="https://admin.microsoft.com">admin.microsoft.com</a> → Billing → Your products.
+Note there are <b>no spare licences</b> in the tenant.</p>
+
+<div class="foot">
+  BEXT Consultancy — Business Structure Efficiency · Prepared 11 August 2026 ·
+  Status verified against live APIs on that date. Source: <code>docs/access-checklist.html</code>.
+</div>
+
+</body>
+</html>

@@ -23,6 +23,14 @@ const DECKS = [
     src: path.join(REPO, 'dashboard', 'public', 'proposal', 'index.html'),
     out: path.join(REPO, 'deliverables', 'BEXT-Business-Structure-Efficiency-Draft-Plan-2026-08-11.pdf'),
   },
+  {
+    // A document rather than a deck: A4 portrait, and the CSS is written for
+    // print (page breaks, avoid splitting rows) rather than for a 16:9 slide.
+    src: path.join(REPO, 'docs', 'access-checklist.html'),
+    out: path.join(REPO, 'deliverables', 'BEXT-Access-Permissions-Checklist-2026-08-11.pdf'),
+    width: '210mm',
+    height: '297mm',
+  },
 ];
 
 const ENDPOINT = process.env.FETCHER_URL ?? 'http://127.0.0.1:8080';
@@ -33,7 +41,11 @@ const ENDPOINT = process.env.FETCHER_URL ?? 'http://127.0.0.1:8080';
     const r = await fetch(`${ENDPOINT}/pdf`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ html, width: '1280px', height: '720px' }),
+      body: JSON.stringify({
+        html,
+        width: deck.width ?? '1280px',
+        height: deck.height ?? '720px',
+      }),
     });
     if (!r.ok) {
       console.error(`FAILED ${path.basename(deck.out)} — ${r.status} ${(await r.text()).slice(0, 200)}`);
