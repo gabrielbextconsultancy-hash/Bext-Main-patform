@@ -22,8 +22,12 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
+      # Block scalar, not a plain one: the body contains ": " which YAML would
+      # otherwise read as a nested mapping and reject the whole file.
       - name: Where is this runner
-        run: curl -s --max-time 20 http://ip-api.com/json | python3 -c 'import sys,json;j=json.load(sys.stdin);print(f"  runner: {j.get(\"query\")} | {j.get(\"country\")} {j.get(\"city\")} | {j.get(\"isp\")}")'
+        run: |
+          curl -s --max-time 20 http://ip-api.com/json \
+            | python3 -c 'import sys,json; j=json.load(sys.stdin); print("  runner:", j.get("query"), "|", j.get("country"), j.get("city"), "|", j.get("isp"))'
 
       - name: Probe the nine GovCMS sources
         run: |
