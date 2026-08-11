@@ -89,6 +89,12 @@ Application permissions, not Delegated: the workflows run overnight with no one 
 | `OnlineMeetings.Read.All` | Discover Teams meetings for the meeting workflow (Brief B.3) |
 | `OnlineMeetings.ReadWrite.All` | Meeting records and transcript access (Brief B.3) |
 | `User.Read.All` | Resolve mailbox owners and attendees |
+| `OnlineMeetingTranscript.Read.All` | **Added 11 Aug.** Download the Teams transcript itself. `OnlineMeetings.*` finds the meeting; this reads its transcript, and without it the download fails 403 |
+
+Transcript access needs one more thing that is not a Graph permission: a Teams **application
+access policy** naming this app and granted to the meeting organiser. Consenting the
+permission alone still returns 403. Run `graph/teams-access-policy.ps1` — it creates and
+grants the policy, and reports whether transcription is enabled on the global meeting policy.
 
 Add them all, then **Grant admin consent for \<your tenant\>** and confirm every row shows
 a green *Granted* tick. Without this step every Graph call returns `403 Forbidden`, and the

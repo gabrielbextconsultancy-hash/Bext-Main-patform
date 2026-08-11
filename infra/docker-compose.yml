@@ -111,6 +111,14 @@ services:
       REPORT_SENDER: ${REPORT_SENDER}
       REPORT_RECIPIENT: ${REPORT_RECIPIENT}
 
+      # Microsoft Graph — client-credentials flow for the Brief B workflows
+      # (health checks, meeting transcripts, SharePoint filing). Read as
+      # $env.MS_* inside Code nodes, same arrangement as the Gemini key.
+      MS_TENANT_ID: ${MS_TENANT_ID}
+      MS_CLIENT_ID: ${MS_CLIENT_ID}
+      MS_CLIENT_SECRET: ${MS_CLIENT_SECRET}
+      MS_SENDER_UPN: ${MS_SENDER_UPN}
+
       # Code nodes may not require Node builtins unless named here. The ingest
       # parser hashes article content with crypto to deduplicate stories that are
       # syndicated across several sources under different URLs.

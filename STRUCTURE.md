@@ -57,12 +57,20 @@ Export to `n8n/workflows/*.json` and commit after every change.
 **Done (11 Aug): HubSpot + ProjectManager API tokens** in `.env`, both verified live
 (HubSpot portal 443333225; ProjectManager projects readable).
 
-**Still blocked (Brief B, client-side):** Xero API token, Teams transcription toggle,
-company templates, SharePoint `BEXT` site structure (`docs/SETUP-CHECKLIST.md`).
+**Done (11 Aug): SharePoint + Graph Health.** The tenant already had a four-site IA
+(BEXTHQ / CRM / ProgramManagement / CommercialManagement) — documented in
+`docs/sharepoint-ia.md`, extended not replaced. `graph/provision-sharepoint.js` added
+`Templates/`, `Meeting Transcripts/`, `Meeting Minutes/` under BEXTHQ › API Automation Folder.
+`BEXT — Graph Health` is deployed and active (`S1AEzQfVRRfpYcWW`, daily 06:00).
+
+**Still blocked (Brief B, client-side):** Xero API token, Teams transcription toggle +
+`OnlineMeetingTranscript.Read.All` + application access policy (`graph/teams-access-policy.ps1`),
+company minutes template, the naming/filing decisions in `docs/sharepoint-ia.md` §Open decisions.
 
 ## Next workflows (order)
 
-1. **`BEXT — Graph Health`** (n8n): daily token/sendMail/sites check → `integration_health`. Unblocked — build now; reuse `graph/verify.js` logic.
-2. **25 Aug architecture deliverables** (docs): Business Systems Integration Diagram, Process Flow Maps, SharePoint IA.
-3. **`BEXT — Meeting Intake`** (n8n, needs Teams transcription toggle): recording → transcript → minutes → action items → draft follow-ups.
-4. **Email/document automation** (review areas 4–5) once templates + SharePoint IA agreed.
+1. **`BEXT — Meeting Intake`** (n8n) — needs the three Teams prerequisites above.
+2. **25 Aug architecture deliverables**: Business Systems Integration Diagram, Process Flow Maps
+   (SharePoint IA drafted).
+3. **Email/document automation** (review areas 4–5) once templates agreed.
+4. **Brief A**: 19 failing sources — 11 need routing through the browser fetcher, 4 need URL fixes.

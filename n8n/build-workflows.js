@@ -708,6 +708,168 @@ VALUES ('daily_report', 'up', $1)`,
   };
 }
 
+// ─── Workflow 4: Graph Health ────────────────────────────────────────────────
+
+// graph/verify.js is the same four checks run by hand from a laptop. This is the
+// unattended copy: the Brief B workflows all depend on the client secret, and a
+// secret that expires quietly would otherwise be discovered by a meeting whose
+// minutes never arrived. Checked daily, recorded, and mailed only when it breaks.
+const GRAPH_HEALTH_CODE = `
+const TENANT = $env.MS_TENANT_ID;
+const CLIENT = $env.MS_CLIENT_ID;
+const SECRET = $env.MS_CLIENT_SECRET;
+const UPN    = $env.MS_SENDER_UPN;
+
+if (!TENANT || !CLIENT || !SECRET || !UPN) {
+  return [{ json: { ok: false, detail: 'MS_* not present in the container environment',
+                    failures: ['configuration'] } }];
+}
+
+const http = this.helpers.httpRequest;
+const results = [];
+async function step(name, fn) {
+  try { results.push({ name, ok: true, detail: await fn() }); }
+  catch (e) { results.push({ name, ok: false, detail: String(e.message || e).slice(0, 300) }); }
+}
+
+let token = null;
+await step('token', async () => {
+  const r = await http({
+    method: 'POST',
+    url: \`https://login.microsoftonline.com/\${TENANT}/oauth2/v2.0/token\`,
+    json: true, timeout: 30000,
+    body: new URLSearchParams({
+      client_id: CLIENT, client_secret: SECRET,
+      scope: 'https://graph.microsoft.com/.default', grant_type: 'client_credentials',
+    }).toString(),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  });
+  token = r.access_token;
+  return \`expires in \${Math.round(r.expires_in / 60)} min\`;
+});
+
+// Without a token the rest cannot be attempted, and reporting three further
+// failures would misrepresent one broken secret as four broken permissions.
+if (token) {
+  const graph = (p) => http({
+    method: 'GET', url: 'https://graph.microsoft.com/v1.0' + p,
+    json: true, timeout: 30000, headers: { Authorization: 'Bearer ' + token },
+  });
+
+  await step('user lookup (User.Read.All)', async () => {
+    const u = await graph('/users/' + encodeURIComponent(UPN));
+    return u.displayName;
+  });
+
+  await step('sites (Sites.ReadWrite.All)', async () => {
+    const s = await graph('/sites?search=');
+    return \`\${s.value?.length ?? 0} site(s) visible\`;
+  });
+
+  // The folders the meeting workflow writes into. Their absence is the failure
+  // mode that would otherwise surface as a successful run filing nothing.
+  await step('meeting folders', async () => {
+    const site = await graph('/sites/bextconsultancy.sharepoint.com:/sites/BEXTHQ');
+    const drives = await graph('/sites/' + site.id + '/drives');
+    const drive = drives.value.find(d => d.name === 'Documents') || drives.value[0];
+    const want = ['Templates', 'Meeting Transcripts', 'Meeting Minutes'];
+    const found = [];
+    for (const name of want) {
+      try {
+        await graph('/drives/' + drive.id + '/root:/' +
+          encodeURI('API Automation Folder/' + name));
+        found.push(name);
+      } catch { /* recorded by omission below */ }
+    }
+    if (found.length !== want.length) {
+      throw new Error('missing: ' + want.filter(w => !found.includes(w)).join(' / '));
+    }
+    return found.length + ' of ' + want.length + ' present';
+  });
+}
+
+const failures = results.filter(r => !r.ok);
+// Commas are deliberately absent: n8n's queryReplacement splits on them, which
+// would shift this string into the wrong column.
+const detail = results.map(r => \`\${r.ok ? 'ok' : 'FAIL'} \${r.name}: \${r.detail}\`).join(' | ');
+return [{ json: { ok: failures.length === 0, detail,
+                  failures: failures.map(f => f.name) } }];
+`;
+
+function graphHealthWorkflow() {
+  return {
+    name: 'BEXT — Graph Health',
+    settings: { executionOrder: 'v1', timezone: 'Australia/Melbourne' },
+    nodes: [
+      {
+        id: 'trigger', name: 'Daily 06:00', type: 'n8n-nodes-base.scheduleTrigger',
+        typeVersion: 1.2, position: pos(-320, 0),
+        // An hour after the daily report, so a secret that expired overnight is
+        // reported alongside the send it would have broken.
+        parameters: { rule: { interval: [{ field: 'cronExpression', expression: '0 6 * * *' }] } },
+      },
+      {
+        id: 'check', name: 'Check Graph', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(-80, 0),
+        parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: GRAPH_HEALTH_CODE },
+      },
+      {
+        id: 'record', name: 'Record health', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(160, 0),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        parameters: {
+          operation: 'executeQuery',
+          query: `INSERT INTO integration_health (service, status, detail)
+SELECT 'microsoft_graph', x.status, x.detail
+FROM json_to_recordset($1::json) AS x(status text, detail text)`,
+          options: {
+            queryReplacement:
+              '={{ JSON.stringify([{ status: $json.ok ? "up" : "down", detail: $json.detail }]) }}',
+          },
+        },
+      },
+      {
+        id: 'gate', name: 'Only when broken', type: 'n8n-nodes-base.if',
+        typeVersion: 2.2, position: pos(400, 0),
+        parameters: {
+          conditions: {
+            options: { caseSensitive: true, typeValidation: 'strict', version: 2 },
+            combinator: 'and',
+            conditions: [{
+              id: 'failed',
+              operator: { type: 'boolean', operation: 'false', singleValue: true },
+              leftValue: '={{ $("Check Graph").first().json.ok }}',
+              rightValue: '',
+            }],
+          },
+          options: {},
+        },
+      },
+      {
+        id: 'alert', name: 'Alert by email', type: 'n8n-nodes-base.emailSend',
+        typeVersion: 2.1, position: pos(640, -80),
+        credentials: { smtp: { id: SMTP_CRED, name: 'BEXT SMTP' } },
+        parameters: {
+          fromEmail: '={{ $env.REPORT_SENDER }}',
+          // To the operator, not the client distribution list — this is an
+          // internal fault, and the client has no action to take on it.
+          toEmail: '={{ $env.MS_SENDER_UPN }}',
+          subject: '=BEXT — Microsoft Graph check failed ({{ $("Check Graph").first().json.failures.join(", ") }})',
+          emailFormat: 'text',
+          text: `={{ "The daily Graph check failed.\\n\\n" + $("Check Graph").first().json.detail + "\\n\\nMeeting minutes and document filing stay stopped until this is fixed.\\nTroubleshooting: graph/app-registration.md" }}`,
+          options: {},
+        },
+      },
+    ],
+    connections: {
+      'Daily 06:00': { main: [[{ node: 'Check Graph', type: 'main', index: 0 }]] },
+      'Check Graph': { main: [[{ node: 'Record health', type: 'main', index: 0 }]] },
+      'Record health': { main: [[{ node: 'Only when broken', type: 'main', index: 0 }]] },
+      'Only when broken': { main: [[{ node: 'Alert by email', type: 'main', index: 0 }], []] },
+    },
+  };
+}
+
 // ─── Deploy ──────────────────────────────────────────────────────────────────
 
 async function deploy(wf) {
@@ -749,6 +911,9 @@ async function deploy(wf) {
   }
   await deploy(sourceIngestWorkflow());
   await deploy(articleAnalysisWorkflow());
-  if (!SMTP_CRED) console.error('N8N_SMTP_CREDENTIAL_ID not set — skipping the daily report.');
-  else await deploy(dailyReportWorkflow());
+  if (!SMTP_CRED) console.error('N8N_SMTP_CREDENTIAL_ID not set — skipping the daily report and Graph health.');
+  else {
+    await deploy(dailyReportWorkflow());
+    await deploy(graphHealthWorkflow());
+  }
 })();
