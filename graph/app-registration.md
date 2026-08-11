@@ -96,6 +96,27 @@ access policy** naming this app and granted to the meeting organiser. Consenting
 permission alone still returns 403. Run `graph/teams-access-policy.ps1` — it creates and
 grants the policy, and reports whether transcription is enabled on the global meeting policy.
 
+### Who can grant consent — checked 11 Aug 2026
+
+`OnlineMeetingTranscript.Read.All` was **added** to the registration on 11 August (the app now
+requests ten permissions) but is **not yet consented** — nine of the ten are granted.
+
+The automation account `Admin.bext-automation@bextconsultancy.com.au` holds no directory
+roles. It can create app registrations and request permissions, which is why the registration
+exists, but granting tenant-wide consent is reserved to an administrator, so
+`az ad app permission admin-consent` fails with `Authorization_RequestDenied`.
+
+Global Administrator in this tenant is held by **`Brent@bextconsultancy.com.au`** and
+**`Admin@bextconsultancy.com.au`**. Consent has to come from one of those, either through the
+portal or by opening:
+
+```
+https://login.microsoftonline.com/9eb458d1-317d-4aae-a9a3-bb68e430d701/adminconsent?client_id=b72d1df4-06ec-4390-937a-1293f34d31be
+```
+
+Until that happens, transcript reads fail and `BEXT — Meeting Intake` cannot run. Nothing
+already working is affected: the other nine permissions are untouched.
+
 Add them all, then **Grant admin consent for \<your tenant\>** and confirm every row shows
 a green *Granted* tick. Without this step every Graph call returns `403 Forbidden`, and the
 error message does not say why.
