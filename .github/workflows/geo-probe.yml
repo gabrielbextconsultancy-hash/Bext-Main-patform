@@ -54,10 +54,15 @@ jobs:
           probe energy-rating-gems https://www.energyrating.gov.au/news-and-stories
           probe minister-bowen     https://minister.dcceew.gov.au/bowen
           probe nabers             https://www.nabers.gov.au/news
+          gov_ok=$ok; gov_fail=$fail
           echo
+          # The control proves the runner has working egress at all. It must not
+          # count toward the gov tally — including it made a 0-of-9 result print
+          # as "not purely geographic", which is the opposite of the truth.
           probe 'CONTROL non-gov'  https://reneweconomy.com.au/feed/
+          ok=$gov_ok; fail=$gov_fail
           echo
-          echo "  reachable: $ok   blocked: $fail"
+          echo "  gov sites reachable: $ok   blocked: $fail"
           if [ "$ok" -eq 0 ]; then
             echo "  VERDICT: geographic block — a Hostinger VPS in Jakarta or Mumbai will fail identically. Do not provision."
           else
