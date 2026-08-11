@@ -49,14 +49,17 @@ Export to `n8n/workflows/*.json` and commit after every change.
 
 **Done:** VPS + docker stack + TLS · schema + 68 sources · Brief A pipeline + daily 05:00 AEST email · dashboard deployed · proposal deck live · current-state assessment (`docs/current-state-assessment.md`) · HubSpot audit.
 
-**Blocked (Brief B):**
-- Entra directory missing on personal MS account → no Azure app registration (`graph/app-registration.md` §0). Blocks review areas 3/4/5 (meetings, email, documents). Fix: Azure free signup.
-- `graph/verify.js` never run — `MS_TENANT_ID/CLIENT_ID/CLIENT_SECRET/SENDER_UPN` blank in `.env`.
-- Client-side: SharePoint test site, HubSpot/Xero/ProjectManager tokens, Teams transcription, templates (`docs/SETUP-CHECKLIST.md`).
+**Done (11 Aug): Microsoft Graph wired.** App **BEXT Automation (Dev)** on tenant
+`bextconsultancy.com.au` (`9eb458d1-317d-4aae-a9a3-bb68e430d701`), client
+`b72d1df4-06ec-4390-937a-1293f34d31be`, admin `Admin.bext-automation@bextconsultancy.com.au`.
+`node graph/verify.js`: all 4 checks pass (token, User.Read.All, Mail.Send, Sites.ReadWrite.All).
+
+**Still blocked (Brief B, client-side):** HubSpot/Xero/ProjectManager API tokens, Teams
+transcription toggle, company templates, SharePoint `BEXT` site structure (`docs/SETUP-CHECKLIST.md`).
 
 ## Next workflows (order)
 
-1. **Entra unblock** (human): Azure free signup → app registration → run `node graph/verify.js`.
-2. **`BEXT — Graph Health`** (n8n): daily token/sendMail/sites check → `integration_health`. Buildable the moment creds exist.
-3. **25 Aug architecture deliverables** (docs, unblocked now): Business Systems Integration Diagram, Process Flow Maps, SharePoint IA.
-4. **`BEXT — Meeting Intake`** (n8n, after Graph + Teams transcription): recording → transcript → minutes → action items → draft follow-ups.
+1. **`BEXT — Graph Health`** (n8n): daily token/sendMail/sites check → `integration_health`. Unblocked — build now; reuse `graph/verify.js` logic.
+2. **25 Aug architecture deliverables** (docs): Business Systems Integration Diagram, Process Flow Maps, SharePoint IA.
+3. **`BEXT — Meeting Intake`** (n8n, needs Teams transcription toggle): recording → transcript → minutes → action items → draft follow-ups.
+4. **Email/document automation** (review areas 4–5) once templates + SharePoint IA agreed.

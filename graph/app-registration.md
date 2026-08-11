@@ -30,6 +30,14 @@ Once a directory exists, everything below works, and the app registration and Gr
 free permanently. Paid M365 licences remain a **separate, later** step — they buy the data
 behind Graph (mailbox, SharePoint, Teams), not access to the API.
 
+**Update 11 Aug 2026 — DONE and verified.** The registration exists on the
+`bextconsultancy.com.au` tenant (`9eb458d1-317d-4aae-a9a3-bb68e430d701`), created 7 Aug via
+the work account **`Admin.bext-automation@bextconsultancy.com.au`**: app **BEXT Automation
+(Dev)**, client ID `b72d1df4-06ec-4390-937a-1293f34d31be`, secret current. `.env` holds all
+four `MS_*` values. `node graph/verify.js` run 11 Aug — all 4 checks pass (token, User.Read.All,
+Mail.Send, Sites.ReadWrite.All → 8 sites). Admin consent is in place. The Azure-free-signup
+route above is obsolete. Steps below are kept for secret rotation only.
+
 ---
 
 ## 1. Register the application

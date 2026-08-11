@@ -37,7 +37,10 @@ You said the sandbox exists. Confirm these, because the workflows depend on them
 
 ---
 
-## 3. Azure App Registration — 10 minutes · **blocks all Microsoft work**
+## 3. Azure App Registration — ✅ DONE (verified 11 Aug 2026)
+
+App **BEXT Automation (Dev)** exists on the `bextconsultancy.com.au` tenant, secret current,
+admin consent granted, all `graph/verify.js` checks pass. Steps below kept for secret rotation.
 
 Full click-path with screenshots-worth of detail: **[graph/app-registration.md](../graph/app-registration.md)**
 
@@ -127,7 +130,7 @@ will proceed unless you say otherwise:
 |---|---|---|
 | 1 | n8n owner account + API key | **waiting on you** |
 | 2 | M365 sandbox details | **waiting on you** |
-| 3 | Azure App Registration | **waiting on you** |
+| 3 | Azure App Registration | done — verified 11 Aug |
 | 4 | Gemini API key | **waiting on you** |
 | 5 | SharePoint test structure | later — Brief B |
 | 6 | Power BI Desktop | later — Brief B |
