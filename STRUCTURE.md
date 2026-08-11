@@ -54,8 +54,11 @@ Export to `n8n/workflows/*.json` and commit after every change.
 `b72d1df4-06ec-4390-937a-1293f34d31be`, admin `Admin.bext-automation@bextconsultancy.com.au`.
 `node graph/verify.js`: all 4 checks pass (token, User.Read.All, Mail.Send, Sites.ReadWrite.All).
 
-**Still blocked (Brief B, client-side):** HubSpot/Xero/ProjectManager API tokens, Teams
-transcription toggle, company templates, SharePoint `BEXT` site structure (`docs/SETUP-CHECKLIST.md`).
+**Done (11 Aug): HubSpot + ProjectManager API tokens** in `.env`, both verified live
+(HubSpot portal 443333225; ProjectManager projects readable).
+
+**Still blocked (Brief B, client-side):** Xero API token, Teams transcription toggle,
+company templates, SharePoint `BEXT` site structure (`docs/SETUP-CHECKLIST.md`).
 
 ## Next workflows (order)
 
