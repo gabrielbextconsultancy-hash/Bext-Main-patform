@@ -5,6 +5,8 @@
 Automation platform for BEXT Consultancy (one-person energy & sustainability consultancy).
 Two engagements, hard client deadlines between 11 Aug and 8 Sep 2026. See `README.md`.
 
+**New session? Read `STRUCTURE.md` first** — repo map, engagement status, hosting, MCP/skill scope.
+
 ## Hard rules
 
 1. **Never touch the Premier Fitness stack.** The same VPS runs docker project `n8n`

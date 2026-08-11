@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "n8n-bext": {
+      "command": "npx",
+      "args": ["-y", "n8n-mcp"],
+      "env": {
+        "MCP_MODE": "stdio",
+        "LOG_LEVEL": "error",
+        "DISABLE_CONSOLE_OUTPUT": "true",
+        "N8N_API_URL": "https://bext-n8n.srv1866850.hstgr.cloud",
+        "N8N_API_KEY": "${BEXT_N8N_API_KEY}"
+      }
+    }
+  }
+}

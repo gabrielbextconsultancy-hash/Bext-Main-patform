@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git diff:*)",
+      "Bash(git show:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(ls:*)",
+      "Bash(node --version)",
+      "Bash(node n8n/build-workflows.js:*)",
+      "Bash(node n8n/dry-run.js:*)",
+      "Bash(npm run:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker compose ls:*)"
+    ]
+  }
+}
