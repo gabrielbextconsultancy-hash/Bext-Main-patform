@@ -66,6 +66,43 @@ your choosing, so you control which account is used.
 
 ---
 
+## Update, 12 August — two further steps
+
+The policy above worked: meeting lookup now succeeds where it returned 403 before. Two things
+surfaced behind it.
+
+### A. Grant the policy tenant-wide
+
+Meetings organised by anyone other than the automation account still fail with
+`3003: User does not have access to lookup meeting`. The policy authorises the application only
+against the users it is granted to, and in practice you organise the meetings. In the same
+PowerShell window:
+
+```powershell
+Grant-CsApplicationAccessPolicy -PolicyName BEXT-Automation-Policy -Global
+```
+
+Returns silently on success. This replaces the per-user grant — do not run both.
+
+### B. Turn on Transcript API access (tenant setting)
+
+Microsoft added a tenant-wide control in late July 2026, enforced from 31 July, **off by
+default**. It is independent of everything above: consent, the access policy and the
+transcription toggle can all be correct and transcripts still return
+`403 — Graph API access to transcripts is disabled for this tenant`.
+
+1. https://admin.teams.microsoft.com/meetings/settings
+2. **Meetings → Meeting settings → Transcript API access → Microsoft Graph access: On**
+3. **Configure** beside it → **Include speaker attribution: On**
+
+Step 3 matters: without speaker attribution the transcript has no names, so the minutes cannot
+attribute decisions or assign action items to anyone.
+
+Both take 30–60 minutes to propagate, occasionally longer. Refresh the page afterwards and
+confirm the setting held — it can appear saved without sticking.
+
+---
+
 ## Option 2 — delegate it, so this does not come back to you
 
 Assign the **Teams Administrator** role to the automation account. Gabriel can then complete

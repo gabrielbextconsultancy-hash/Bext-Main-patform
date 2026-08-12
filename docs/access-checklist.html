@@ -65,7 +65,8 @@
   <tr><td>Graph permissions (10) + consent</td><td><span class="b done">Done</span></td><td>Complete</td><td>—</td></tr>
   <tr><td>Teams transcription policy</td><td><span class="b done">Done</span></td><td>Complete</td><td>—</td></tr>
   <tr><td>SharePoint folders</td><td><span class="b done">Done</span></td><td>Complete</td><td>—</td></tr>
-  <tr><td><b>Teams application access policy</b></td><td><span class="b pend">Blocked</span></td><td>Brent — Teams admin</td><td>Meeting Intake — all of it</td></tr>
+  <tr><td>Teams application access policy</td><td><span class="b part">Partial</span></td><td>Brent — Teams admin</td><td>Meetings organised by others</td></tr>
+  <tr><td><b>Transcript API access (tenant)</b></td><td><span class="b pend">Blocked</span></td><td>Brent — Teams admin</td><td>Meeting Intake — all of it</td></tr>
   <tr><td>HubSpot companies scope</td><td><span class="b part">Partial</span></td><td>HubSpot app owner</td><td>Client matching, filing, drafts</td></tr>
   <tr><td>Xero connection</td><td><span class="b pend">Not started</span></td><td>Brent — Xero admin</td><td>Finance automation</td></tr>
   <tr><td>ProjectManager hourly rates</td><td><span class="b pend">Not set</span></td><td>Brent — data entry</td><td>Profitability reporting</td></tr>
@@ -159,7 +160,44 @@
     action extraction, follow-up drafts. Brief B review area 3 — the client's stated highest priority.</div>
 </div>
 
-<h3>2.5 Teams Administrator role <span class="b rec">Recommended</span></h3>
+<h3>2.5 Transcript API access — tenant control <span class="b pend">Blocked — action required</span></h3>
+<div class="card blocked">
+  <div class="nav"><b>Verified error:</b> <code>403 — Graph API access to transcripts is disabled for this tenant.</code></div>
+  <div class="lbl">Why it exists</div>
+  <div class="nav">A tenant-wide control Microsoft introduced in <b>late July 2026</b>, enforced from
+    31 July — after this engagement was scoped. It is <b>off by default</b>, and it is a fourth,
+    independent gate: consent, the application access policy and the transcription toggle can all be
+    correct and transcripts still return 403 until this is switched on. There is no request-side
+    workaround.</div>
+  <div class="lbl">Where</div>
+  <div class="nav">Teams admin center → <b>Meetings → Meeting settings</b> → <b>Transcript API access</b>
+    → <b>Microsoft Graph access: On</b>. Then <b>Configure</b> beside it →
+    <b>Include speaker attribution: On</b>.</div>
+  <div class="nav"><b>Link:</b> <a href="https://admin.teams.microsoft.com/meetings/settings">admin.teams.microsoft.com/meetings/settings</a></div>
+  <div class="lbl">Speaker attribution is not optional here</div>
+  <div class="nav">Without it the transcript carries no names. Minutes could summarise what was said
+    but could not attribute decisions or assign action items to a person — which is most of what the
+    brief asks for.</div>
+  <div class="lbl">Reference</div>
+  <div class="nav"><a href="https://learn.microsoft.com/en-us/graph/api/calltranscript-get">Get callTranscript — Microsoft Learn</a></div>
+  <div class="nav"><b>Propagation:</b> typically 30–60 minutes, occasionally longer.</div>
+</div>
+
+<h3>2.6 Policy scope — whose meetings can be read <span class="b part">Partial</span></h3>
+<div class="card">
+  <div class="nav"><b>Verified error on meetings organised by others:</b>
+    <code>403 — 3003: User does not have access to lookup meeting</code></div>
+  <div class="nav">The access policy authorises the application against the users it is granted to.
+    Granted only to <code>Admin.bext-automation@</code>, it cannot read meetings organised by Brent —
+    which in practice is most of them.</div>
+  <div class="lbl">Fix — grant tenant-wide</div>
+  <div class="nav"><code>Grant-CsApplicationAccessPolicy -PolicyName BEXT-Automation-Policy -Global</code></div>
+  <div class="nav">Tenant-wide is proportionate here: the alternative is granting each organiser
+    individually and repeating it for every person added later. The application remains limited to the
+    ten consented permissions — this decides only <i>whose</i> meetings it may read.</div>
+</div>
+
+<h3>2.7 Teams Administrator role <span class="b rec">Recommended</span></h3>
 <div class="card">
   <div class="nav"><b>Where:</b> Entra admin center → Users → <i>Admin.bext-automation</i>
     → Assigned roles → Add assignments → <b>Teams Administrator</b></div>
