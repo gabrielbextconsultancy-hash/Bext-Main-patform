@@ -1,0 +1,123 @@
+{
+  "name": "BEXT — Meeting Intake",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Australia/Melbourne"
+  },
+  "nodes": [
+    {
+      "id": "trigger",
+      "name": "Every 15 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -380,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "seen",
+      "name": "Load processed meetings",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -160,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "0SoqGGqUOqbwYTmJ",
+          "name": "BEXT Postgres"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT meeting_id FROM meeting_minutes\nWHERE created_at > now() - interval '3 days'",
+        "options": {}
+      }
+    },
+    {
+      "id": "process",
+      "name": "Transcribe and draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst TENANT = $env.MS_TENANT_ID, CLIENT = $env.MS_CLIENT_ID;\nconst SECRET = $env.MS_CLIENT_SECRET, UPN = $env.MS_SENDER_UPN;\nconst GEMINI = $env.GEMINI_API_KEY;\nconst http = this.helpers.httpRequest;\n\nconst SITE = 'bextconsultancy.sharepoint.com:/sites/BEXTHQ';\nconst BASE = 'API Automation Folder';\nconst TEMPLATE = BASE + '/Templates/Minutes Template.docx';\nconst MODEL = 'gemini-3.6-flash';\n\n// Meetings already minuted, passed down from the database. Re-filing a meeting\n// every fifteen minutes would bury the reviewer in duplicates.\nconst done = new Set($input.all().map(i => i.json.meeting_id).filter(Boolean));\n\nconst auth = await http({\n  method: 'POST',\n  url: `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0/token`,\n  json: true, timeout: 30000,\n  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },\n  body: new URLSearchParams({\n    client_id: CLIENT, client_secret: SECRET,\n    scope: 'https://graph.microsoft.com/.default', grant_type: 'client_credentials',\n  }).toString(),\n});\nconst TOKEN = auth.access_token;\nconst G = 'https://graph.microsoft.com/v1.0';\nconst graph = (path, opts = {}) => http({\n  url: G + path, json: true, timeout: 60000,\n  headers: { Authorization: 'Bearer ' + TOKEN, ...(opts.headers || {}) },\n  ...opts,\n});\n\n// The meetings API rejects a UPN and requires the object id, unlike mail and\n// calendar which accept either.\nconst me = await graph('/users/' + encodeURIComponent(UPN) + '?$select=id,displayName');\n\n// The drive is resolved once, by id. Addressing a library through the compound\n// /sites/host:/sites/name:/drive/root:/path form returns 400 — the site path and\n// the item path cannot both be relative in one URL.\nconst site = await graph('/sites/' + SITE);\nconst drives = await graph('/sites/' + site.id + '/drives');\nconst DRIVE = (drives.value.find(d => d.name === 'Documents') || drives.value[0]).id;\n\n// Meetings that finished in the last day. Wider than the fifteen-minute cadence\n// on purpose: Teams takes minutes to publish a transcript after a meeting ends,\n// and a run that failed should pick the meeting up next time rather than lose it.\nconst since = new Date(Date.now() - 86400000).toISOString();\nconst until = new Date(Date.now() + 60000).toISOString();\nconst events = await graph('/users/' + me.id + '/calendar/events'\n  + '?$select=subject,start,end,organizer,isOnlineMeeting,onlineMeeting'\n  + '&$filter=' + encodeURIComponent(`end/dateTime ge '${since}' and end/dateTime le '${until}'`)\n  + '&$top=50');\n\nconst out = [];\n\nfor (const ev of (events.value || [])) {\n  if (!ev.isOnlineMeeting || !ev.onlineMeeting?.joinUrl) continue;\n\n  let meeting, transcripts;\n  try {\n    const found = await graph('/users/' + me.id + '/onlineMeetings?$filter='\n      + encodeURIComponent(`JoinWebUrl eq '${ev.onlineMeeting.joinUrl}'`));\n    meeting = found.value?.[0];\n    if (!meeting || done.has(meeting.id)) continue;\n    transcripts = await graph('/users/' + me.id + '/onlineMeetings/' + meeting.id + '/transcripts');\n  } catch (e) {\n    // A meeting we cannot read is not a run failure — an external organiser\n    // outside the access policy is a normal thing to skip.\n    continue;\n  }\n  if (!(transcripts.value || []).length) continue;\n\n  try {\n    // --- transcript ---------------------------------------------------------\n    const vtt = await http({\n      method: 'GET',\n      url: G + '/users/' + me.id + '/onlineMeetings/' + meeting.id\n         + '/transcripts/' + transcripts.value[0].id + '/content?$format=text/vtt',\n      headers: { Authorization: 'Bearer ' + TOKEN }, timeout: 120000,\n    });\n    const text = typeof vtt === 'string' ? vtt : String(vtt);\n    if (text.trim().length < 50) continue;   // a transcript of nothing said\n\n    // --- extraction ---------------------------------------------------------\n    // Same transient-failure handling as the article scorer: Gemini drops\n    // connections often enough that one attempt loses a meeting outright.\n    const TRANSIENT = /ECONNRESET|ETIMEDOUT|ECONNREFUSED|EAI_AGAIN|socket hang up|network|aborted/i;\n    let res, lastErr;\n    for (let attempt = 1; attempt <= 4; attempt++) {\n      try {\n        res = await http({\n          method: 'POST',\n          url: `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${GEMINI}`,\n          json: true, timeout: 180000,\n          body: {\n            contents: [{ parts: [{ text: \"You are writing the minutes of a meeting for an Australian energy and\\nsustainability consultancy, from the Teams transcript below.\\n\\nReturn a JSON object with exactly these keys:\\n  summary      3-5 sentences of prose. What was discussed and what it means. No bullet points.\\n  attendees    array of the speaker names appearing in the transcript\\n  decisions    array of strings. Decisions actually made. Omit anything merely discussed.\\n  actions      array of { task, owner, due }. owner is a person named in the transcript, or\\n               \\\"Unassigned\\\". due is a plain date like \\\"22 August\\\" or \\\"\\\" if none was stated.\\n  followups    array of strings. Things to raise or check later that are not yet actions.\\n\\nWrite in Australian English. Be specific: name the schemes, clients and figures that were\\nmentioned. If a section has nothing in it, return an empty array rather than inventing content.\\n\\nReturn ONLY the JSON object, no markdown fence, no commentary.\\n\\nTRANSCRIPT:\\n\" + text.slice(0, 200000) }] }],\n            generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },\n          },\n        });\n        break;\n      } catch (e) {\n        lastErr = e;\n        const st = e?.statusCode ?? e?.response?.statusCode;\n        const retryable = st === 429 || (st >= 500 && st < 600)\n          || (!st && TRANSIENT.test(String(e?.message || e?.code || '')));\n        if (attempt === 4 || !retryable) throw e;\n        await new Promise(r => setTimeout(r, [2000, 8000, 20000][attempt - 1]));\n      }\n    }\n    if (!res) throw lastErr;\n\n    const raw = res?.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';\n    let x;\n    try { x = JSON.parse(raw); }\n    catch { throw new Error('Gemini returned unparseable JSON: ' + raw.slice(0, 200)); }\n\n    const when = new Date(ev.end?.dateTime + 'Z');\n    const data = {\n      subject: ev.subject || 'Meeting',\n      date: when.toLocaleDateString('en-AU',\n        { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Melbourne' }),\n      organiser: ev.organizer?.emailAddress?.name || '',\n      attendees: (x.attendees || []).join(', '),\n      summary: String(x.summary || ''),\n      decisions: (x.decisions || []).map(String),\n      actions: (x.actions || []).map(a => ({\n        task: String(a.task || ''), owner: String(a.owner || 'Unassigned'), due: String(a.due || ''),\n      })),\n      followups: (x.followups || []).map(String),\n    };\n\n    // --- document -----------------------------------------------------------\n    const tpl = await http({\n      method: 'GET',\n      url: G + '/drives/' + DRIVE + '/root:/' + encodeURI(TEMPLATE) + ':/content',\n      headers: { Authorization: 'Bearer ' + TOKEN }, encoding: 'arraybuffer', timeout: 60000,\n    });\n    const docx = await http({\n      method: 'POST', url: 'http://fetcher:8080/render-docx',\n      json: true, timeout: 60000, encoding: 'arraybuffer',\n      body: { template: Buffer.from(tpl).toString('base64'), data },\n    });\n\n    // --- filing -------------------------------------------------------------\n    // Date first so the folder sorts chronologically without a custom view, and\n    // colons stripped because SharePoint rejects them in a file name.\n    const stamp = when.toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' });\n    const safe = (ev.subject || 'Meeting').replace(/[\\\\/:*?\"<>|]/g, '-').slice(0, 80);\n\n    const put = async (path, body, type) => http({\n      method: 'PUT', url: G + '/drives/' + DRIVE + '/root:/' + encodeURI(path) + ':/content',\n      headers: { Authorization: 'Bearer ' + TOKEN, 'Content-Type': type },\n      body, json: false, timeout: 120000,\n    });\n\n    await put(`${BASE}/Meeting Transcripts/${stamp} ${safe}.vtt`, text, 'text/vtt');\n    await put(`${BASE}/Meeting Minutes/${stamp} ${safe} — Minutes.docx`, Buffer.from(docx),\n      'application/vnd.openxmlformats-officedocument.wordprocessingml.document');\n\n    // --- follow-up draft ----------------------------------------------------\n    // Created as a draft and never sent. The brief is explicit that nothing\n    // leaves without review, and a draft enforces that structurally rather than\n    // by convention.\n    const lines = [\n      `Thanks all for today's discussion on ${data.subject}.`, '',\n      data.summary, '',\n      data.decisions.length ? 'Decisions:' : '',\n      ...data.decisions.map(d => '  - ' + d),\n      data.actions.length ? '' : '', data.actions.length ? 'Actions:' : '',\n      ...data.actions.map(a => `  - ${a.task} (${a.owner}${a.due ? ', due ' + a.due : ''})`),\n      '', 'Minutes are attached to the meeting record in SharePoint.', '', 'Regards',\n    ].filter(l => l !== null);\n\n    const draft = await graph('/users/' + me.id + '/messages', {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: {\n        subject: `${data.subject} — draft minutes and actions`,\n        body: { contentType: 'Text', content: lines.join('\\n') },\n        toRecipients: ev.organizer?.emailAddress?.address\n          ? [{ emailAddress: { address: ev.organizer.emailAddress.address } }] : [],\n      },\n    });\n\n    out.push({ json: {\n      meeting_id: meeting.id,\n      subject: data.subject,\n      organiser_upn: ev.organizer?.emailAddress?.address || '',\n      started_at: ev.start?.dateTime ? ev.start.dateTime + 'Z' : null,\n      ended_at: ev.end?.dateTime ? ev.end.dateTime + 'Z' : null,\n      attendees: x.attendees || [],\n      status: 'drafted',\n      transcript_path: `${BASE}/Meeting Transcripts/${stamp} ${safe}.vtt`,\n      minutes_path: `${BASE}/Meeting Minutes/${stamp} ${safe} — Minutes.docx`,\n      draft_message_id: draft.id,\n      extracted: x,\n      model: MODEL,\n      error: null,\n    } });\n  } catch (e) {\n    // Recorded rather than thrown: one unreadable meeting must not stop the\n    // others, and a failure with no record is a meeting silently lost.\n    out.push({ json: {\n      meeting_id: meeting.id, subject: ev.subject || '', status: 'failed',\n      organiser_upn: ev.organizer?.emailAddress?.address || '',\n      started_at: null, ended_at: null, attendees: [], transcript_path: null,\n      minutes_path: null, draft_message_id: null, extracted: null, model: MODEL,\n      error: String(e.message || e).slice(0, 500),\n    } });\n  }\n}\n\nif (!out.length) return [];\nreturn [{ json: { payload: JSON.stringify(out.map(o => o.json)), count: out.length } }];\n"
+      }
+    },
+    {
+      "id": "record",
+      "name": "Record minutes",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        320,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "0SoqGGqUOqbwYTmJ",
+          "name": "BEXT Postgres"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO meeting_minutes\n  (meeting_id, subject, organiser_upn, started_at, ended_at, attendees, status,\n   transcript_path, minutes_path, draft_message_id, extracted, model, error)\nSELECT meeting_id, subject, organiser_upn, started_at, ended_at,\n       coalesce(attendees, '{}'), status::minutes_status,\n       transcript_path, minutes_path, draft_message_id, extracted, model, error\nFROM json_to_recordset($1::json) AS x(\n  meeting_id text, subject text, organiser_upn text,\n  started_at timestamptz, ended_at timestamptz, attendees text[], status text,\n  transcript_path text, minutes_path text, draft_message_id text,\n  extracted jsonb, model text, error text)\nON CONFLICT (meeting_id) DO UPDATE SET\n  status = EXCLUDED.status, minutes_path = EXCLUDED.minutes_path,\n  draft_message_id = EXCLUDED.draft_message_id, extracted = EXCLUDED.extracted,\n  error = EXCLUDED.error, updated_at = now()",
+        "options": {
+          "queryReplacement": "={{ $json.payload }}"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every 15 minutes": {
+      "main": [
+        [
+          {
+            "node": "Load processed meetings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load processed meetings": {
+      "main": [
+        [
+          {
+            "node": "Transcribe and draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Transcribe and draft": {
+      "main": [
+        [
+          {
+            "node": "Record minutes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

@@ -870,6 +870,313 @@ FROM json_to_recordset($1::json) AS x(status text, detail text)`,
   };
 }
 
+// ─── Workflow 5: Meeting Intake ──────────────────────────────────────────────
+
+// Brief B review area 3, the client's stated highest priority: record a meeting,
+// and minutes, decisions, action items and a follow-up draft appear without
+// anyone taking a note. The consultant reviews; nothing sends itself.
+const MINUTES_PROMPT = `You are writing the minutes of a meeting for an Australian energy and
+sustainability consultancy, from the Teams transcript below.
+
+Return a JSON object with exactly these keys:
+  summary      3-5 sentences of prose. What was discussed and what it means. No bullet points.
+  attendees    array of the speaker names appearing in the transcript
+  decisions    array of strings. Decisions actually made. Omit anything merely discussed.
+  actions      array of { task, owner, due }. owner is a person named in the transcript, or
+               "Unassigned". due is a plain date like "22 August" or "" if none was stated.
+  followups    array of strings. Things to raise or check later that are not yet actions.
+
+Write in Australian English. Be specific: name the schemes, clients and figures that were
+mentioned. If a section has nothing in it, return an empty array rather than inventing content.
+
+Return ONLY the JSON object, no markdown fence, no commentary.
+
+TRANSCRIPT:
+`;
+
+const MEETING_CODE = `
+const TENANT = $env.MS_TENANT_ID, CLIENT = $env.MS_CLIENT_ID;
+const SECRET = $env.MS_CLIENT_SECRET, UPN = $env.MS_SENDER_UPN;
+const GEMINI = $env.GEMINI_API_KEY;
+const http = this.helpers.httpRequest;
+
+const SITE = 'bextconsultancy.sharepoint.com:/sites/BEXTHQ';
+const BASE = 'API Automation Folder';
+const TEMPLATE = BASE + '/Templates/Minutes Template.docx';
+const MODEL = 'gemini-3.6-flash';
+
+// Meetings already minuted, passed down from the database. Re-filing a meeting
+// every fifteen minutes would bury the reviewer in duplicates.
+const done = new Set($input.all().map(i => i.json.meeting_id).filter(Boolean));
+
+const auth = await http({
+  method: 'POST',
+  url: \`https://login.microsoftonline.com/\${TENANT}/oauth2/v2.0/token\`,
+  json: true, timeout: 30000,
+  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  body: new URLSearchParams({
+    client_id: CLIENT, client_secret: SECRET,
+    scope: 'https://graph.microsoft.com/.default', grant_type: 'client_credentials',
+  }).toString(),
+});
+const TOKEN = auth.access_token;
+const G = 'https://graph.microsoft.com/v1.0';
+const graph = (path, opts = {}) => http({
+  url: G + path, json: true, timeout: 60000,
+  headers: { Authorization: 'Bearer ' + TOKEN, ...(opts.headers || {}) },
+  ...opts,
+});
+
+// The meetings API rejects a UPN and requires the object id, unlike mail and
+// calendar which accept either.
+const me = await graph('/users/' + encodeURIComponent(UPN) + '?$select=id,displayName');
+
+// The drive is resolved once, by id. Addressing a library through the compound
+// /sites/host:/sites/name:/drive/root:/path form returns 400 — the site path and
+// the item path cannot both be relative in one URL.
+const site = await graph('/sites/' + SITE);
+const drives = await graph('/sites/' + site.id + '/drives');
+const DRIVE = (drives.value.find(d => d.name === 'Documents') || drives.value[0]).id;
+
+// Meetings that finished in the last day. Wider than the fifteen-minute cadence
+// on purpose: Teams takes minutes to publish a transcript after a meeting ends,
+// and a run that failed should pick the meeting up next time rather than lose it.
+const since = new Date(Date.now() - 86400000).toISOString();
+const until = new Date(Date.now() + 60000).toISOString();
+const events = await graph('/users/' + me.id + '/calendar/events'
+  + '?$select=subject,start,end,organizer,isOnlineMeeting,onlineMeeting'
+  + '&$filter=' + encodeURIComponent(\`end/dateTime ge '\${since}' and end/dateTime le '\${until}'\`)
+  + '&$top=50');
+
+const out = [];
+
+for (const ev of (events.value || [])) {
+  if (!ev.isOnlineMeeting || !ev.onlineMeeting?.joinUrl) continue;
+
+  let meeting, transcripts;
+  try {
+    const found = await graph('/users/' + me.id + '/onlineMeetings?$filter='
+      + encodeURIComponent(\`JoinWebUrl eq '\${ev.onlineMeeting.joinUrl}'\`));
+    meeting = found.value?.[0];
+    if (!meeting || done.has(meeting.id)) continue;
+    transcripts = await graph('/users/' + me.id + '/onlineMeetings/' + meeting.id + '/transcripts');
+  } catch (e) {
+    // A meeting we cannot read is not a run failure — an external organiser
+    // outside the access policy is a normal thing to skip.
+    continue;
+  }
+  if (!(transcripts.value || []).length) continue;
+
+  try {
+    // --- transcript ---------------------------------------------------------
+    const vtt = await http({
+      method: 'GET',
+      url: G + '/users/' + me.id + '/onlineMeetings/' + meeting.id
+         + '/transcripts/' + transcripts.value[0].id + '/content?$format=text/vtt',
+      headers: { Authorization: 'Bearer ' + TOKEN }, timeout: 120000,
+    });
+    const text = typeof vtt === 'string' ? vtt : String(vtt);
+    if (text.trim().length < 50) continue;   // a transcript of nothing said
+
+    // --- extraction ---------------------------------------------------------
+    // Same transient-failure handling as the article scorer: Gemini drops
+    // connections often enough that one attempt loses a meeting outright.
+    const TRANSIENT = /ECONNRESET|ETIMEDOUT|ECONNREFUSED|EAI_AGAIN|socket hang up|network|aborted/i;
+    let res, lastErr;
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      try {
+        res = await http({
+          method: 'POST',
+          url: \`https://generativelanguage.googleapis.com/v1beta/models/\${MODEL}:generateContent?key=\${GEMINI}\`,
+          json: true, timeout: 180000,
+          body: {
+            contents: [{ parts: [{ text: ${JSON.stringify(MINUTES_PROMPT)} + text.slice(0, 200000) }] }],
+            generationConfig: { temperature: 0.2, responseMimeType: 'application/json' },
+          },
+        });
+        break;
+      } catch (e) {
+        lastErr = e;
+        const st = e?.statusCode ?? e?.response?.statusCode;
+        const retryable = st === 429 || (st >= 500 && st < 600)
+          || (!st && TRANSIENT.test(String(e?.message || e?.code || '')));
+        if (attempt === 4 || !retryable) throw e;
+        await new Promise(r => setTimeout(r, [2000, 8000, 20000][attempt - 1]));
+      }
+    }
+    if (!res) throw lastErr;
+
+    const raw = res?.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
+    let x;
+    try { x = JSON.parse(raw); }
+    catch { throw new Error('Gemini returned unparseable JSON: ' + raw.slice(0, 200)); }
+
+    const when = new Date(ev.end?.dateTime + 'Z');
+    const data = {
+      subject: ev.subject || 'Meeting',
+      date: when.toLocaleDateString('en-AU',
+        { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Melbourne' }),
+      organiser: ev.organizer?.emailAddress?.name || '',
+      attendees: (x.attendees || []).join(', '),
+      summary: String(x.summary || ''),
+      decisions: (x.decisions || []).map(String),
+      actions: (x.actions || []).map(a => ({
+        task: String(a.task || ''), owner: String(a.owner || 'Unassigned'), due: String(a.due || ''),
+      })),
+      followups: (x.followups || []).map(String),
+    };
+
+    // --- document -----------------------------------------------------------
+    const tpl = await http({
+      method: 'GET',
+      url: G + '/drives/' + DRIVE + '/root:/' + encodeURI(TEMPLATE) + ':/content',
+      headers: { Authorization: 'Bearer ' + TOKEN }, encoding: 'arraybuffer', timeout: 60000,
+    });
+    const docx = await http({
+      method: 'POST', url: 'http://fetcher:8080/render-docx',
+      json: true, timeout: 60000, encoding: 'arraybuffer',
+      body: { template: Buffer.from(tpl).toString('base64'), data },
+    });
+
+    // --- filing -------------------------------------------------------------
+    // Date first so the folder sorts chronologically without a custom view, and
+    // colons stripped because SharePoint rejects them in a file name.
+    const stamp = when.toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' });
+    const safe = (ev.subject || 'Meeting').replace(/[\\\\/:*?"<>|]/g, '-').slice(0, 80);
+
+    const put = async (path, body, type) => http({
+      method: 'PUT', url: G + '/drives/' + DRIVE + '/root:/' + encodeURI(path) + ':/content',
+      headers: { Authorization: 'Bearer ' + TOKEN, 'Content-Type': type },
+      body, json: false, timeout: 120000,
+    });
+
+    await put(\`\${BASE}/Meeting Transcripts/\${stamp} \${safe}.vtt\`, text, 'text/vtt');
+    await put(\`\${BASE}/Meeting Minutes/\${stamp} \${safe} — Minutes.docx\`, Buffer.from(docx),
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+
+    // --- follow-up draft ----------------------------------------------------
+    // Created as a draft and never sent. The brief is explicit that nothing
+    // leaves without review, and a draft enforces that structurally rather than
+    // by convention.
+    const lines = [
+      \`Thanks all for today's discussion on \${data.subject}.\`, '',
+      data.summary, '',
+      data.decisions.length ? 'Decisions:' : '',
+      ...data.decisions.map(d => '  - ' + d),
+      data.actions.length ? '' : '', data.actions.length ? 'Actions:' : '',
+      ...data.actions.map(a => \`  - \${a.task} (\${a.owner}\${a.due ? ', due ' + a.due : ''})\`),
+      '', 'Minutes are attached to the meeting record in SharePoint.', '', 'Regards',
+    ].filter(l => l !== null);
+
+    const draft = await graph('/users/' + me.id + '/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: {
+        subject: \`\${data.subject} — draft minutes and actions\`,
+        body: { contentType: 'Text', content: lines.join('\\n') },
+        toRecipients: ev.organizer?.emailAddress?.address
+          ? [{ emailAddress: { address: ev.organizer.emailAddress.address } }] : [],
+      },
+    });
+
+    out.push({ json: {
+      meeting_id: meeting.id,
+      subject: data.subject,
+      organiser_upn: ev.organizer?.emailAddress?.address || '',
+      started_at: ev.start?.dateTime ? ev.start.dateTime + 'Z' : null,
+      ended_at: ev.end?.dateTime ? ev.end.dateTime + 'Z' : null,
+      attendees: x.attendees || [],
+      status: 'drafted',
+      transcript_path: \`\${BASE}/Meeting Transcripts/\${stamp} \${safe}.vtt\`,
+      minutes_path: \`\${BASE}/Meeting Minutes/\${stamp} \${safe} — Minutes.docx\`,
+      draft_message_id: draft.id,
+      extracted: x,
+      model: MODEL,
+      error: null,
+    } });
+  } catch (e) {
+    // Recorded rather than thrown: one unreadable meeting must not stop the
+    // others, and a failure with no record is a meeting silently lost.
+    out.push({ json: {
+      meeting_id: meeting.id, subject: ev.subject || '', status: 'failed',
+      organiser_upn: ev.organizer?.emailAddress?.address || '',
+      started_at: null, ended_at: null, attendees: [], transcript_path: null,
+      minutes_path: null, draft_message_id: null, extracted: null, model: MODEL,
+      error: String(e.message || e).slice(0, 500),
+    } });
+  }
+}
+
+if (!out.length) return [];
+return [{ json: { payload: JSON.stringify(out.map(o => o.json)), count: out.length } }];
+`;
+
+function meetingIntakeWorkflow() {
+  return {
+    name: 'BEXT — Meeting Intake',
+    settings: { executionOrder: 'v1', timezone: 'Australia/Melbourne' },
+    nodes: [
+      {
+        id: 'trigger', name: 'Every 15 minutes', type: 'n8n-nodes-base.scheduleTrigger',
+        typeVersion: 1.2, position: pos(-380, 0),
+        // Polling rather than a webhook: this n8n is Community and reachable
+        // publicly only through traefik, and a fifteen-minute lag on minutes is
+        // invisible against the time Teams itself takes to publish a transcript.
+        parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 15 }] } },
+      },
+      {
+        id: 'seen', name: 'Load processed meetings', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(-160, 0),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        parameters: {
+          operation: 'executeQuery',
+          // Only the window the code looks at. The table grows forever; the
+          // exclusion list should not.
+          query: `SELECT meeting_id FROM meeting_minutes
+WHERE created_at > now() - interval '3 days'`,
+          options: {},
+        },
+      },
+      {
+        id: 'process', name: 'Transcribe and draft', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(80, 0),
+        parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: MEETING_CODE },
+      },
+      {
+        id: 'record', name: 'Record minutes', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(320, 0),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        parameters: {
+          operation: 'executeQuery',
+          // One JSON parameter rather than positional ones: queryReplacement
+          // splits on commas, and every one of these fields is full of them.
+          query: `INSERT INTO meeting_minutes
+  (meeting_id, subject, organiser_upn, started_at, ended_at, attendees, status,
+   transcript_path, minutes_path, draft_message_id, extracted, model, error)
+SELECT meeting_id, subject, organiser_upn, started_at, ended_at,
+       coalesce(attendees, '{}'), status::minutes_status,
+       transcript_path, minutes_path, draft_message_id, extracted, model, error
+FROM json_to_recordset($1::json) AS x(
+  meeting_id text, subject text, organiser_upn text,
+  started_at timestamptz, ended_at timestamptz, attendees text[], status text,
+  transcript_path text, minutes_path text, draft_message_id text,
+  extracted jsonb, model text, error text)
+ON CONFLICT (meeting_id) DO UPDATE SET
+  status = EXCLUDED.status, minutes_path = EXCLUDED.minutes_path,
+  draft_message_id = EXCLUDED.draft_message_id, extracted = EXCLUDED.extracted,
+  error = EXCLUDED.error, updated_at = now()`,
+          options: { queryReplacement: '={{ $json.payload }}' },
+        },
+      },
+    ],
+    connections: {
+      'Every 15 minutes': { main: [[{ node: 'Load processed meetings', type: 'main', index: 0 }]] },
+      'Load processed meetings': { main: [[{ node: 'Transcribe and draft', type: 'main', index: 0 }]] },
+      'Transcribe and draft': { main: [[{ node: 'Record minutes', type: 'main', index: 0 }]] },
+    },
+  };
+}
+
 // ─── Deploy ──────────────────────────────────────────────────────────────────
 
 async function deploy(wf) {
@@ -915,5 +1222,6 @@ async function deploy(wf) {
   else {
     await deploy(dailyReportWorkflow());
     await deploy(graphHealthWorkflow());
+    await deploy(meetingIntakeWorkflow());
   }
 })();
