@@ -27,6 +27,51 @@ const SITE = 'bextconsultancy.sharepoint.com:/sites/BEXTHQ';
 const BASE = 'API Automation Folder';
 const MODEL = 'gemini-3.6-flash';
 
+// The Teams channel is the record: one folder per meeting holding the transcript,
+// the minutes and the summary, so the whole history reads chronologically in the
+// channel's Files tab without anyone opening SharePoint.
+const CHANNEL_SITE = 'bextconsultancy.sharepoint.com:/sites/bext_transcriptsrecords';
+const CHANNEL_BASE = 'Bext Transcripts';
+
+/** A plain Word document, assembled directly. Used for the summary, which has no
+ *  client template to fill — a .docx is a zip of XML and one flat document needs
+ *  no more than that. */
+function simpleDocx(title, blocks) {
+  const PizZip = require('pizzip');
+  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const p = (text, { bold = false, size = 22, after = 140 } = {}) =>
+    `<w:p><w:pPr><w:spacing w:after="${after}"/></w:pPr><w:r><w:rPr>${bold ? '<w:b/>' : ''}` +
+    `<w:sz w:val="${size}"/></w:rPr><w:t xml:space="preserve">${esc(text)}</w:t></w:r></w:p>`;
+
+  const body = [p(title, { bold: true, size: 32, after: 240 })]
+    .concat(blocks.map(b => b.heading
+      ? p(b.heading, { bold: true, size: 24, after: 120 })
+      : p(b.text, { size: 22, after: b.tight ? 60 : 160 })))
+    .join('');
+
+  const zip = new PizZip();
+  zip.file('[Content_Types].xml',
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+    + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+    + '<Default Extension="xml" ContentType="application/xml"/>'
+    + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
+    + '</Types>');
+  zip.folder('_rels').file('.rels',
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
+    + '</Relationships>');
+  zip.folder('word').file('document.xml',
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'
+    + body
+    + '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/>'
+    + '<w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134"/></w:sectPr>'
+    + '</w:body></w:document>');
+  return zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
+}
+
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 // The tenant drops connections often enough that a single attempt regularly
 // fails on an otherwise healthy call.
@@ -239,17 +284,47 @@ async function token() {
   console.log('\n[4] FILING');
   const stamp = when.toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' });
   const safe = (found.ev.subject || 'Meeting').replace(/[\\/:*?"<>|]/g, '-').slice(0, 80);
-  const put = async (p, body, type) => {
-    const r = await retry(() => fetch(`${G}/drives/${drive}/root:/${encodeURI(p)}:/content`, {
+  const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  const put = async (driveId, p, body, type) => {
+    const r = await retry(() => fetch(`${G}/drives/${driveId}/root:/${encodeURI(p)}:/content`, {
       method: 'PUT', headers: { ...H, 'Content-Type': type }, body,
     }));
     const j = await r.json();
     console.log(`  ${r.ok ? 'filed' : 'FAILED'}  ${p}${r.ok ? '' : ' — ' + JSON.stringify(j).slice(0, 120)}`);
     return j;
   };
-  await put(`${BASE}/Meeting Transcripts/${stamp} ${safe}.vtt`, found.vtt, 'text/vtt');
-  const filed = await put(`${BASE}/Meeting Minutes/${stamp} ${safe} — Minutes.docx`, docx,
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+
+  // The working library keeps a flat archive; the channel keeps the readable record.
+  await put(drive, `${BASE}/Meeting Transcripts/${stamp} ${safe}.vtt`, found.vtt, 'text/vtt');
+  const filed = await put(drive, `${BASE}/Meeting Minutes/${stamp} ${safe} — Minutes.docx`, docx, DOCX);
+
+  // ── channel record ────────────────────────────────────────────────────────
+  const chSite = await graph(`/sites/${CHANNEL_SITE}`);
+  const chDrives = await graph(`/sites/${chSite.id}/drives`);
+  const chDrive = (chDrives.value.find(d => d.name === 'Documents') || chDrives.value[0]).id;
+  const folder = `${CHANNEL_BASE}/${stamp} ${safe}`;
+
+  const summary = simpleDocx(`${data.program} — Meeting Summary`, [
+    { text: `${data.date}  ·  ${data.venue}` },
+    { heading: 'Summary' },
+    { text: String(x.summary || '') },
+    ...((x.decisions || []).length ? [{ heading: 'Decisions' }] : []),
+    ...(x.decisions || []).map(d => ({ text: '•  ' + d, tight: true })),
+    ...((x.actions || []).length ? [{ heading: 'Actions' }] : []),
+    ...(x.actions || []).map(a => ({
+      text: `•  ${a.title} — ${a.owner || 'Unassigned'}${a.due ? ', due ' + a.due : ''}`
+            + (a.closed ? '  [closed]' : ''),
+      tight: true,
+    })),
+    { heading: 'Attendees' },
+    { text: (x.attendees || []).map(a => a.name).join(', ') },
+  ]);
+
+  await put(chDrive, `${folder}/Transcript.vtt`, found.vtt, 'text/vtt');
+  const chMin = await put(chDrive, `${folder}/Minutes.docx`, docx, DOCX);
+  await put(chDrive, `${folder}/Summary.docx`, summary, DOCX);
+  const chFolder = await graph(`/drives/${chDrive}/root:/${encodeURI(folder)}`);
+  console.log(`  channel  ${chFolder.webUrl}`);
 
   // ── 5. draft ──────────────────────────────────────────────────────────────
   console.log('\n[5] DRAFT EMAIL');
@@ -272,5 +347,6 @@ async function token() {
     }),
   });
   console.log(`  draft created  ${draft.id.slice(0, 24)}...  isDraft=${draft.isDraft}`);
-  console.log(`\nminutes: ${filed.webUrl || '(see SharePoint)'}`);
+  console.log(`\nchannel minutes: ${chMin.webUrl || '(see the channel)'}`);
+  console.log(`archive minutes: ${filed.webUrl || '(see SharePoint)'}`);
 })().catch(e => { console.error('\nFAILED:', e.message); process.exitCode = 1; });
