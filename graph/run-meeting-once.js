@@ -4,6 +4,7 @@
  *
  *   node graph/run-meeting-once.js                 most recent transcript
  *   node graph/run-meeting-once.js --dry           extract only, file nothing
+ *   node graph/run-meeting-once.js --file x.vtt    a transcript from disk
  *
  * The n8n workflow does this on a schedule with no one watching. This is the
  * same sequence run deliberately so each stage can be inspected before the next,
@@ -45,10 +46,12 @@ Return a JSON object with exactly these keys:
   attendees   array of { name, initials, company }. One entry per distinct speaker. Derive
               initials from the name. Leave company "" unless stated.
   safety      array of { item, detail, owner, due, status }
+              status here MUST be exactly Open or Closed — not the project vocabulary below
   projects    array of { project, phase, status, update, next_action, owner, due, network_note }
               status MUST be exactly one of: On Track, Monitor, At Risk, On Hold, Complete
               network_note is the DNSP or network position if one was mentioned, else ""
   finance     array of { item, detail, owner, due, status } — commercial and other business
+              status here MUST also be exactly Open or Closed
   actions     array of { title, detail, owner, due, status, closed }
               owner is a person named in the transcript, or "Unassigned" — never guess
               closed is true only if the transcript says it is done
@@ -100,7 +103,21 @@ async function token() {
     + '&$select=subject,start,end,organizer,isOnlineMeeting,onlineMeeting');
 
   let found = null;
-  for (const ev of events.value.filter(e => e.isOnlineMeeting && e.onlineMeeting?.joinUrl)) {
+
+  // A transcript from disk, for replaying against a changed prompt or for
+  // exercising the fill with content the test meetings did not contain.
+  const fileArg = process.argv.indexOf('--file');
+  if (fileArg > -1 && process.argv[fileArg + 1]) {
+    const ev = events.value.find(e => e.isOnlineMeeting) || {
+      subject: 'Weekly Program Check-in',
+      start: { dateTime: new Date().toISOString().slice(0, -1) },
+      end: { dateTime: new Date().toISOString().slice(0, -1) },
+    };
+    found = { ev, meeting: { id: 'local' }, tr: { createdDateTime: 'from file' },
+              vtt: fs.readFileSync(process.argv[fileArg + 1], 'utf8') };
+  }
+
+  for (const ev of found ? [] : events.value.filter(e => e.isOnlineMeeting && e.onlineMeeting?.joinUrl)) {
     let meeting;
     try {
       const r = await graph(`/users/${me.id}/onlineMeetings?$filter=`
@@ -119,6 +136,23 @@ async function token() {
     break;
   }
   if (!found) { console.log('  no transcript found on any recent meeting'); return; }
+
+  // Two Teams clients in one call each produce their own stream, so the same
+  // utterance arrives twice with slightly different wording — "rate cards" and
+  // "read cards". Left in, the model sees every action twice. Compared on the
+  // first sixty characters, which is enough to catch the pair without merging
+  // two people who genuinely said similar things.
+  const before = (found.vtt.match(/<v /g) || []).length;
+  const seen = new Set();
+  found.vtt = found.vtt.split('\n').filter(line => {
+    if (!line.includes('<v ')) return true;
+    const key = line.replace(/<\/?v[^>]*>/g, '').trim().slice(0, 60).toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).join('\n');
+  const after = (found.vtt.match(/<v /g) || []).length;
+  if (before !== after) console.log(`  deduped  ${before} -> ${after} lines`);
 
   const speakers = [...new Set((found.vtt.match(/<v ([^>]+)>/g) || []).map(s => s.slice(3, -1)))];
   console.log(`  meeting   ${found.ev.subject}`);
