@@ -1,0 +1,37 @@
+- generic [ref=f12e1]:
+  - generic [ref=f12e5]:
+    - img "Organization background image" [ref=f12e6]
+    - generic [ref=f12e7]:
+      - generic [ref=f12e13]:
+        - img "Microsoft" [ref=f12e16]
+        - main [ref=f12e17]:
+          - generic [ref=f12e20]:
+            - heading "Pick an account" [level=1] [ref=f12e24]
+            - list "Pick an account" [ref=f12e27]:
+              - listitem [ref=f12e29] [cursor=pointer]:
+                - button "Sign in with Admin.bext-automation@bextconsultancy.com.au work or school account." [ref=f12e30]:
+                  - generic [ref=f12e33]:
+                    - generic [ref=f12e34]: BEXT Automation
+                    - generic [ref=f12e35]: Admin.bext-automation@bextconsultancy.com.au
+                    - generic [ref=f12e36]: Connected to Windows
+              - listitem [ref=f12e38] [cursor=pointer]:
+                - button "Sign in with gab@modinsight.ai work or school account." [ref=f12e39]:
+                  - generic [ref=f12e42]:
+                    - generic [ref=f12e43]: Gab
+                    - generic [ref=f12e44]: gab@modinsight.ai
+                    - generic [ref=f12e45]: Connected to Windows
+              - listitem [ref=f12e47] [cursor=pointer]:
+                - button "Sign in with Gabriel@excis.com work or school account." [ref=f12e48]:
+                  - generic [ref=f12e49]: Gabriel@excis.com
+                - button "Open menu" [ref=f12e54]
+              - listitem [ref=f12e55] [cursor=pointer]:
+                - button "Use another account" [ref=f12e56]
+      - contentinfo [ref=f12e61]:
+        - generic [ref=f12e62]:
+          - link "Terms of use" [ref=f12e63] [cursor=pointer]:
+            - /url: https://www.microsoft.com/en-US/servicesagreement/
+          - link "Privacy & cookies" [ref=f12e64] [cursor=pointer]:
+            - /url: https://privacy.microsoft.com/en-US/privacystatement
+          - button "Click here for troubleshooting information" [ref=f12e65] [cursor=pointer]: ...
+  - generic:
+    - document

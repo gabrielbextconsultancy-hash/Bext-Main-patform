@@ -1,0 +1,101 @@
+- generic [ref=f21e1]:
+  - generic [ref=f21e7]:
+    - banner [ref=f21e8]:
+      - button "Skip to main content" [ref=f21e9]
+      - banner [ref=f21e11]:
+        - button "App launcher" [ref=f21e14] [cursor=pointer]: 
+        - generic [ref=f21e20]:
+          - generic [ref=f21e21]: Power Automate
+          - search [ref=f21e27]:
+            - button [ref=f21e28]
+            - combobox "Search box. Suggestions appear as you type" [ref=f21e32]
+          - generic [ref=f21e33]:
+            - button "Brent Craig (default)" [ref=f21e38] [cursor=pointer]:
+              - generic [ref=f21e43]:
+                - generic [ref=f21e44]: Environments
+                - generic [ref=f21e45]: Brent Craig (default)
+            - button "Click to send feedback" [ref=f21e51] [cursor=pointer]
+            - button "Settings" [ref=f21e57] [cursor=pointer]:
+              - generic [ref=f21e58]: 
+            - button "Help" [ref=f21e61] [cursor=pointer]:
+              - generic [ref=f21e62]: 
+        - generic [ref=f21e63]:
+          - button "Account manager for BEXT Automation" [ref=f21e65] [cursor=pointer]:
+            - generic [ref=f21e66]: BA
+          - generic: 
+    - generic [ref=f21e75]:
+      - navigation "Main" [ref=f21e76]:
+        - button [expanded] [ref=f21e77] [cursor=pointer]:
+          - img "Left navigation panel" [ref=f21e79]
+        - menu [ref=f21e81]:
+          - generic [ref=f21e86]:
+            - generic [ref=f21e87]:
+              - generic "Home" [ref=f21e88]:
+                - menuitem "Home" [ref=f21e89] [cursor=pointer]
+              - generic "Create" [ref=f21e94]:
+                - menuitem "Create" [ref=f21e95] [cursor=pointer]
+              - generic "Templates" [ref=f21e100]:
+                - menuitem "Templates" [ref=f21e101] [cursor=pointer]
+              - generic "Learn" [ref=f21e106]:
+                - menuitem "Learn" [ref=f21e107] [cursor=pointer]
+              - generic "My flows" [ref=f21e112]:
+                - menuitem "My flows" [ref=f21e113] [cursor=pointer]
+            - generic [ref=f21e119]:
+              - separator
+            - generic "Approvals" [ref=f21e120]:
+              - menuitem "Approvals, press right arrow to navigate more options" [ref=f21e121] [cursor=pointer]:
+                - generic [ref=f21e122]: Approvals
+            - generic "Solutions" [ref=f21e126]:
+              - menuitem "Solutions, press right arrow to navigate more options" [ref=f21e127] [cursor=pointer]:
+                - generic [ref=f21e128]: Solutions
+            - generic "Automation center" [ref=f21e132]:
+              - menuitem "Automation center, press right arrow to navigate more options" [ref=f21e133] [cursor=pointer]:
+                - generic [ref=f21e134]: Automation center
+            - generic "Process mining" [ref=f21e138]:
+              - menuitem "Process mining, press right arrow to navigate more options" [ref=f21e139] [cursor=pointer]:
+                - generic [ref=f21e140]: Process mining
+            - generic "AI hub" [ref=f21e144]:
+              - menuitem "AI hub, press right arrow to navigate more options" [ref=f21e145] [cursor=pointer]:
+                - generic [ref=f21e146]: AI hub
+            - generic "More" [ref=f21e151]:
+              - menuitem "More" [ref=f21e152] [cursor=pointer]
+            - generic [ref=f21e157]:
+              - separator
+            - generic "Power Platform" [ref=f21e158]:
+              - menuitem "Power Platform" [ref=f21e159] [cursor=pointer]
+      - main [ref=f21e169]:
+        - generic [ref=f21e170]:
+          - menubar [ref=f21e175]:
+            - group [ref=f21e176]:
+              - menuitem "New flow" [ref=f21e177] [cursor=pointer]:
+                - generic [ref=f21e178]:
+                  - generic [ref=f21e179]: 
+                  - generic [ref=f21e180]: New flow
+                  - generic [ref=f21e182]: 
+              - menuitem "Import" [ref=f21e183] [cursor=pointer]:
+                - generic [ref=f21e184]:
+                  - generic [ref=f21e185]: 
+                  - generic [ref=f21e186]: Import
+                  - generic [ref=f21e188]: 
+            - group [ref=f21e189]:
+              - menuitem [ref=f21e190]:
+                - generic [ref=f21e191]: 
+                - searchbox "Search" [ref=f21e193]
+          - generic: "Searching for {0} found 0 flows"
+        - generic [ref=f21e196]:
+          - generic [ref=f21e198]:
+            - heading "Flows" [level=1] [ref=f21e200]
+            - button "Install menu" [ref=f21e201] [cursor=pointer]:
+              - generic [ref=f21e202]:
+                - generic [ref=f21e203]: Install
+                - generic [ref=f21e205]: 
+          - tablist [ref=f21e211]:
+            - tab "Cloud flows" [selected] [ref=f21e214] [cursor=pointer]
+            - tab "Desktop flows" [ref=f21e220] [cursor=pointer]
+            - tab "Shared with me" [ref=f21e226] [cursor=pointer]
+          - generic [ref=f21e232]:
+            - generic [ref=f21e233]: 
+            - paragraph [ref=f21e234]: You don't have any flows
+            - paragraph [ref=f21e235]: Choose from 100s of templates to start automating your workflows.
+  - generic:
+    - document
