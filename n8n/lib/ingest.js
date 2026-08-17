@@ -209,8 +209,44 @@ function passesFilter(article, filter) {
   return true;
 }
 
+/**
+ * Google News appends " - Publisher" to every headline. The sheet already
+ * prints the source beside each item, so the suffix is duplication — and on a
+ * long regulator name it pushes the actual headline out of view.
+ *
+ * Only the last segment is removed, and only when it is short and free of
+ * sentence punctuation, so a headline that legitimately contains " - " keeps
+ * its own text.
+ */
+function cleanSyndicatedTitle(title, url) {
+  const t = String(title || '').trim();
+  if (!/(^|\.)news\.google\.com$/i.test(safeHost(url))) return t;
+  // " - Publisher" with nothing before it: Google indexed the page with no
+  // headline. Trimming has already moved the dash to position 0, so the split
+  // below cannot see it — catch the case explicitly and return nothing.
+  if (/^-\s+/.test(t)) return '';
+  // Greedy, so a headline containing its own " - " splits at the LAST separator
+  // and keeps its text: "SUPA ENERGY - THE BASE network exemption - AER".
+  const m = t.match(/^([\s\S]*)\s+-\s+([^-]{2,60})$/);
+  if (!m) return t;
+  if (/[.!?]$/.test(m[2].trim())) return t;
+  // May legitimately come back empty: Google indexes some pages with no
+  // headline at all, leaving only " - Publisher". normalise() drops those.
+  return m[1].trim();
+}
+
+function safeHost(url) {
+  try { return new URL(url).hostname; } catch { return ''; }
+}
+
 function normalise(raw, source) {
   return raw
+    .map(a => ({ ...a, title: cleanSyndicatedTitle(a.title, a.url) }))
+    // Title is checked after cleaning, not before. Twenty of thirty-five AER
+    // entries arrived as " - Australian Energy Regulator (AER)" — Google had
+    // indexed the page with no headline, so once the publisher suffix goes
+    // there is nothing left. Storing those means rows whose title is a
+    // publisher's name, which is worse than not having the row.
     .filter(a => a.url && a.title && a.title.length >= 8)
     .filter(a => passesFilter(a, source.config?.filter))
     .map(a => ({
@@ -224,4 +260,4 @@ function normalise(raw, source) {
     }));
 }
 
-module.exports = { parseFeed, parseIndex, normalise, contentHash, passesFilter, strip, absolute };
+module.exports = { parseFeed, parseIndex, normalise, contentHash, passesFilter, strip, absolute, cleanSyndicatedTitle };
