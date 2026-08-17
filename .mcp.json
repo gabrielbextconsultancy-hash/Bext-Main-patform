@@ -10,6 +10,11 @@
         "N8N_API_URL": "https://bext-n8n.srv1866850.hstgr.cloud",
         "N8N_API_KEY": "${BEXT_N8N_API_KEY}"
       }
+    },
+    "teams": {
+      "command": "npx",
+      "args": ["-y", "@floriscornel/teams-mcp@latest"],
+      "env": {}
     }
   }
 }
