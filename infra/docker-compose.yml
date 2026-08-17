@@ -190,6 +190,12 @@ services:
       ADMIN_PASS: ${ADMIN_PASS}
       SESSION_SECRET: ${SESSION_SECRET}
       N8N_URL: https://${N8N_SUBDOMAIN}.${DOMAIN_NAME}
+      QDRANT_URL: http://qdrant:6333
+      # Connection-health probes only — Gemini reachability and GitHub repo/CI
+      # status shown on /health. Analysis itself runs in the n8n container.
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+      GITHUB_REPO: gabrielbextconsultancy-hash/Bext-Main-patform
     networks:
       - bext_internal
       - n8n_default

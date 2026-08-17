@@ -1,13 +1,13 @@
 import 'server-only';
+import { query } from './db';
 
 /**
- * Live connection probes for the operational stack. These run server-side on
- * the cPanel host and reflect real reachability, not hand-set status.
+ * Live connection probes for the operational stack. These run server-side in
+ * the dashboard container on the VPS and reflect real reachability.
  *
- * Only services reachable from the dashboard host are probed. Postgres and
- * Qdrant live on the VPS loopback (no public port), so they cannot be pinged
- * from here — they fall back to their curated status in platform.ts, clearly
- * labelled as "not remotely checkable".
+ * The dashboard now runs beside Postgres, Qdrant and n8n on the same VPS
+ * (bext_internal / n8n_default networks), so those are probed directly.
+ * Anything without a probe falls back to its curated status in platform.ts.
  */
 
 // 'up'/'down' come from an actual HTTP response; 'unreachable' means the probe
@@ -76,7 +76,7 @@ const unreachable = (detail: string): CheckResult => ({
 const PROBES: Record<string, () => Promise<CheckResult>> = {
   // The dashboard itself — if this code runs, it is serving.
   'dashboard-app': async () => up('Serving requests', 0),
-  'cpanel-subdomain': async () => up('Passenger app responding', 0),
+  'cpanel-subdomain': async () => up('Container serving behind traefik', 0),
 
   'n8n': async () => {
     const base = (process.env.N8N_URL || 'https://bext-n8n.srv1866850.hstgr.cloud').replace(
@@ -89,7 +89,28 @@ const PROBES: Record<string, () => Promise<CheckResult>> = {
         ? up(`healthz ${r.status}`, r.latencyMs)
         : down(`healthz returned ${r.status}`);
     } catch {
-      return unreachable('No route from dashboard host — n8n runs on the VPS');
+      return unreachable('n8n not reachable via traefik route');
+    }
+  },
+
+  'postgresql': async () => {
+    const t0 = Date.now();
+    try {
+      await query('SELECT 1');
+      const ms = Date.now() - t0;
+      return up(`SELECT 1 (${ms}ms)`, ms);
+    } catch (e) {
+      return down(`query failed: ${(e as Error).message.slice(0, 60)}`);
+    }
+  },
+
+  'qdrant': async () => {
+    const base = process.env.QDRANT_URL || 'http://qdrant:6333';
+    try {
+      const r = await timed(`${base}/healthz`);
+      return r.ok ? up(`healthz ${r.status}`, r.latencyMs) : down(`healthz ${r.status}`);
+    } catch {
+      return unreachable('Qdrant not reachable on the internal network');
     }
   },
 

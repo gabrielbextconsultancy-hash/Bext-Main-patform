@@ -183,16 +183,12 @@ export const TOOLS: PlatformTool[] = [
     cost: 'Trial → ~A$17/mo',
     paid: true,
     owner: 'You',
-    status: 'pending',
+    status: 'configured',
+    endpoint: 'bextconsultancy.com.au',
     note:
-      'The free Developer Sandbox is gone — Microsoft requires a Visual Studio ' +
-      'Professional or Enterprise annual subscription (~US$1,199/yr) to qualify, ' +
-      'confirmed on the developer portal. A directory is the real prerequisite: an ' +
-      'Azure free signup creates one at no cost (card needed for identity check ' +
-      'only), and that alone unlocks the app registration and Graph auth. Paid M365 ' +
-      'licences are a separate, later step — they buy the data behind Graph ' +
-      '(mailbox, SharePoint, Teams) and are needed for Brief B build, not Brief A, ' +
-      'which sends over SMTP.',
+      'Live. Tenant bextconsultancy.com.au provisioned with a real Entra directory, ' +
+      'clearing the earlier blocker (the free Developer Sandbox now needs Visual ' +
+      'Studio Pro/Enterprise). This unlocked the app registration and Graph auth.',
     thisWeek: true,
   },
   {
@@ -203,17 +199,11 @@ export const TOOLS: PlatformTool[] = [
     cost: 'Free',
     paid: false,
     owner: 'You',
-    status: 'pending',
+    status: 'configured',
     note:
-      'BLOCKED — verified in the portal on 31 Jul. Signing in to entra.microsoft.com ' +
-      'with the personal account gabriel.bextconsultancy@gmail.com reaches App ' +
-      'registrations, but New registration refuses: "The ability to create ' +
-      'applications outside of a directory has been deprecated." A personal account ' +
-      'has no Entra directory. Microsoft offers two routes — the M365 Developer ' +
-      'Program (already refused, needs Visual Studio Pro/Enterprise) or signing up ' +
-      'for Azure, which creates a real directory. The Azure free account costs ' +
-      'nothing but needs a card for identity verification. Once a directory exists, ' +
-      'the registration and Graph are free permanently.',
+      'Done. App registered in the bextconsultancy.com.au directory with a client ' +
+      'secret; client-credentials token verified live (graph/verify.js). Admin ' +
+      'consent landed for User.Read.All, Mail.Send and Sites.ReadWrite.All.',
     thisWeek: true,
   },
   {
@@ -224,12 +214,14 @@ export const TOOLS: PlatformTool[] = [
     cost: 'Free',
     paid: false,
     owner: 'You',
-    status: 'pending',
+    status: 'in_progress',
     note:
-      'The API itself is free. What needs a licence is the data behind it: ' +
-      'Mail.Send needs an Exchange mailbox, Sites.* needs SharePoint, ' +
-      'OnlineMeetings.* needs Teams. Directory calls work on a free tenant. ' +
-      'Brief A no longer depends on this at all — the 5am report sends over SMTP.',
+      'Mostly wired — verified live: Mail.Send delivers (Brief A can move off SMTP), ' +
+      'Sites.ReadWrite.All sees 8 SharePoint sites (Brief B doc work ready), ' +
+      'User.Read.All works. Remaining: OnlineMeetings / meeting-transcript access, ' +
+      'which needs the Teams application access policy (Grant-CsApplicationAccessPolicy) ' +
+      'before the #1 meeting workflow can run unattended.',
+    thisWeek: true,
   },
   {
     id: 'power-bi',
