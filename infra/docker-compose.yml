@@ -58,9 +58,15 @@ services:
     # Chromium needs more than Docker's default 64 MB of shared memory or it
     # crashes partway through rendering.
     shm_size: 512mb
+    ports:
+      # Loopback only, like Postgres and Qdrant — never 0.0.0.0. n8n still reaches
+      # it as http://fetcher:8080 over the internal network; this exists so the
+      # build scripts can render documents through an SSH tunnel, which
+      # docs/05-runbook.md describes and which could not work while the port was
+      # unpublished.
+      - "127.0.0.1:8080:8080"
     networks:
       - bext_internal
-    # Reached only as http://fetcher:8080 from n8n. Never published.
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
