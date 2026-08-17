@@ -445,10 +445,18 @@ WITH win AS (
   SELECT date_trunc('day', now() AT TIME ZONE 'Australia/Melbourne')
            - interval '1 day' AS day_start
 )
-SELECT a.id, a.url, a.title, a.published_at,
+SELECT a.id, a.url, a.title,
+       -- What the sheet prints beside each item. published_at where the source
+       -- gives one, otherwise when we first saw it; date_is_exact says which,
+       -- so the sheet never presents a fetch time as a publication date.
+       coalesce(a.published_at, a.fetched_at) AS shown_at,
+       (a.published_at IS NOT NULL)           AS date_is_exact,
        s.name AS source_name, s.category,
        coalesce(an.summary, '') AS summary,
-       an.relevance_score
+       an.relevance_score,
+       -- Carried on every row so the footer can state coverage without a
+       -- second query: how many sources are being pulled right now.
+       (SELECT count(*) FROM sources WHERE active) AS sources_monitored
 FROM articles a
 JOIN sources s               ON s.id = a.source_id
 LEFT JOIN article_analysis an ON an.article_id = a.id
@@ -490,7 +498,10 @@ function dailyReportWorkflow() {
           jsCode: `
 const rows = $input.all().map(i => i.json);
 if (rows.length === 0) {
-  return [{ json: { empty: true, item_count: 0, sections: [], intro: '' } }];
+  // No rows means no carrier for the source counts, so they are left at 0 and
+  // the template omits the coverage line rather than claiming "0 of 0".
+  return [{ json: { empty: true, item_count: 0, sections: [], intro: '',
+                    sources_monitored: 0, sources_contributing: 0 } }];
 }
 
 // Group into the brief's section order.
@@ -532,7 +543,14 @@ TODAY'S ITEMS:
   intro = '';
 }
 
+// How many sources are being pulled, and how many actually published on the
+// day. Every row carries sources_monitored, so read it off the first.
+const sourcesMonitored = Number(rows[0].sources_monitored) || 0;
+const sourcesContributing = new Set(rows.map(r => r.source_name)).size;
+
 return [{ json: { empty: false, item_count: rows.length, sections, intro,
+                  sources_monitored: sourcesMonitored,
+                  sources_contributing: sourcesContributing,
                   generated_by: intro ? 'hermes3:8b' : 'none' } }];
 `,
         },
@@ -552,6 +570,18 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
 const coverage = new Date(Date.now() - 86400000).toLocaleDateString('en-AU',
   { weekday:'long', day:'numeric', month:'long', year:'numeric', timeZone:'Australia/Melbourne' });
 
+// The date each item carries, in Melbourne time. Where the source published no
+// machine-readable date we show when we picked it up and say so, rather than
+// passing a fetch time off as a publication date.
+const itemDate = (a) => {
+  if (!a.shown_at) return 'date unavailable';
+  const d = new Date(a.shown_at);
+  if (isNaN(d)) return 'date unavailable';
+  const s = d.toLocaleDateString('en-AU',
+    { day:'numeric', month:'short', year:'numeric', timeZone:'Australia/Melbourne' });
+  return a.date_is_exact ? s : s + ' (picked up)';
+};
+
 // Inline styles throughout — Outlook and Gmail strip <style> blocks.
 const body = d.empty
   ? '<p style="color:#6b7280">No qualifying articles published on this day.</p>'
@@ -563,8 +593,7 @@ const body = d.empty
           <a href="\${esc(a.url)}" style="font:600 14px/1.4 Arial,sans-serif;color:#0f766e;
              text-decoration:none">\${esc(a.title)}</a>
           <div style="font:11px/1.4 Arial,sans-serif;color:#9ca3af;margin:3px 0 4px">
-            \${esc(a.source_name)} · \${a.relevance_score == null
-              ? 'not yet scored' : 'relevance ' + a.relevance_score}
+            \${esc(a.source_name)} · \${esc(itemDate(a))}
           </div>
           \${a.summary
             ? \`<div style="font:13px/1.5 Arial,sans-serif;color:#374151">\${esc(a.summary)}</div>\`
@@ -579,14 +608,17 @@ const html = \`<!doctype html><html><body style="margin:0;padding:0;background:#
   </div>
   <h1 style="font:600 20px/1.3 Arial,sans-serif;color:#111827;margin:6px 0 2px">\${coverage}</h1>
   <div style="font:12px/1.4 Arial,sans-serif;color:#9ca3af;margin-bottom:20px">
-    \${d.item_count} items across \${d.sections.length} sections
+    \${d.item_count} items across \${d.sections.length} sections\${d.sources_monitored
+      ? \` · \${d.sources_contributing} of \${d.sources_monitored} sources contributed\` : ''}
   </div>
   \${d.intro ? \`<div style="background:#f0fdfa;border-left:3px solid #14b8a6;padding:12px 14px;
        font:13px/1.6 Arial,sans-serif;color:#134e4a;margin-bottom:8px">\${esc(d.intro)}</div>\` : ''}
   \${body}
   <div style="margin-top:32px;padding-top:14px;border-top:1px solid #e5e7eb;
               font:11px/1.5 Arial,sans-serif;color:#9ca3af">
-    Generated automatically from \${d.item_count} scored articles.
+    \${d.sources_monitored
+      ? \`Generated automatically from \${d.sources_monitored} monitored sources; \${d.sources_contributing} published on this day.\`
+      : 'Generated automatically.'}
     Grants / Funding and LinkedIn sections are covered in a separate report.
   </div>
 </div></body></html>\`;
