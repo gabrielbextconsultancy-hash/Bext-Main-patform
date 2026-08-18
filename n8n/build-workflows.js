@@ -18,6 +18,7 @@ const H = { 'X-N8N-API-KEY': process.env.N8N_API_KEY, 'Content-Type': 'applicati
 const DRY = process.argv.includes('--dry');
 const PG_CRED = process.env.N8N_PG_CREDENTIAL_ID;
 const SMTP_CRED = process.env.N8N_SMTP_CREDENTIAL_ID;
+const WEBHOOK_CRED = process.env.N8N_WEBHOOK_CREDENTIAL_ID;
 const TAG = 'BEXT Consultancy';
 
 // The tested parser, minus its CommonJS export line, for embedding in a Code node.
@@ -1209,6 +1210,102 @@ ON CONFLICT (meeting_id) DO UPDATE SET
   };
 }
 
+// ─── Workflow 6: Teams Inbound ───────────────────────────────────────────────
+
+// Normalises whatever the Power Automate flow sends into the one shape the rest
+// of the chain expects, and refuses anything that is not a transcript. The flow
+// posts the driveItem id rather than the file body: the payload stays small, and
+// the flow never needs permission to read content the app-only pipeline can
+// already fetch for itself.
+const TEAMS_INBOUND_CODE = `
+const body = $input.first().json.body || $input.first().json;
+
+const item = {
+  source: body.source || 'unknown',
+  driveId: body.driveId || '',
+  itemId: body.itemId || '',
+  name: body.name || '',
+  webUrl: body.webUrl || '',
+  createdDateTime: body.createdDateTime || new Date().toISOString(),
+};
+
+// A folder-created event fires for the folder as well as the file, and Teams
+// occasionally replays one. Neither is an error worth alerting on — they are
+// simply not work, so say so and stop.
+if (!item.itemId || !/\\.vtt$/i.test(item.name)) {
+  return [{ json: { ...item, accepted: false, reason: 'not a .vtt transcript' } }];
+}
+
+return [{ json: { ...item, accepted: true } }];
+`;
+
+function teamsInboundWorkflow(meetingIntakeId) {
+  return {
+    name: 'BEXT — Teams Inbound',
+    settings: { executionOrder: 'v1', timezone: 'Australia/Melbourne' },
+    nodes: [
+      {
+        id: 'hook', name: 'Teams inbound', type: 'n8n-nodes-base.webhook',
+        typeVersion: 2, position: pos(-380, 0),
+        // Hardcoded so a redeploy keeps the URL. n8n mints a fresh webhookId per
+        // node otherwise, which silently breaks the Power Automate flow calling it
+        // — the flow keeps returning 404 against a URL that no longer exists.
+        webhookId: 'b7f1c4e2-3a9d-4c17-8e55-2f6a0d91b4c3',
+        parameters: {
+          httpMethod: 'POST',
+          path: 'teams-inbound',
+          // Reachable publicly through traefik, unlike the polling workflows, so
+          // this one needs a real secret rather than obscurity.
+          authentication: 'headerAuth',
+          responseMode: 'onReceived',
+          options: {},
+        },
+        credentials: WEBHOOK_CRED
+          ? { httpHeaderAuth: { id: WEBHOOK_CRED, name: 'BEXT Webhook Auth' } }
+          : undefined,
+      },
+      {
+        id: 'normalise', name: 'Normalise payload', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(-140, 0),
+        parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: TEAMS_INBOUND_CODE },
+      },
+      {
+        id: 'gate', name: 'Only transcripts', type: 'n8n-nodes-base.if',
+        typeVersion: 2.2, position: pos(100, 0),
+        parameters: {
+          conditions: {
+            options: { caseSensitive: true, typeValidation: 'strict', version: 2 },
+            combinator: 'and',
+            conditions: [{
+              id: 'accepted',
+              operator: { type: 'boolean', operation: 'true', singleValue: true },
+              leftValue: '={{ $json.accepted }}',
+              rightValue: '',
+            }],
+          },
+          options: {},
+        },
+      },
+      {
+        id: 'run', name: 'Run Meeting Intake', type: 'n8n-nodes-base.executeWorkflow',
+        typeVersion: 1.2, position: pos(340, -80),
+        // Calls the existing pipeline rather than repeating it. Meeting Intake
+        // already excludes anything in meeting_minutes, so an early run here and
+        // the fifteen-minute poll cannot produce the record twice.
+        parameters: {
+          workflowId: { __rl: true, value: meetingIntakeId, mode: 'id' },
+          options: { waitForSubWorkflow: false },
+        },
+      },
+    ],
+    connections: {
+      'Teams inbound': { main: [[{ node: 'Normalise payload', type: 'main', index: 0 }]] },
+      'Normalise payload': { main: [[{ node: 'Only transcripts', type: 'main', index: 0 }]] },
+      'Only transcripts': { main: [[{ node: 'Run Meeting Intake', type: 'main', index: 0 }], []] },
+    },
+  };
+}
+
 // ─── Deploy ──────────────────────────────────────────────────────────────────
 
 async function deploy(wf) {
@@ -1217,7 +1314,19 @@ async function deploy(wf) {
   const file = path.join(dir, wf.name.replace(/[^\w]+/g, '-').replace(/^-|-$/g, '') + '.json');
   fs.writeFileSync(file, JSON.stringify(wf, null, 2));
   console.log(`wrote ${path.relative(process.cwd(), file)}`);
-  if (DRY) return;
+
+  if (DRY) {
+    // Still resolve the id, because one workflow is wired to another by id and a
+    // dry run that cannot answer "what id would this have had" cannot build the
+    // caller at all. Read-only, and --dry stays usable offline: a failure here
+    // returns nothing rather than stopping the build.
+    try {
+      const list = await (await fetch(`${B}/api/v1/workflows?limit=100`, { headers: H })).json();
+      return list.data?.find(w => w.name === wf.name)?.id;
+    } catch {
+      return undefined;
+    }
+  }
 
   const list = await (await fetch(`${B}/api/v1/workflows?limit=100`, { headers: H })).json();
   const existing = list.data?.find(w => w.name === wf.name);
@@ -1254,6 +1363,20 @@ async function deploy(wf) {
   else {
     await deploy(dailyReportWorkflow());
     await deploy(graphHealthWorkflow());
-    await deploy(meetingIntakeWorkflow());
+    const meetingId = await deploy(meetingIntakeWorkflow());
+
+    // The inbound hook exists to start Meeting Intake early instead of waiting out
+    // the fifteen-minute poll, so it is only worth deploying once that workflow has
+    // an id to call. Without the header-auth credential it would be an unauthenticated
+    // public endpoint, which is not a trade worth making for a latency improvement.
+    if (!WEBHOOK_CRED) {
+      console.error('N8N_WEBHOOK_CREDENTIAL_ID not set — skipping Teams Inbound.');
+      console.error('  Create an n8n Header Auth credential named "BEXT Webhook Auth" and put its id in .env.');
+    } else if (!meetingId) {
+      console.error('No id for Meeting Intake — skipping Teams Inbound, which calls it by id.');
+      if (DRY) console.error('  (--dry needs the workflow to exist already, or n8n to be reachable.)');
+    } else {
+      await deploy(teamsInboundWorkflow(meetingId));
+    }
   }
 })();

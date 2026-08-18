@@ -13,8 +13,22 @@
     },
     "teams": {
       "command": "npx",
-      "args": ["-y", "@floriscornel/teams-mcp@latest"],
+      "args": ["-y", "@floriscornel/teams-mcp@0.9.0"],
       "env": {}
+    },
+    "flowagent": {
+      "command": "node",
+      "args": ["./vendor/flowagent/mcp.mjs"],
+      "env": {
+        "PA_TENANT_ID": "9eb458d1-317d-4aae-a9a3-bb68e430d701",
+        "PA_DEFAULT_ENVIRONMENT": "Default-9eb458d1-317d-4aae-a9a3-bb68e430d701",
+        "PA_CLOUD": "commercial",
+        "FLOWAGENT_TELEMETRY": "0"
+      }
+    },
+    "microsoft-learn": {
+      "type": "http",
+      "url": "https://learn.microsoft.com/api/mcp"
     }
   }
 }

@@ -21,3 +21,9 @@ env.local.json
 
 # Playwright MCP session artefacts — snapshots and console logs, not source
 .playwright-mcp/
+
+# Timestamped .env snapshots taken before automated rewrites — full secrets.
+.env.bak.*
+
+# FlowAgent runtime state — flow backup snapshots, not source.
+.flowagent/

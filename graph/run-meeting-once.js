@@ -5,6 +5,8 @@
  *   node graph/run-meeting-once.js                 most recent transcript
  *   node graph/run-meeting-once.js --dry           extract only, file nothing
  *   node graph/run-meeting-once.js --file x.vtt    a transcript from disk
+ *   node graph/run-meeting-once.js --no-post       file everything, skip the Teams card
+ *   node graph/run-meeting-once.js --print-card    write the card payload to scratch/card.json
  *
  * The n8n workflow does this on a schedule with no one watching. This is the
  * same sequence run deliberately so each stage can be inspected before the next,
@@ -20,8 +22,15 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
-const { MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET, MS_SENDER_UPN, GEMINI_API_KEY } = process.env;
+const { buildMeetingCard } = require('../n8n/lib/meeting-card');
+
+const {
+  MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET, MS_SENDER_UPN, GEMINI_API_KEY,
+  TEAMS_MEETING_WEBHOOK_URL,
+} = process.env;
 const DRY = process.argv.includes('--dry');
+const NO_POST = process.argv.includes('--no-post');
+const PRINT_CARD = process.argv.includes('--print-card');
 const G = 'https://graph.microsoft.com/v1.0';
 const SITE = 'bextconsultancy.sharepoint.com:/sites/BEXTHQ';
 const BASE = 'API Automation Folder';
@@ -72,6 +81,29 @@ function simpleDocx(title, blocks) {
   return zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
 }
 
+/** VTT cues as readable paragraphs, one per speaker turn.
+ *  Timestamps and cue numbers are dropped — nobody reads a transcript for those,
+ *  and consecutive lines from the same speaker are merged so the result reads as
+ *  speech rather than as subtitles. */
+function vttToBlocks(vtt) {
+  const out = [];
+  let last = null;
+  for (const raw of String(vtt || '').split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || /^(WEBVTT|NOTE|STYLE|REGION)\b/.test(line)) continue;
+    if (line.includes('-->') || /^\d+$/.test(line)) continue;
+    const v = line.match(/^<v\s+([^>]+)>([\s\S]*?)(?:<\/v>)?$/);
+    const who = v ? v[1].trim() : null;
+    const said = (v ? v[2] : line).replace(/<[^>]+>/g, '').trim();
+    if (!said) continue;
+    if (who && who === last) out[out.length - 1].text += ' ' + said;
+    else if (who) { out.push({ text: `${who}:  ${said}` }); last = who; }
+    else if (last === null && out.length) out[out.length - 1].text += ' ' + said;
+    else { out.push({ text: said }); last = null; }
+  }
+  return out.length ? out : [{ text: '(the transcript was empty)' }];
+}
+
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 // The tenant drops connections often enough that a single attempt regularly
 // fails on an otherwise healthy call.
@@ -115,14 +147,17 @@ Return ONLY the JSON object, no markdown fence.
 TRANSCRIPT:
 `;
 
-async function token() {
+// The channel webhook is a second audience, not a second credential: the Teams
+// webhook trigger is tenant-restricted, so the POST carries an app-only token for
+// the Flow service rather than relying on a signed URL that anyone could replay.
+async function token(scope = 'https://graph.microsoft.com/.default') {
   const r = await retry(() => fetch(
     `https://login.microsoftonline.com/${MS_TENANT_ID}/oauth2/v2.0/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         client_id: MS_CLIENT_ID, client_secret: MS_CLIENT_SECRET,
-        scope: 'https://graph.microsoft.com/.default', grant_type: 'client_credentials',
+        scope, grant_type: 'client_credentials',
       }),
     }));
   const j = await r.json();
@@ -285,18 +320,18 @@ async function token() {
   const stamp = when.toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' });
   const safe = (found.ev.subject || 'Meeting').replace(/[\\/:*?"<>|]/g, '-').slice(0, 80);
   const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  // Failures are collected rather than thrown: a bad archive write should not cost
+  // the draft email. The channel card is the one thing gated on a clean run.
+  const failures = [];
   const put = async (driveId, p, body, type) => {
     const r = await retry(() => fetch(`${G}/drives/${driveId}/root:/${encodeURI(p)}:/content`, {
       method: 'PUT', headers: { ...H, 'Content-Type': type }, body,
     }));
     const j = await r.json();
+    if (!r.ok) failures.push(p);
     console.log(`  ${r.ok ? 'filed' : 'FAILED'}  ${p}${r.ok ? '' : ' — ' + JSON.stringify(j).slice(0, 120)}`);
     return j;
   };
-
-  // The working library keeps a flat archive; the channel keeps the readable record.
-  await put(drive, `${BASE}/Meeting Transcripts/${stamp} ${safe}.vtt`, found.vtt, 'text/vtt');
-  const filed = await put(drive, `${BASE}/Meeting Minutes/${stamp} ${safe} — Minutes.docx`, docx, DOCX);
 
   // ── channel record ────────────────────────────────────────────────────────
   const chSite = await graph(`/sites/${CHANNEL_SITE}`);
@@ -320,9 +355,46 @@ async function token() {
     { text: (x.attendees || []).map(a => a.name).join(', ') },
   ]);
 
-  await put(chDrive, `${folder}/Transcript.vtt`, found.vtt, 'text/vtt');
+  // Minutes.docx is written last, in both places, so that the channel card — which
+  // fires once everything below has landed — never announces a half-filed record.
+  // The working library keeps a flat archive; the channel keeps the readable record.
+  await put(drive, `${BASE}/Meeting Transcripts/${stamp} ${safe}.vtt`, found.vtt, 'text/vtt');
+  const chTr = await put(chDrive, `${folder}/Transcript.vtt`, found.vtt, 'text/vtt');
+  const chSum = await put(chDrive, `${folder}/Summary.docx`, summary, DOCX);
+  const filed = await put(drive, `${BASE}/Meeting Minutes/${stamp} ${safe} — Minutes.docx`, docx, DOCX);
   const chMin = await put(chDrive, `${folder}/Minutes.docx`, docx, DOCX);
-  await put(chDrive, `${folder}/Summary.docx`, summary, DOCX);
+
+  // ── readable renditions ───────────────────────────────────────────────────
+  // SharePoint has no preview handler for .vtt, so that button downloads a file
+  // most people cannot read. Word's export service turns a rendered document into
+  // a PDF that opens inline on desktop and mobile. The originals stay put — BEXT
+  // still edits Minutes.docx at step 9.
+  const transcriptDocx = simpleDocx(`${data.program} — Transcript`, [
+    { text: `${data.date}  ·  ${data.venue}` },
+    ...vttToBlocks(found.vtt),
+  ]);
+  await put(chDrive, `${folder}/Transcript.docx`, transcriptDocx, DOCX);
+
+  const toPdf = async (src, dst) => {
+    try {
+      const r = await retry(() => fetch(
+        `${G}/drives/${chDrive}/root:/${encodeURI(src)}:/content?format=pdf`,
+        { headers: H, redirect: 'follow' }));
+      if (!r.ok) { console.log(`  no pdf  ${dst} — ${r.status}`); return {}; }
+      const buf = Buffer.from(await r.arrayBuffer());
+      // The conversion service answers 200 with a JSON error body on some inputs,
+      // so trust the magic bytes rather than the status code.
+      if (buf.slice(0, 5).toString('latin1') !== '%PDF-') {
+        console.log(`  no pdf  ${dst} — not a PDF`); return {};
+      }
+      return await put(chDrive, dst, buf, 'application/pdf');
+    } catch (e) { console.log(`  no pdf  ${dst} — ${e.message}`); return {}; }
+  };
+
+  const pdfMin = await toPdf(`${folder}/Minutes.docx`, `${folder}/Minutes.pdf`);
+  const pdfSum = await toPdf(`${folder}/Summary.docx`, `${folder}/Summary.pdf`);
+  const pdfTr = await toPdf(`${folder}/Transcript.docx`, `${folder}/Transcript.pdf`);
+
   const chFolder = await graph(`/drives/${chDrive}/root:/${encodeURI(folder)}`);
   console.log(`  channel  ${chFolder.webUrl}`);
 
@@ -347,6 +419,91 @@ async function token() {
     }),
   });
   console.log(`  draft created  ${draft.id.slice(0, 24)}...  isDraft=${draft.isDraft}`);
+
+  // Attach an Entra id to every attendee whose name matches an account, so the
+  // card can @mention them. A transcript yields display names only, so most
+  // external attendees will not resolve — that is expected, and they simply
+  // appear as plain text rather than as a mention.
+  const withIds = async list => {
+    const out = [];
+    for (const a of list) {
+      const name = (a && a.name || '').trim();
+      if (!name) continue;
+      try {
+        const q = `/users?$select=id,displayName&$filter=${encodeURIComponent(`displayName eq '${name.replace(/'/g, "''")}'`)}`;
+        const hit = (await graph(q))?.value?.[0];
+        out.push(hit ? { ...a, id: hit.id } : a);
+      } catch { out.push(a); }
+    }
+    const n = out.filter(a => a.id).length;
+    console.log(`  attendees  ${n}/${out.length} resolved to accounts, will be @mentioned`);
+    return out;
+  };
+
+  // ── 6. channel card ───────────────────────────────────────────────────────
+  // Graph publishes no application permission for posting a channel message, so
+  // the announcement goes through a Teams Workflows webhook the tenant owns.
+  // See docs/TEAMS-WEBHOOK-SETUP.md.
+  console.log('\n[6] CHANNEL CARD');
+  const card = buildMeetingCard({
+    subject: found.ev.subject,
+    program: data.program,
+    meetingNo: data.meeting_no,
+    date: data.date,
+    time: data.time,
+    venue: data.venue,
+    organiser: found.ev.organizer?.emailAddress?.name
+      || found.ev.organizer?.emailAddress?.address || '',
+    attendees: await withIds(x.attendees || []),
+    summary: x.summary || '',
+    decisions: x.decisions || [],
+    actions: x.actions || [],
+    projects: x.projects || [],
+    safety: x.safety || [],
+    // Prefer the PDF: it opens inline in Teams on any device. Falls back to the
+    // original whenever a conversion did not produce one, so a button is never lost.
+    urls: {
+      folder: chFolder.webUrl,
+      minutes: pdfMin.webUrl || chMin.webUrl,
+      summary: pdfSum.webUrl || chSum.webUrl,
+      transcript: pdfTr.webUrl || chTr.webUrl,
+    },
+  });
+
+  if (PRINT_CARD) {
+    fs.writeFileSync(path.join(scratch, 'card.json'), JSON.stringify(card, null, 2));
+    console.log(`  card written  ${path.join(scratch, 'card.json')}  ${JSON.stringify(card).length} bytes`);
+  }
+
+  if (failures.length) {
+    console.log(`  not posting — ${failures.length} file(s) failed to land: ${failures.join(', ')}`);
+  } else if (NO_POST) {
+    console.log('  --no-post: card built, not sent.');
+  } else if (!TEAMS_MEETING_WEBHOOK_URL) {
+    console.log('  no TEAMS_MEETING_WEBHOOK_URL set — skipping channel post.');
+  } else {
+    // A missing announcement is recoverable; a duplicate one is not, so this
+    // retries once and then gives up rather than failing the run.
+    try {
+      // A URL carrying its own ?sig= is self-authenticating. Without one the flow
+      // is tenant-restricted and wants a bearer token instead — decided by the
+      // URL rather than a second setting that could drift out of step with it.
+      const hdrs = { 'Content-Type': 'application/json' };
+      if (!/[?&]sig=/.test(TEAMS_MEETING_WEBHOOK_URL)) {
+        hdrs.Authorization = `Bearer ${await token('https://service.flow.microsoft.com/.default')}`;
+        console.log('  tenant-restricted webhook — attaching an app-only token');
+      }
+      const r = await retry(() => fetch(TEAMS_MEETING_WEBHOOK_URL, {
+        method: 'POST', headers: hdrs, body: JSON.stringify(card),
+      }), 2);
+      // Power Automate answers 202 Accepted, not 200.
+      if (r.ok) console.log(`  posted  ${r.status}`);
+      else console.log(`  post FAILED  ${r.status} — ${(await r.text()).slice(0, 300)}`);
+    } catch (e) {
+      console.log(`  post FAILED  ${e.message}`);
+    }
+  }
+
   console.log(`\nchannel minutes: ${chMin.webUrl || '(see the channel)'}`);
   console.log(`archive minutes: ${filed.webUrl || '(see SharePoint)'}`);
 })().catch(e => { console.error('\nFAILED:', e.message); process.exitCode = 1; });

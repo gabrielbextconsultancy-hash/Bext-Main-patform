@@ -1,0 +1,85 @@
+{
+  "_comment": "Source of truth for \"BEXT — Meeting Report\". The live trigger URL is a secret and lives only in .env as TEAMS_MEETING_WEBHOOK_URL.",
+  "environment": "Default-9eb458d1-317d-4aae-a9a3-bb68e430d701",
+  "flowId": "bbe06a8c-b747-851e-40e7-f1be6157edbc",
+  "properties": {
+    "displayName": "BEXT — Meeting Report",
+    "state": "Started",
+    "definition": {
+      "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+      "contentVersion": "1.0.0.0",
+      "parameters": {
+        "$connections": {
+          "defaultValue": {},
+          "type": "Object"
+        },
+        "$authentication": {
+          "defaultValue": {},
+          "type": "SecureObject"
+        }
+      },
+      "triggers": {
+        "manual": {
+          "type": "Request",
+          "kind": "Http",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string"
+                },
+                "attachments": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "contentType": {
+                        "type": "string"
+                      },
+                      "content": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "actions": {
+        "Post_card_in_a_chat_or_channel": {
+          "runAfter": {},
+          "type": "OpenApiConnection",
+          "inputs": {
+            "host": {
+              "apiId": "/providers/Microsoft.PowerApps/apis/shared_teams",
+              "connectionName": "shared_teams",
+              "operationId": "PostCardToConversation"
+            },
+            "parameters": {
+              "poster": "Flow bot",
+              "location": "Channel",
+              "body/recipient/groupId": "36840697-dbe5-4294-994d-7a043eef51ca",
+              "body/recipient/channelId": "19:R7FciH4QRVZU7_7EVUg3CH_zCmSIHOoVxrRAM_nFeBA1@thread.tacv2",
+              "body/messageBody": "@{string(triggerBody()?['attachments'][0]['content'])}"
+            },
+            "authentication": "@parameters('$authentication')"
+          }
+        }
+      }
+    },
+    "connectionReferences": {
+      "shared_teams": {
+        "connectionName": "<redacted>",
+        "source": "Embedded",
+        "id": "/providers/Microsoft.PowerApps/apis/shared_teams",
+        "displayName": "Microsoft Teams",
+        "tier": "Standard",
+        "apiName": "teams"
+      }
+    }
+  },
+  "triggerUrl": "<redacted>"
+}

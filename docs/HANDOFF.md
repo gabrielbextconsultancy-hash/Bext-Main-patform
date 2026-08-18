@@ -21,6 +21,44 @@ Paste the "Start here" block into a new session. Everything else is reference.
 
 ---
 
+## Done — 18 August 2026: the channel announcement is live
+
+`BEXT — Meeting Report`, Power Automate flow `bbe06a8c-b747-851e-40e7-f1be6157edbc`, Started, posting
+Adaptive Cards into `bext_transcripts records` › **Bext Transcripts**. Verified by two live cards
+rather than by a status code — the channel messages carry
+`application/vnd.microsoft.card.adaptive` attachments.
+
+- **Graph cannot post channel messages** and no permission exists for it. The flow is the answer.
+- **The generic HTTP trigger is premium** (`MissingAdequateQuotaPolicy`). `kind: "TeamsWebhook"` is
+  standard-tier and is what we use.
+- **Flows can be created but not updated** through the API here. Updates route through Dataverse and
+  demand `host.connectionReferenceName`, which neither the REST API nor FlowAgent supplies. Replace,
+  do not patch — three attempts died on this.
+- **`triggerAuthenticationType: "Tenant"` rejects app-only tokens** (`MisMatchingOAuthClaims`): Entra
+  issues the audience without the trailing slash the policy demands. `"Anonymous"` is in use, so
+  **the trigger URL is a bearer secret** and lives only in `.env`.
+- **The leading `@` on the card expression is load-bearing.** Without it Power Automate stores a
+  literal string and the channel receives expression text instead of a card. The designer omitted it.
+- **PDF renditions**: Graph `?format=pdf` converts rendered documents. `.vtt` has no SharePoint
+  preview handler, so the transcript is rewritten as readable speaker turns, filed as
+  `Transcript.docx`, then converted. Card buttons prefer the PDF and fall back to the original.
+  The minutes *template* will not convert — its `{#loop}` placeholders defeat Word's exporter.
+- **Attendees matching a tenant account are @mentioned**; the rest stay plain text.
+
+Tenant facts verified live, correcting stale notes below: the flow owner's Power Automate licence
+passes, an environment exists, `Admin.bext-automation@` holds **Teams Administrator** and
+**Cloud Application Administrator**, and Brent is now a member of the team, so the card has an
+audience.
+
+### Still to do
+
+1. Port into `MEETING_CODE` so the scheduled n8n workflow posts the card too.
+2. Apply migration `011` — needs the SSH tunnel to Postgres.
+3. A real end-to-end run — needs the fetcher tunnel on `127.0.0.1:8080`.
+4. Delete `Bext Transcripts/_pipeline-verification/` and the two verification cards.
+
+---
+
 ## Working and verified
 
 Verified by reading document contents, not by checking files exist.
@@ -55,7 +93,9 @@ Verified by reading document contents, not by checking files exist.
 1. **Port the pipeline into `BEXT — Meeting Intake`.** `graph/run-meeting-once.js` is the working
    reference; `MEETING_CODE` in `n8n/build-workflows.js` is the older version to replace. Keep it
    inactive until one scheduled run has been watched.
-2. **Write `Minutes.docx` last** so the Power Automate channel post announces a complete record.
+2. ~~**Write `Minutes.docx` last**, and the channel announcement~~ — **done and live**. See the
+   18 August section above. The card is built by `n8n/lib/meeting-card.js` and posted to
+   `TEAMS_MEETING_WEBHOOK_URL`; the envelope is verified.
 3. **Excel actions register** — schema exists, generation does not. Per-project numbering restarts
    at 1, matching the supplied file. Store `Open`/`Closed`, render `Done` in the Word table.
 4. **Transcript dedup — unsolved.** Two Teams clients in one call produce near-duplicate lines
@@ -76,13 +116,17 @@ Verified by reading document contents, not by checking files exist.
 
 - `Transcription` on the meeting policy if it regresses — it produced output on only two of five
   attempts before settling.
-- **Teams Administrator** on `Admin.bext-automation@`, which would have avoided four of the five
-  escalations on 17 August. The account currently holds no directory roles.
+- ~~**Teams Administrator** on `Admin.bext-automation@`~~ — **granted**, verified 18 Aug. The account
+  holds Teams Administrator and Cloud Application Administrator. Brent has been added to
+  `bext_transcripts records`, so the announcement card has a human audience.
+  See `docs/BRENT-TEAMS-ADMIN.md` — his outstanding list is now empty.
 - Xero credential; HubSpot `crm.objects.companies.read` scope (verified missing — companies
   returns 403); ProjectManager hourly rates (all 13 projects at 0, which blocks profitability and
   is the main purpose of the Xero integration).
-- Lapsed licence: `O365 Business Premium` shows 0 purchased, 1 assigned, attached to the mailbox
-  that sends the 05:00 report.
+- ~~Lapsed licence: `O365 Business Premium`~~ — **not a blocker**, verified 18 Aug against
+  `subscribedSkus`. The expired SKU sits on `Brent@`, not on the report sender, and Brent also holds
+  `BUSINESS_PREMIUM_AND_MICROSOFT_365_COPILOT_FOR_BUSINESS` (2 prepaid / 2 consumed). `MS_SENDER_UPN`
+  is `Admin.bext-automation@`, which is licensed. Nothing to buy.
 
 ## Traps found the hard way
 

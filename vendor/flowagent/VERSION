@@ -1,0 +1,49 @@
+# FlowAgent MCP server — vendored
+
+Upstream:   https://github.com/microsoft/power-platform-skills
+Path:       plugins/power-automate/server/mcp.mjs
+Pinned at:  556f03ea5936e105b7fbe9adfa24a39d46b83646   (repo HEAD, 17 Aug 2026)
+Retrieved:  17 August 2026
+Size:       1713866 bytes
+sha256:     b3849b18417af1f917ea4f34a1ef7fdad5ea948a36103a24ee65630fdf00b7b7
+
+## Why this is vendored rather than installed
+
+FlowAgent is not published to npm, so there is no `npx` form. The upstream distribution is a
+Claude Code plugin, and a plugin's cache path is CLI-specific and is wiped on update. The repo is
+the source of truth for this project, and an MCP server the repo depends on should not live only
+in a cache. So the bundle is committed and `.mcp.json` points at a relative path.
+
+## What it is
+
+A single self-contained ESM bundle — 50+ tools, stdio transport, all dependencies inlined
+(MSAL included). Needs Node 18+ and nothing else installed. It shells out to `az` for tokens:
+
+- `https://service.flow.microsoft.com` — flow management (the main path)
+- `https://api.powerplatform.com` — connection management, via an inlined MSAL public client
+
+It does **not** require the `pac` CLI. `pac` is used by the *other* plugins in that marketplace
+for solution and ALM work, and is not installed on this machine.
+
+## Updating
+
+```bash
+git clone --depth 1 --filter=blob:none --sparse \
+  https://github.com/microsoft/power-platform-skills.git /tmp/pps
+cd /tmp/pps && git sparse-checkout set plugins/power-automate/server
+cp plugins/power-automate/server/mcp.mjs <repo>/vendor/flowagent/mcp.mjs
+git rev-parse HEAD          # → new pin
+sha256sum <repo>/vendor/flowagent/mcp.mjs
+```
+
+Then update the pin, size and hash above, restart the MCP server, and re-run a read-only tool
+call before trusting it. Do not update mid-engagement without a reason — a silent breaking change
+before 8 September 2026 is the risk this pin exists to prevent.
+
+Note: `raw.githubusercontent.com` rate-limits (429) on this bundle. The sparse clone above is the
+reliable route.
+
+## Licence
+
+MIT, © Microsoft. See the upstream repository. This is an unmodified copy — do not edit it. Any
+local change would be silently lost on the next update and would make the hash above a lie.

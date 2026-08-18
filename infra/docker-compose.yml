@@ -125,6 +125,12 @@ services:
       MS_CLIENT_SECRET: ${MS_CLIENT_SECRET}
       MS_SENDER_UPN: ${MS_SENDER_UPN}
 
+      # Graph publishes no application permission for posting a channel message,
+      # so the meeting card goes through a Teams Workflows webhook the tenant
+      # creates. Secret — the URL is its own bearer token.
+      # See docs/TEAMS-WEBHOOK-SETUP.md.
+      TEAMS_MEETING_WEBHOOK_URL: ${TEAMS_MEETING_WEBHOOK_URL}
+
       # Code nodes may not require Node builtins unless named here. The ingest
       # parser hashes article content with crypto to deduplicate stories that are
       # syndicated across several sources under different URLs.
