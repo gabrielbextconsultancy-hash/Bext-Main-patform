@@ -1065,6 +1065,22 @@ const graph = async (path, opts = {}) => {
   }
 };
 
+// Normalise whatever the HTTP helper hands back for a binary response.
+//
+// With json: true it parses the body, and a binary payload becomes the JSON
+// envelope { type: 'Buffer', data: [ ... ] }. Buffer.from() on that object does
+// not fail — it produces the *text* of the envelope, which then gets uploaded
+// with a .docx extension. Word opens it and reports "unreadable content", which
+// reads as a corrupt template or a SharePoint permissions problem rather than a
+// response-parsing one. Every binary body goes through here.
+const toBuf = v => {
+  if (Buffer.isBuffer(v)) return v;
+  if (v && v.type === 'Buffer' && Array.isArray(v.data)) return Buffer.from(v.data);
+  if (v instanceof ArrayBuffer) return Buffer.from(v);
+  if (typeof v === 'string') return Buffer.from(v, 'binary');
+  return Buffer.from(v);
+};
+
 const graphRaw = (path, opts = {}) => {
   const url = G + path;
   const headers = { Authorization: 'Bearer ' + TOKEN, ...(opts.headers || {}) };
@@ -1294,8 +1310,13 @@ for (const cand of candidates) {
     });
     const docx = await call('render-docx', {
       method: 'POST', url: 'http://fetcher:8080/render-docx',
-      json: true, timeout: 60000, encoding: 'arraybuffer',
-      body: { template: Buffer.from(tpl).toString('base64'), data },
+      // json:false so the RESPONSE stays binary — the previous json:true turned the
+      // rendered .docx into a { type: 'Buffer', data: [...] } envelope that was then
+      // written to SharePoint as the file itself. The request body has to be
+      // stringified by hand as a result: json:true was doing both jobs.
+      json: false, timeout: 60000, encoding: 'arraybuffer',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ template: toBuf(tpl).toString('base64'), data }),
     });
 
     // --- filing -------------------------------------------------------------
@@ -1307,15 +1328,56 @@ for (const cand of candidates) {
     // Failures are collected rather than thrown: a bad write should not cost the
     // draft email. The card is the one thing gated on a clean run.
     const failures = [];
+    // Uploads go through Node's https module, not the n8n helper.
+    //
+    // A Buffer is an object, and the helper JSON.stringify()s an object body even
+    // with json:false — so every .docx we wrote was the text
+    // {"type":"Buffer","data":[80,75,3,4,...]} rather than the file. It uploads
+    // fine, SharePoint stores it happily, and Word then reports "unreadable
+    // content", which reads as a broken template or a permissions problem. The
+    // files written by graph/run-meeting-once.js were intact throughout, because
+    // that path uses plain fetch — that difference is what identified it.
+    //
+    // https.request writes the bytes verbatim, so there is nothing left to
+    // misinterpret them.
+    const https = require('https');
+    const putBinary = (urlStr, buf, type) => new Promise((resolve, reject) => {
+      const u = new URL(urlStr);
+      const req = https.request({
+        method: 'PUT', hostname: u.hostname, path: u.pathname + u.search,
+        headers: {
+          Authorization: 'Bearer ' + TOKEN,
+          'Content-Type': type,
+          'Content-Length': buf.length,
+        },
+        timeout: 120000,
+      }, res => {
+        const chunks = [];
+        res.on('data', c => chunks.push(c));
+        res.on('end', () => {
+          const text = Buffer.concat(chunks).toString('utf8');
+          if (res.statusCode >= 400) return reject(new Error('upload ' + res.statusCode + ': ' + text.slice(0, 200)));
+          try { resolve(JSON.parse(text)); } catch (e) { resolve({}); }
+        });
+      });
+      req.on('timeout', () => req.destroy(new Error('upload timed out')));
+      req.on('error', reject);
+      req.end(buf);
+    });
+
     const put = async (driveId, p, body, type) => {
       try {
-        const r = await call('file-upload', {
-          method: 'PUT', url: G + '/drives/' + driveId + '/root:/' + encodeURI(p) + ':/content',
-          headers: { Authorization: 'Bearer ' + TOKEN, 'Content-Type': type },
-          body, json: false, timeout: 120000,
-        });
-        return typeof r === 'string' ? JSON.parse(r) : r;
-      } catch (err) { failures.push(p); return {}; }
+        const buf = toBuf(body);
+        // A .docx is a zip. If what we are about to write is not one, the render
+        // stage produced something else and writing it would recreate the exact
+        // fault above — fail loudly instead.
+        if (/\.docx$/i.test(p) && buf.slice(0, 4).toString('hex') !== '504b0304') {
+          throw new Error('refusing to upload ' + p + ': not a zip (docx), starts '
+            + buf.slice(0, 8).toString('hex'));
+        }
+        return await putBinary(
+          G + '/drives/' + driveId + '/root:/' + encodeURI(p) + ':/content', buf, type);
+      } catch (err) { failures.push(p + ' — ' + err.message); return {}; }
     };
 
     const chSite = await graph('/sites/' + CHANNEL_SITE);
@@ -1346,12 +1408,13 @@ for (const cand of candidates) {
     const chTr = await put(CH, folder + '/Transcript.vtt', text, 'text/vtt');
     const chSum = await put(CH, folder + '/Summary.docx', summaryDoc, DOCX);
     await put(CH, folder + '/Transcript.docx', transcriptDoc, DOCX);
-    await put(DRIVE, arcMin, Buffer.from(docx), DOCX);
-    const chMin = await put(CH, folder + '/Minutes.docx', Buffer.from(docx), DOCX);
+    await put(DRIVE, arcMin, toBuf(docx), DOCX);
+    const chMin = await put(CH, folder + '/Minutes.docx', toBuf(docx), DOCX);
 
     // SharePoint has no preview handler for .vtt, so the readable rendition is
     // what the card links to. Conversion is best effort and the button falls back;
     // the filled minutes in particular are refused by the Word export service.
+    let pdfBuf = null;
     const toPdf = async (src, dst) => {
       try {
         const raw = await call('pdf-convert', {
@@ -1359,7 +1422,10 @@ for (const cand of candidates) {
           url: G + '/drives/' + CH + '/root:/' + encodeURI(src) + ':/content?format=pdf',
           headers: { Authorization: 'Bearer ' + TOKEN }, encoding: 'arraybuffer', timeout: 120000,
         });
-        const b = Buffer.from(raw);
+        const b = toBuf(raw);
+        // Kept so the minutes PDF can also be attached to the email — the same
+        // bytes, rather than downloading what we just uploaded.
+        if (/Minutes\.pdf$/.test(dst)) pdfBuf = b;
         // The service answers 200 with a JSON error body on some inputs, so trust
         // the magic bytes rather than the status code.
         if (b.slice(0, 5).toString('latin1') !== '%PDF-') return {};
@@ -1413,13 +1479,31 @@ for (const cand of candidates) {
       urls: { folder: chFolder.webUrl || '', minutes: chMin.webUrl || '' },
     });
 
+    // Who actually receives it.
+    //
+    // MEETING_REPORT_RECIPIENT set  -> the message is SENT, to that address only.
+    // MEETING_REPORT_RECIPIENT unset -> it stays a draft addressed to the people
+    //                                   who spoke, for someone to review and send.
+    //
+    // Sending only to Brent is deliberate: he wants it in his inbox rather than
+    // having to open a draft, but nothing reaches an external attendee without a
+    // person deciding to forward it. Clearing the variable restores the review
+    // step everywhere, which is why the behaviour hangs off configuration rather
+    // than being written into the code path.
+    const SEND_TO = ($env.MEETING_REPORT_RECIPIENT || '').trim();
+    const to = SEND_TO ? [SEND_TO] : recipients;
+
     const draft = await graph('/users/' + me.id + '/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: {
         subject: email.subject,
         body: { contentType: 'HTML', content: email.html },
-        toRecipients: recipients.map(a => ({ emailAddress: { address: a } })),
+        toRecipients: to.map(a => ({ emailAddress: { address: a } })),
+        // Who was in the room, recorded on the message itself so a forward does
+        // not have to be reconstructed from the minutes.
+        replyTo: recipients.length
+          ? recipients.map(a => ({ emailAddress: { address: a } })) : undefined,
       },
     });
 
@@ -1427,7 +1511,7 @@ for (const cand of candidates) {
     // anything larger needs an upload session, and the minutes have never come
     // close — so a big file falls back to the SharePoint link already in the body
     // rather than failing the run over an attachment.
-    const docxBuf = Buffer.from(docx);
+    const docxBuf = toBuf(docx);
     if (docxBuf.length < 3000000) {
       await graph('/users/' + me.id + '/messages/' + draft.id + '/attachments', {
         method: 'POST',
@@ -1436,9 +1520,42 @@ for (const cand of candidates) {
           '@odata.type': '#microsoft.graph.fileAttachment',
           name: 'Minutes.docx',
           contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          contentBytes: Buffer.from(docxBuf).toString('base64'),
+          contentBytes: docxBuf.toString('base64'),
         },
       });
+    }
+
+    // The PDF too, when the conversion produced one — it previews on a phone
+    // without Word, which is how this actually gets read.
+    if (pdfBuf && pdfBuf.length && pdfBuf.length < 3000000) {
+      try {
+        await graph('/users/' + me.id + '/messages/' + draft.id + '/attachments', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: {
+            '@odata.type': '#microsoft.graph.fileAttachment',
+            name: 'Minutes.pdf',
+            contentType: 'application/pdf',
+            contentBytes: pdfBuf.toString('base64'),
+          },
+        });
+      } catch (e) { /* the Word copy is attached; a missing preview is not a failure */ }
+    }
+
+    // Send only when a recipient is configured. The attachments have to be on the
+    // message before this, because a sent message cannot be added to.
+    let sentAt = null;
+    if (SEND_TO) {
+      try {
+        await graph('/users/' + me.id + '/messages/' + draft.id + '/send', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: {},
+        });
+        sentAt = new Date().toISOString();
+      } catch (e) {
+        // A record that exists but was not announced is recoverable; losing the
+        // record over a mail failure is not.
+        failures.push('send — ' + e.message);
+      }
     }
 
     // --- channel card -------------------------------------------------------
@@ -1513,7 +1630,11 @@ for (const cand of candidates) {
       model: MODEL,
       error: null,
       folder_url: chFolder.webUrl || null,
-      minutes_url: (pdfMin.webUrl || chMin.webUrl) || null,
+      minutes_url: chMin.webUrl || null,
+      minutes_pdf_url: pdfMin.webUrl || null,
+      summary_pdf_url: pdfSum.webUrl || null,
+      transcript_pdf_url: pdfTr.webUrl || null,
+      sent_at: sentAt,
       summary_url: (pdfSum.webUrl || chSum.webUrl) || null,
       transcript_url: (pdfTr.webUrl || chTr.webUrl) || null,
       posted_at: postedAt,
@@ -1608,17 +1729,20 @@ SELECT 'participant', name, company, email, aliases FROM participants`,
           query: `INSERT INTO meeting_minutes
   (meeting_id, subject, organiser_upn, started_at, ended_at, attendees, status,
    transcript_path, minutes_path, draft_message_id, extracted, model, error,
-   folder_url, minutes_url, summary_url, transcript_url, posted_at, post_error)
+   folder_url, minutes_url, summary_url, transcript_url, posted_at, post_error,
+   minutes_pdf_url, summary_pdf_url, transcript_pdf_url, sent_at)
 SELECT meeting_id, subject, organiser_upn, started_at, ended_at,
        coalesce(attendees, '{}'), status::minutes_status,
        transcript_path, minutes_path, draft_message_id, extracted, model, error,
-       folder_url, minutes_url, summary_url, transcript_url, posted_at, post_error
+       folder_url, minutes_url, summary_url, transcript_url, posted_at, post_error,
+       minutes_pdf_url, summary_pdf_url, transcript_pdf_url, sent_at
 FROM json_to_recordset($1::json) AS x(
   meeting_id text, subject text, organiser_upn text,
   started_at timestamptz, ended_at timestamptz, attendees text[], status text,
   transcript_path text, minutes_path text, draft_message_id text,
   extracted jsonb, model text, error text,
   folder_url text, minutes_url text, summary_url text, transcript_url text,
+  minutes_pdf_url text, summary_pdf_url text, transcript_pdf_url text, sent_at timestamptz,
   posted_at timestamptz, post_error text)
 -- The unique index on meeting_id is PARTIAL (WHERE meeting_id IS NOT NULL), which
 -- lets several rows carry a null id. Postgres will not match a partial index unless
@@ -1629,6 +1753,10 @@ ON CONFLICT (meeting_id) WHERE meeting_id IS NOT NULL DO UPDATE SET
   draft_message_id = EXCLUDED.draft_message_id, extracted = EXCLUDED.extracted,
   error = EXCLUDED.error, folder_url = EXCLUDED.folder_url,
   minutes_url = EXCLUDED.minutes_url, summary_url = EXCLUDED.summary_url,
+  minutes_pdf_url = EXCLUDED.minutes_pdf_url,
+  summary_pdf_url = EXCLUDED.summary_pdf_url,
+  transcript_pdf_url = EXCLUDED.transcript_pdf_url,
+  sent_at = EXCLUDED.sent_at,
   transcript_url = EXCLUDED.transcript_url,
   -- A re-run that fails to post must not erase the timestamp of one that did.
   posted_at = coalesce(EXCLUDED.posted_at, meeting_minutes.posted_at),

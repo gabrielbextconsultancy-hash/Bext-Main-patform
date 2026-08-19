@@ -4,23 +4,10 @@ import {
   type MeetingRow,
 } from '@/lib/queries';
 import { Card, DatabaseDown, Empty } from '@/components/ui';
+import { MeetingsTable, STAGES } from '@/components/MeetingsTable';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-
-/**
- * The six stages a meeting passes through, in order. Each reads a column the
- * workflow writes, so the strip reflects what actually happened rather than what
- * the workflow reported about itself.
- */
-const STAGES = [
-  { key: 'transcript', label: 'Transcript', of: (m: MeetingRow) => !!(m.transcript_path || m.transcript_url) },
-  { key: 'extract', label: 'Extraction', of: (m: MeetingRow) => m.has_extract },
-  { key: 'minutes', label: 'Minutes', of: (m: MeetingRow) => !!(m.minutes_path || m.minutes_url) },
-  { key: 'filing', label: 'Filing', of: (m: MeetingRow) => !!m.folder_url },
-  { key: 'draft', label: 'Draft email', of: (m: MeetingRow) => !!m.draft_message_id },
-  { key: 'card', label: 'Channel card', of: (m: MeetingRow) => !!m.posted_at },
-] as const;
 
 export default async function MeetingsPage() {
   const [meetings, readiness] = await Promise.all([getMeetings(), getMeetingReadiness()]);
@@ -106,54 +93,8 @@ export default async function MeetingsPage() {
         )}
       </Card>
 
-      <Card title="Meetings" subtitle="Newest first. Documents open in SharePoint.">
-        {meetings.length === 0 ? (
-          <Empty>Nothing yet.</Empty>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="text-[11px] uppercase tracking-wider text-ink-400">
-                <tr className="border-b border-ink-800">
-                  <th className="py-2 pr-3 font-medium">Meeting</th>
-                  <th className="py-2 pr-3 font-medium">When</th>
-                  <th className="py-2 pr-3 font-medium">Organiser</th>
-                  <th className="py-2 pr-3 font-medium">Status</th>
-                  <th className="py-2 pr-3 font-medium">Stages</th>
-                  <th className="py-2 font-medium">Documents</th>
-                </tr>
-              </thead>
-              <tbody>
-                {meetings.map((m) => (
-                  <tr key={m.meeting_id} className="border-b border-ink-800/60 align-top">
-                    <td className="py-3 pr-3 text-ink-100">
-                      {m.subject}
-                      {m.error && <p className="mt-1 text-[11px] text-blocked">{m.error}</p>}
-                      {m.post_error && <p className="mt-1 text-[11px] text-warn">card: {m.post_error}</p>}
-                    </td>
-                    <td className="py-3 pr-3 tnum text-ink-300">{when(m.started_at)}</td>
-                    <td className="py-3 pr-3 text-ink-300">{short(m.organiser_upn)}</td>
-                    <td className="py-3 pr-3">
-                      <Pill status={m.status} />
-                    </td>
-                    <td className="py-3 pr-3">
-                      <span className="tnum text-ink-300">
-                        {STAGES.filter((s) => s.of(m)).length}/{STAGES.length}
-                      </span>
-                    </td>
-                    <td className="py-3">
-                      <div className="flex flex-wrap gap-1.5">
-                        <Doc href={m.folder_url} label="Folder" />
-                        <Doc href={m.minutes_url} label="Minutes" />
-                        <Doc href={m.summary_url} label="Summary" />
-                        <Doc href={m.transcript_url} label="Transcript" />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+      <Card title="Meetings" subtitle="Search, filter and sort. Documents open in SharePoint.">
+        {meetings.length === 0 ? <Empty>Nothing yet.</Empty> : <MeetingsTable rows={meetings} />}
       </Card>
     </div>
   );

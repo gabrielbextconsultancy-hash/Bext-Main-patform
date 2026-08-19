@@ -245,6 +245,64 @@ check('R017', 'Graph helper applies Authorization after the opts spread', () => 
     : { ok: false, detail: 'spread overwrites headers — Authorization is dropped' };
 });
 
+// ── R020 ─ a binary response must not be JSON-parsed ────────────────────────
+// json:true turns a rendered .docx into { type: 'Buffer', data: [...] }.
+// Buffer.from() on that object does not throw — it yields the TEXT of the
+// envelope, which was uploaded as Minutes.docx. Word then reports "unreadable
+// content", which reads as a broken template or a SharePoint permission problem.
+check('R020', 'binary fetches are not JSON-parsed', () => {
+  const c = codeNodes(workflow('BEXT-Meeting-Intake')).map(n => n.parameters.jsCode).join('\n');
+  const bad = [];
+  const re = /await call\('([^']+)',\s*\{([\s\S]{0,320}?)\}\);/g;
+  let m;
+  while ((m = re.exec(c))) {
+    const [, label, body] = m;
+    if (/encoding:\s*'arraybuffer'/.test(body) && /json:\s*true/.test(body)) bad.push(label);
+  }
+  if (bad.length) return { ok: false, detail: bad.join(', ') + ' parse a binary body as JSON' };
+  if (!/const toBuf =/.test(c)) return { ok: false, detail: 'no toBuf normaliser' };
+  if (/Buffer\.from\(docx\)|Buffer\.from\(raw\)/.test(c))
+    return { ok: false, detail: 'a binary buffer bypasses toBuf' };
+  return { ok: true, detail: 'normalised' };
+});
+
+// ── R021 ─ a Buffer body must not be handed to the HTTP helper ──────────────
+// A Buffer is an object, and the helper JSON.stringify()s an object body even
+// with json:false. Every .docx written through it was the text
+// {"type":"Buffer","data":[...]} instead of the file — stored happily, opened by
+// Word as "unreadable content". Uploads use https.request, which writes bytes.
+check('R021', 'binary uploads bypass the n8n HTTP helper', () => {
+  const c = codeNodes(workflow('BEXT-Meeting-Intake')).map(n => n.parameters.jsCode).join('\n');
+  if (/call\('file-upload'/.test(c))
+    return { ok: false, detail: 'uploads still go through the helper — Buffers will be stringified' };
+  if (!/https\.request/.test(c)) return { ok: false, detail: 'no https.request upload path' };
+  if (!/504b0304/.test(c)) return { ok: false, detail: 'no zip-magic guard before writing a .docx' };
+  return { ok: true, detail: 'https.request + zip guard' };
+});
+
+// ── R022 ─ a require() in a Code node needs the sandbox to allow it ─────────
+// The Code sandbox only exposes builtins listed in NODE_FUNCTION_ALLOW_BUILTIN.
+// Uploads use https.request, and with the container set to "crypto,url" every
+// meeting failed at runtime with "Module 'https' is disallowed" — deployed
+// cleanly, broke only when it ran.
+check('R022', 'every require() in a Code node is allowed by the sandbox', () => {
+  const allowed = (process.env.NODE_FUNCTION_ALLOW_BUILTIN || 'crypto,url,https')
+    .split(',').map(s => s.trim()).filter(Boolean);
+  const missing = new Set();
+  for (const f of fs.readdirSync(path.join(ROOT, 'n8n/workflows'))) {
+    if (!f.endsWith('.json')) continue;
+    const wf = JSON.parse(read(`n8n/workflows/${f}`));
+    for (const n of codeNodes(wf)) {
+      for (const m of n.parameters.jsCode.matchAll(/require\(['"]([^'"]+)['"]\)/g)) {
+        if (!allowed.includes(m[1])) missing.add(`${f}:${n.name} needs ${m[1]}`);
+      }
+    }
+  }
+  return missing.size
+    ? { ok: false, detail: [...missing].join('; ') + ` (allowed: ${allowed.join(',')})` }
+    : { ok: true, detail: `allowed: ${allowed.join(',')}` };
+});
+
 check('R012', 'required env is set locally', () => {
   const need = ['MS_TENANT_ID', 'MS_CLIENT_ID', 'MS_CLIENT_SECRET', 'MS_SENDER_UPN',
                 'MEETING_HOSTS', 'TEAMS_MEETING_WEBHOOK_URL', 'N8N_WEBHOOK_CREDENTIAL_ID'];

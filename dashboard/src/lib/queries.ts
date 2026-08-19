@@ -317,6 +317,10 @@ export interface MeetingRow {
   minutes_url: string | null;
   summary_url: string | null;
   transcript_url: string | null;
+  minutes_pdf_url: string | null;
+  summary_pdf_url: string | null;
+  transcript_pdf_url: string | null;
+  sent_at: string | null;
   has_extract: boolean;
   updated_at: string;
 }
@@ -332,6 +336,7 @@ export const getMeetings = () =>
             transcript_path, minutes_path, draft_message_id,
             posted_at::text, post_error, error,
             folder_url, minutes_url, summary_url, transcript_url,
+            minutes_pdf_url, summary_pdf_url, transcript_pdf_url, sent_at::text,
             (extracted IS NOT NULL AND extracted::text <> '{}') AS has_extract,
             updated_at::text
        FROM meeting_minutes
@@ -343,6 +348,7 @@ export interface MeetingReadiness {
   drafted: number;
   failed: number;
   posted: number;
+  sent: number;
   participants: number;
   last_success: string | null;
   last_attempt: string | null;
@@ -355,6 +361,7 @@ export const getMeetingReadiness = async () => {
             count(*) FILTER (WHERE status = 'drafted')::int            AS drafted,
             count(*) FILTER (WHERE status = 'failed')::int             AS failed,
             count(*) FILTER (WHERE posted_at IS NOT NULL)::int         AS posted,
+            count(*) FILTER (WHERE sent_at IS NOT NULL)::int            AS sent,
             (SELECT count(*)::int FROM participants)                   AS participants,
             max(updated_at) FILTER (WHERE status <> 'failed')::text    AS last_success,
             max(updated_at)::text                                      AS last_attempt

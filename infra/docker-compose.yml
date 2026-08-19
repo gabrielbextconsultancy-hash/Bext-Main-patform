@@ -134,13 +134,14 @@ services:
       # Calendars the meeting workflow polls. Whoever hosts a meeting owns its
       # transcript, so this is not just the automation account.
       MEETING_HOSTS: ${MEETING_HOSTS}
+      MEETING_REPORT_RECIPIENT: ${MEETING_REPORT_RECIPIENT}
 
       # Code nodes may not require Node builtins unless named here. The ingest
       # parser hashes article content with crypto to deduplicate stories that are
       # syndicated across several sources under different URLs.
       # crypto hashes article content to deduplicate syndicated stories; url
       # provides the URL constructor, which the sandbox does not expose globally.
-      NODE_FUNCTION_ALLOW_BUILTIN: crypto,url
+      NODE_FUNCTION_ALLOW_BUILTIN: crypto,url,https
 
       # Code nodes are denied $env by default, which silently killed the analysis
       # workflow on every tick: it loaded 40 articles then died reading

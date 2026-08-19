@@ -251,3 +251,65 @@ so the oldest meeting posted last.
 
 **Fix:** sort candidates by `createdDateTime` ascending before processing, so cards land in the
 order the meetings happened.
+
+---
+
+## R020 — a binary response parsed as JSON
+
+`json: true` on the render call turned the returned .docx into
+`{"type":"Buffer","data":[80,75,3,4,...]}`. `Buffer.from()` on that object does
+not throw — it yields the **text** of the envelope.
+
+**Fix:** `json: false` for binary responses (the request body then needs
+stringifying by hand, because `json: true` was doing both jobs), plus a `toBuf()`
+normaliser on every binary body.
+
+**Guard:** R020.
+
+---
+
+## R021 — a Buffer body handed to the HTTP helper
+
+**Cost:** every `.docx` the pipeline ever wrote. Word opened them as *"unreadable
+content"*, which read as a broken template or a SharePoint permissions problem.
+
+A Buffer is an object, and the helper `JSON.stringify()`s an object body **even
+with `json: false`** — so the file written to SharePoint was the text of a Buffer
+envelope rather than the document. It uploaded fine and stored fine; only Word
+disagreed.
+
+What identified it: `Summary.docx` and `Transcript.docx` were corrupt too, and
+those never touch the renderer — while the two files written by
+`graph/run-meeting-once.js` were intact throughout, because that path uses plain
+`fetch`. The common factor was the upload, not the download.
+
+**Fix:** uploads use `https.request`, which writes bytes verbatim. Plus a guard
+that refuses to upload a `.docx` whose first four bytes are not `504b0304`, so
+this fails loudly instead of silently producing a file nobody can open.
+
+**Guard:** R021.
+
+**Recovery:** the real document was recoverable from inside the envelope. 19 files
+across five meetings, in both the channel and the archive, were repaired in place
+— same item ids, so every existing card link kept working.
+
+---
+
+## R022 — a require() the sandbox does not allow
+
+The fix for R021 used `require('https')`, and the container was set to
+`NODE_FUNCTION_ALLOW_BUILTIN=crypto,url`. Every meeting then failed at runtime
+with `Module 'https' is disallowed [line 1128]` — deployed cleanly, broke only
+when it ran, and was visible on the dashboard rather than in any check.
+
+**Fix:** `crypto,url,https`, in the repo compose **and** on the VPS.
+
+**Guard:** R022 — cross-references every `require()` in a generated Code node
+against the allowed list.
+
+### The pattern worth remembering
+
+Three of these — R020, R021, R022 — were introduced *while fixing* the one before
+it. Each fix was correct in isolation and wrong in the running environment. The
+check that caught the last one was the dashboard, which is the argument for
+building the monitoring view early rather than last.
