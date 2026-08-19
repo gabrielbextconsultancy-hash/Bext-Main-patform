@@ -33,6 +33,11 @@ const DOCX_SRC = fs
   .replace(/^module\.exports\s*=.*$/m, '');
 
 // The tested card builder, minus its export line, for embedding in a Code node.
+// The client's follow-up email format, embedded the same way as the card builder.
+const EMAIL_SRC = fs
+  .readFileSync(path.join(__dirname, 'lib', 'meeting-email.js'), 'utf8')
+  .replace(/^module\.exports\s*=.*$/m, '');
+
 const CARD_SRC = fs
   .readFileSync(path.join(__dirname, 'lib', 'meeting-card.js'), 'utf8')
   .replace(/^module\.exports\s*=.*$/m, '');
@@ -990,11 +995,26 @@ const WEBHOOK = $env.TEAMS_MEETING_WEBHOOK_URL;
 ${DOCX_SRC}
 // --- shared card builder, generated from n8n/lib/meeting-card.js — do not edit here ---
 ${CARD_SRC}
+// --- shared email builder, generated from n8n/lib/meeting-email.js — do not edit here ---
+// Wrapped in its own scope: the card builder and the email builder both define
+// SUMMARY_MAX, clip and isClosed, and inlining them side by side in one scope is
+// a redeclaration error. Isolating here beats renaming things in a file that has
+// its own tests and its own reader.
+const buildMeetingEmail = (function () {
+${EMAIL_SRC}
+  return buildMeetingEmail;
+})();
 // --- end shared code ---
 
 // Meetings already minuted, passed down from the database. Re-filing a meeting
 // every fifteen minutes would bury the reviewer in duplicates.
-const done = new Set($input.all().map(i => i.json.meeting_id).filter(Boolean));
+// One input carrying two kinds of row — see the query on the node before this.
+const inputRows = $input.all().map(i => i.json);
+const done = new Set(
+  inputRows.filter(r => r.kind === 'done').map(r => r.a).filter(Boolean));
+const PARTICIPANTS = inputRows
+  .filter(r => r.kind === 'participant')
+  .map(r => ({ name: r.a, company: r.b, email: r.c, aliases: r.d || [] }));
 
 const auth = await http({
   method: 'POST',
@@ -1026,11 +1046,42 @@ const call = async (label, opts) => {
   }
 };
 
-const graph = (path, opts = {}) => http({
-  url: G + path, json: true, timeout: 60000,
-  headers: { Authorization: 'Bearer ' + TOKEN, ...(opts.headers || {}) },
-  ...opts,
-});
+// graph() is used a dozen times and, unlabelled, every one of its failures reads
+// "Request failed with status code 401" with no hint which endpoint. That cost a
+// full debugging cycle: the labelled call() wrappers went on the obvious suspects
+// and the real failure turned out to be somewhere graph() was used instead.
+const graph = async (path, opts = {}) => {
+  try {
+    return await graphRaw(path, opts);
+  } catch (e) {
+    const st = e.statusCode || e.status || (e.response && e.response.status) || '?';
+    const b = (e.response && (e.response.body || e.response.data)) || e.message || '';
+    const method = (opts.method || 'GET');
+    throw new Error('graph ' + method + ' ' + path.split('?')[0] + ' -> ' + st + ': '
+      + String(typeof b === 'string' ? b : JSON.stringify(b)).slice(0, 200));
+  }
+};
+
+const graphRaw = (path, opts = {}) => {
+  const url = G + path;
+  const headers = { Authorization: 'Bearer ' + TOKEN, ...(opts.headers || {}) };
+
+  // opts is spread BEFORE headers, deliberately.
+  //
+  // The other order — headers first, then ...opts — silently drops Authorization
+  // on any call that passes headers of its own. The draft creation passes a
+  // Content-Type, so it lost its token and Graph answered 401, while every GET
+  // (which passes no headers) kept working. That mismatch is why this read as
+  // "Microsoft is rejecting us" for hours: it was our own object spread, not
+  // permissions, not licensing, not the n8n HTTP client.
+  //
+  // headers already merges opts.headers, so putting it last loses nothing.
+  return http({
+    url: url, json: true, timeout: 60000,
+    ...opts,
+    headers: headers,
+  });
+};
 
 // The meetings API rejects a UPN and requires the object id, unlike mail and
 // calendar which accept either.
@@ -1060,10 +1111,12 @@ const DRIVE = (drives.value.find(d => d.name === 'Documents') || drives.value[0]
 const ORGANISERS = ($env.MEETING_HOSTS || UPN)
   .split(',').map(function (s) { return s.trim(); }).filter(Boolean);
 
-// Wider than the fifteen-minute cadence on purpose: Teams takes minutes to
-// publish, and a failed run should pick the meeting up next tick rather than
-// lose it. meeting_minutes dedupes on meeting_id, so overlap is free.
-const WINDOW_MS = 86400000;
+// Seven days, not one. A day was too tight in practice: the 18 August weekly
+// aged out of range while the pipeline was still being repaired, and a meeting
+// that falls out of the window is never retried — it needs a manual replay.
+// Re-processing costs nothing, because the exclusion list already holds every
+// meeting that produced something, so only unprocessed and failed ones return.
+const WINDOW_MS = Number($env.MEETING_LOOKBACK_HOURS || 168) * 3600000;
 
 const candidates = [];
 for (const upn of ORGANISERS) {
@@ -1084,6 +1137,14 @@ for (const upn of ORGANISERS) {
     });
   }
 }
+
+// Oldest first, so the cards post in the order the meetings happened and the most
+// recent meeting is the most recent message in the channel. getAllTranscripts
+// returns newest first, so a backfill of several meetings without this posts the
+// oldest one last and the channel reads backwards.
+candidates.sort(function (a, b) {
+  return new Date(a.createdDateTime).getTime() - new Date(b.createdDateTime).getTime();
+});
 
 const out = [];
 
@@ -1106,36 +1167,49 @@ for (const cand of candidates) {
     const attendees = (parts.attendees || [])
       .map(function (a) { return (a.upn || (a.identity && a.identity.user && a.identity.user.id) || ''); })
       .filter(Boolean);
+    // A recurring series reports the SERIES start, not the instance that was just
+    // held: the 18 August weekly filed itself as 2026-07-28, three weeks out. The
+    // transcript is the only per-instance timestamp available, and it is written
+    // minutes after the meeting ends — so take the DATE from the transcript and
+    // keep the TIME OF DAY from the meeting, which a weekly series does hold
+    // correctly. A one-off meeting lands on the same date either way, so this is
+    // safe to apply unconditionally rather than trying to detect recurrence.
+    const instanceStart = function (seriesIso, transcriptIso) {
+      const s = new Date(seriesIso), t = new Date(transcriptIso);
+      if (isNaN(s.getTime()) || isNaN(t.getTime())) return seriesIso;
+      const d = new Date(t);
+      d.setUTCHours(s.getUTCHours(), s.getUTCMinutes(), s.getUTCSeconds(), 0);
+      // The transcript lands after the end, so a meeting that ran past midnight UTC
+      // would otherwise be dated a day late. Pull back when that happens.
+      if (d.getTime() > t.getTime()) d.setUTCDate(d.getUTCDate() - 1);
+      return d.toISOString();
+    };
+    const startIso = instanceStart(meeting.startDateTime, cand.createdDateTime);
+    const durationMs = Math.max(0,
+      new Date(meeting.endDateTime).getTime() - new Date(meeting.startDateTime).getTime());
+    const endIso = new Date(new Date(startIso).getTime() + durationMs).toISOString();
+
     ev = {
       subject: meeting.subject || 'Meeting',
-      start: { dateTime: noZ(meeting.startDateTime) },
-      end: { dateTime: noZ(meeting.endDateTime) },
+      start: { dateTime: noZ(startIso) },
+      end: { dateTime: noZ(endIso) },
       organizer: { emailAddress: { address: cand.organiserUpn, name: cand.organiserName || '' } },
       attendees: attendees,
+      seriesStart: meeting.startDateTime,
     };
   }
 
   try {
     // --- transcript ---------------------------------------------------------
-    // Ask for VTT with an Accept header rather than the ?$format= query parameter.
-    // The query form returns 200 to a plain client but 401 through n8n's HTTP
-    // helper; Accept is the documented negotiation and behaves the same in both.
-    // returnFullResponse + ignoreHttpStatusErrors so a failure records its real
-    // status and body instead of a bare "Request failed with status code 401".
-    // Keep the option set identical to graph(), which demonstrably works against
-    // the same host with the same token — only json differs, because the body is
-    // VTT rather than JSON. Both ?$format=text/vtt and Accept: text/vtt return 200
-    // with no redirect when called from a plain client, so anything fancier here
-    // (encoding, returnFullResponse, ignoreHttpStatusErrors) is n8n-specific
-    // surface that only adds ways to fail; ignoreHttpStatusErrors in particular is
-    // an HTTP Request node option the Code helper silently ignores.
+    // json: false because the body is VTT, not JSON. ?$format=text/vtt and an
+    // Accept header are equivalent — both return 200 text/vtt — and the query
+    // form is kept because it is what the Graph docs show.
     const vtt = await call('transcript-content', {
       method: 'GET',
       url: G + '/users/' + cand.organiserId + '/onlineMeetings/' + cand.meetingId
          + '/transcripts/' + cand.transcriptId + '/content?$format=text/vtt',
       headers: { Authorization: 'Bearer ' + TOKEN, Accept: 'text/vtt' },
-      json: false,
-      timeout: 120000,
+      json: false, timeout: 120000,
     });
     const rawVtt = typeof vtt === 'string' ? vtt : String(vtt);
 
@@ -1299,24 +1373,70 @@ for (const cand of candidates) {
     // Created as a draft and never sent. The brief is explicit that nothing
     // leaves without review, and a draft enforces that structurally rather than
     // by convention.
-    const lines = ['Thanks all for the ' + data.program + '.', '', String(x.summary || ''), '']
-      .concat((x.decisions || []).length ? ['Decisions:'] : [])
-      .concat((x.decisions || []).map(d => '  - ' + d))
-      .concat((x.actions || []).length ? ['', 'Actions:'] : [])
-      .concat((x.actions || []).map(a => '  - ' + a.title + ' (' + (a.owner || 'Unassigned')
-        + (a.due ? ', due ' + a.due : '') + ')'))
-      .concat(['', 'Minutes are attached to the meeting record in SharePoint.', '', 'Regards']);
+    // Recipients: people who were invited AND actually spoke. The meeting's
+    // participant list is the only source of addresses — a transcript gives names
+    // alone — and intersecting with the speakers keeps a silent invitee off a
+    // client-visible email. The organiser is always included, because they own the
+    // meeting whether or not they said anything.
+    const spoke = (x.attendees || [])
+      .map(a => String(a.name || '').toLowerCase().trim())
+      .filter(Boolean);
+    const nameOf = addr => {
+      const p = PARTICIPANTS.find(q =>
+        String(q.email || '').toLowerCase() === String(addr).toLowerCase());
+      return p ? String(p.name).toLowerCase() : String(addr).split('@')[0].toLowerCase();
+    };
+    const organiser = ev.organizer?.emailAddress?.address || '';
+    const recipients = [];
+    for (const addr of (ev.attendees || []).concat(organiser ? [organiser] : [])) {
+      if (!addr || !addr.includes('@')) continue;
+      if (recipients.some(r => r.toLowerCase() === addr.toLowerCase())) continue;
+      const n = nameOf(addr);
+      const said = spoke.some(s => s === n || s.split(' ')[0] === n.split(' ')[0]);
+      if (said || addr.toLowerCase() === organiser.toLowerCase()) recipients.push(addr);
+    }
+
+    const email = buildMeetingEmail({
+      subject: ev.subject,
+      startIso: ev.start.dateTime + 'Z',
+      timeZone: TZ,
+      summary: x.summary || '',
+      decisions: x.decisions || [],
+      projects: x.projects || [],
+      safety: x.safety || [],
+      finance: x.finance || [],
+      actions: x.actions || [],
+      participants: PARTICIPANTS,
+      urls: { folder: chFolder.webUrl || '', minutes: chMin.webUrl || '' },
+    });
 
     const draft = await graph('/users/' + me.id + '/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: {
-        subject: (ev.subject || 'Meeting') + ' — draft minutes and actions',
-        body: { contentType: 'Text', content: lines.join('\\n') },
-        toRecipients: ev.organizer?.emailAddress?.address
-          ? [{ emailAddress: { address: ev.organizer.emailAddress.address } }] : [],
+        subject: email.subject,
+        body: { contentType: 'HTML', content: email.html },
+        toRecipients: recipients.map(a => ({ emailAddress: { address: a } })),
       },
     });
+
+    // "Please see attached minutes" has to be true. Under 3 MB goes inline;
+    // anything larger needs an upload session, and the minutes have never come
+    // close — so a big file falls back to the SharePoint link already in the body
+    // rather than failing the run over an attachment.
+    const docxBuf = Buffer.from(docx);
+    if (docxBuf.length < 3000000) {
+      await graph('/users/' + me.id + '/messages/' + draft.id + '/attachments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: {
+          '@odata.type': '#microsoft.graph.fileAttachment',
+          name: 'Minutes.docx',
+          contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          contentBytes: Buffer.from(docxBuf).toString('base64'),
+        },
+      });
+    }
 
     // --- channel card -------------------------------------------------------
     // Graph publishes no application permission for posting a channel message, so
@@ -1449,8 +1569,23 @@ function meetingIntakeWorkflow() {
           operation: 'executeQuery',
           // Only the window the code looks at. The table grows forever; the
           // exclusion list should not.
-          query: `SELECT meeting_id FROM meeting_minutes
-WHERE created_at > now() - interval '3 days'`,
+          // Only meetings that actually produced something count as done. Including
+          // failed rows here means one transient failure retires the meeting for
+          // good: the row lands, the next tick sees it in the exclusion list, and
+          // the meeting is never attempted again. A permanently broken meeting will
+          // now retry every fifteen minutes, which is noisy but visible — and the
+          // three-day window bounds it.
+          // Two datasets in one node, tagged by `kind`. The Code node takes a
+          // single input, and a second Postgres node would have to fan in — this
+          // keeps the graph flat. `done` is the exclusion list; `participant`
+          // supplies the person → company mapping the follow-up email groups by.
+          query: `SELECT 'done' AS kind, meeting_id AS a, NULL::text AS b, NULL::text AS c,
+                         NULL::text[] AS d
+  FROM meeting_minutes
+ WHERE status <> 'failed'
+   AND created_at > now() - interval '3 days'
+UNION ALL
+SELECT 'participant', name, company, email, aliases FROM participants`,
           options: {},
         },
       },

@@ -211,6 +211,40 @@ check('R015', 'lookup nodes feeding a Code node set alwaysOutputData', () => {
   return bad.length ? { ok: false, detail: bad.join(', ') } : { ok: true, detail: 'guarded' };
 });
 
+// ── R016 ─ a failed row must not retire the meeting ─────────────────────────
+// The exclusion list is what stops re-filing the same minutes every tick. If it
+// also matches failed rows, the first failure is permanent: the row lands, the
+// next run treats the meeting as done, and it is never retried. Observed live —
+// exec 1881 discovered nothing because two failed rows excluded both meetings.
+check('R016', 'meeting exclusion list ignores failed rows', () => {
+  const wf = workflow('BEXT-Meeting-Intake');
+  const n = (wf.nodes || []).find(x => /processed meetings/i.test(x.name || ''));
+  if (!n) return { ok: false, detail: 'exclusion node not found' };
+  const q = (n.parameters && n.parameters.query) || '';
+  return /status\s*<>\s*'failed'|status\s*!=\s*'failed'|status\s+NOT\s+IN/i.test(q)
+    ? { ok: true, detail: 'failed rows retried' }
+    : { ok: false, detail: 'failed rows treated as done — meeting never retried' };
+});
+
+// ── R017 ─ an object spread must not clobber the auth header ────────────────
+// `{ headers, ...opts }` drops Authorization for any caller that passes headers
+// of its own. Every GET kept working (no headers), the draft POST did not, and
+// Graph answered 401 — which read as a permissions problem and cost most of a
+// day. The auth header must be applied LAST.
+check('R017', 'Graph helper applies Authorization after the opts spread', () => {
+  const c = codeNodes(workflow('BEXT-Meeting-Intake')).map(n => n.parameters.jsCode).join('\n');
+  // find the http({...}) that carries both a spread and a headers key
+  const m = c.match(/http\(\{[^}]*\.\.\.opts[^}]*\}\)/s) || c.match(/http\(\{[\s\S]{0,400}?\}\)/);
+  if (!m) return { ok: true, detail: 'no opts-spread call found' };
+  const block = m[0];
+  if (!/\.\.\.opts/.test(block)) return { ok: true, detail: 'no spread' };
+  const spreadAt = block.indexOf('...opts');
+  const headersAt = block.lastIndexOf('headers');
+  return headersAt > spreadAt
+    ? { ok: true, detail: 'headers applied after spread' }
+    : { ok: false, detail: 'spread overwrites headers — Authorization is dropped' };
+});
+
 check('R012', 'required env is set locally', () => {
   const need = ['MS_TENANT_ID', 'MS_CLIENT_ID', 'MS_CLIENT_SECRET', 'MS_SENDER_UPN',
                 'MEETING_HOSTS', 'TEAMS_MEETING_WEBHOOK_URL', 'N8N_WEBHOOK_CREDENTIAL_ID'];

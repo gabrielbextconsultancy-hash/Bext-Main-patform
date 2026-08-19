@@ -297,3 +297,68 @@ export const getScoredCount = async () => {
   );
   return rows?.[0]?.n ?? 0;
 };
+
+// ── Meeting pipeline ─────────────────────────────────────────────────────────
+
+export interface MeetingRow {
+  meeting_id: string;
+  subject: string;
+  organiser_upn: string | null;
+  started_at: string | null;
+  status: 'transcribed' | 'drafted' | 'failed';
+  attendee_count: number;
+  transcript_path: string | null;
+  minutes_path: string | null;
+  draft_message_id: string | null;
+  posted_at: string | null;
+  post_error: string | null;
+  error: string | null;
+  folder_url: string | null;
+  minutes_url: string | null;
+  summary_url: string | null;
+  transcript_url: string | null;
+  has_extract: boolean;
+  updated_at: string;
+}
+
+/**
+ * Every meeting the pipeline has seen. Ordered newest first — the reason anyone
+ * opens this page is to check the meeting they just had.
+ */
+export const getMeetings = () =>
+  tryQuery<MeetingRow>(
+    `SELECT meeting_id, subject, organiser_upn, started_at::text, status::text,
+            coalesce(array_length(attendees, 1), 0) AS attendee_count,
+            transcript_path, minutes_path, draft_message_id,
+            posted_at::text, post_error, error,
+            folder_url, minutes_url, summary_url, transcript_url,
+            (extracted IS NOT NULL AND extracted::text <> '{}') AS has_extract,
+            updated_at::text
+       FROM meeting_minutes
+      ORDER BY coalesce(started_at, created_at) DESC`
+  );
+
+export interface MeetingReadiness {
+  total: number;
+  drafted: number;
+  failed: number;
+  posted: number;
+  participants: number;
+  last_success: string | null;
+  last_attempt: string | null;
+}
+
+/** What the pipeline would have to work with right now. */
+export const getMeetingReadiness = async () => {
+  const rows = await tryQuery<MeetingReadiness>(
+    `SELECT count(*)::int                                              AS total,
+            count(*) FILTER (WHERE status = 'drafted')::int            AS drafted,
+            count(*) FILTER (WHERE status = 'failed')::int             AS failed,
+            count(*) FILTER (WHERE posted_at IS NOT NULL)::int         AS posted,
+            (SELECT count(*)::int FROM participants)                   AS participants,
+            max(updated_at) FILTER (WHERE status <> 'failed')::text    AS last_success,
+            max(updated_at)::text                                      AS last_attempt
+       FROM meeting_minutes`
+  );
+  return rows?.[0] ?? null;
+};

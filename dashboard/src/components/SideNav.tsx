@@ -16,6 +16,7 @@ const NAV = [
   { href: '/deliverables', label: 'Deliverables', hint: 'Brief coverage (live DB)' },
   { href: '/sources', label: 'Sources', hint: 'News source pipeline (live DB)' },
   { href: '/reports', label: 'Daily Report', hint: 'Send results & readiness (live DB)' },
+  { href: '/meetings', label: 'Meeting Report', hint: 'Pipeline & minutes (live DB)' },
 ];
 
 function Item({

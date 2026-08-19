@@ -1,7 +1,7 @@
 {
   "_comment": "Source of truth for \"BEXT — Meeting Report\". The live trigger URL is a secret and lives only in .env as TEAMS_MEETING_WEBHOOK_URL.",
   "environment": "Default-9eb458d1-317d-4aae-a9a3-bb68e430d701",
-  "flowId": "bbe06a8c-b747-851e-40e7-f1be6157edbc",
+  "flowId": "d6efce28-c2c4-89a1-386d-3bd4f71c63a0",
   "properties": {
     "displayName": "BEXT — Meeting Report",
     "state": "Started",
@@ -21,7 +21,7 @@
       "triggers": {
         "manual": {
           "type": "Request",
-          "kind": "Http",
+          "kind": "TeamsWebhook",
           "inputs": {
             "schema": {
               "type": "object",
@@ -44,7 +44,8 @@
                   }
                 }
               }
-            }
+            },
+            "triggerAuthenticationType": "Anonymous"
           }
         }
       },
@@ -63,9 +64,8 @@
               "location": "Channel",
               "body/recipient/groupId": "36840697-dbe5-4294-994d-7a043eef51ca",
               "body/recipient/channelId": "19:R7FciH4QRVZU7_7EVUg3CH_zCmSIHOoVxrRAM_nFeBA1@thread.tacv2",
-              "body/messageBody": "@{string(triggerBody()?['attachments'][0]['content'])}"
-            },
-            "authentication": "@parameters('$authentication')"
+              "body/messageBody": "@triggerBody()?['attachments'][0]['content']"
+            }
           }
         }
       }

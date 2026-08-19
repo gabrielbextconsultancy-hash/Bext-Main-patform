@@ -162,3 +162,92 @@ point of view nothing had changed. That looks like success.
   `…-Meeting Transcript.mp4` is H.264 video, not text. Use a calendar invite, not the call button.
 - **`Source Ingest` had no recent executions** and `Article Analysis` errored on 17 Aug — which is
   why Brent had no industry report on the morning of 19 Aug. Not yet diagnosed.
+
+---
+
+## R015 — a node that emits nothing stops the workflow dead
+
+**Cost:** the workflow could never bootstrap. `meeting_minutes` starts empty, so the exclusion
+query returned zero rows, and **an n8n node that emits no items does not run the nodes after it**.
+The run "succeeded" having done nothing — invisible, because `EXECUTIONS_DATA_SAVE_ON_SUCCESS=none`
+means only failures are recorded.
+
+That combination is what made "0 executions" read as "never ran" for most of a day. It had been
+running all along.
+
+**Fix:** `alwaysOutputData: true` on the lookup node.
+
+**Guard:** R015.
+
+---
+
+## R016 — a failed row retired the meeting permanently
+
+**Cost:** the first failure was final. The exclusion list matched *any* row within three days,
+including `failed` ones — so a row landed, the next tick treated the meeting as done, and it was
+never attempted again. Observed live: execution 1881 discovered nothing, because two failed rows
+excluded both meetings.
+
+**Fix:** `WHERE status <> 'failed'`. A permanently broken meeting now retries every fifteen
+minutes — noisy, but visible. Silent retirement was the worse failure.
+
+**Guard:** R016.
+
+---
+
+## R017 — an object spread silently dropped the auth header
+
+**Cost:** most of a day, and two wrong diagnoses.
+
+```js
+headers: headers,   // { Authorization: 'Bearer …' }
+...opts,            // ← opts.headers REPLACES it
+```
+
+The draft creation passes `headers: { 'Content-Type': 'application/json' }`, so the spread
+overwrote the merged headers and the token vanished. Graph correctly answered **401**.
+
+Every GET passes no headers and kept working; only the POST failed. That asymmetry is what made it
+look like a Microsoft permissions problem. It was not: the same call made directly returned
+**201 Created**, and licensing, consent and the application access policy were all verified good.
+
+**Fix:** spread `opts` first, apply `headers` last.
+
+**Guard:** R017.
+
+### What actually cost the time
+
+Not the bug — the diagnosis. Eight outbound calls plus a dozen `graph()` calls all reported
+`Request failed with status code 401`, naming neither endpoint nor body. Two fixes were written
+against the wrong suspect on that evidence, and both were dead code (`fetch` is not a global in the
+Code sandbox, so those branches never executed).
+
+The fix that mattered was labelling every call — `graph POST /users/…/messages -> 401: <body>` —
+which named it on the first run afterwards. **When a failure cannot say where it came from, make it
+say so before attempting another fix.**
+
+---
+
+## R018 — a recurring series reports the series start, not the instance
+
+**Symptom:** the 18 August weekly filed itself as `2026-07-28` — three weeks out — so the folder
+name and the minutes date were both wrong.
+
+**Cause:** `GET /onlineMeetings/{id}` on a recurring series returns the **series** start date.
+
+**Fix:** take the date from the transcript's `createdDateTime` (written minutes after the instance
+ends) and the time of day from the meeting, which a weekly series does hold correctly. A one-off
+meeting lands on the same date either way, so it applies unconditionally.
+
+---
+
+## R019 — backfilled cards posted in reverse
+
+**Symptom:** after a multi-meeting catch-up run, the newest meeting was not the newest message in
+the channel.
+
+**Cause:** `getAllTranscripts` returns newest first, and candidates were processed in that order —
+so the oldest meeting posted last.
+
+**Fix:** sort candidates by `createdDateTime` ascending before processing, so cards land in the
+order the meetings happened.
