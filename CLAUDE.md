@@ -7,6 +7,13 @@ Two engagements, hard client deadlines between 11 Aug and 8 Sep 2026. See `READM
 
 **New session? Read `STRUCTURE.md` first** — repo map, engagement status, hosting, MCP/skill scope.
 
+**Before touching hosting, mail, DNS or Microsoft 365, read `docs/INFRASTRUCTURE.md`.** It is the
+verified map of where things actually live — the iFastNet cPanel token and its DNS API, the mail
+path through MailChannels, the Postgres port that differs local versus remote, the Teams application
+access policy, and the n8n behaviours that make a broken thing look healthy. Every entry is there
+because something silently broke and cost hours to rediscover. Run `node graph/health-check.js`
+before assuming anything is fine.
+
 ## Hard rules
 
 1. **Never touch the Premier Fitness stack.** The same VPS runs docker project `n8n`

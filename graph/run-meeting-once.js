@@ -23,6 +23,9 @@ const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const { buildMeetingCard } = require('../n8n/lib/meeting-card');
+// One implementation of both, shared with the Meeting Intake Code node, which
+// cannot require anything and gets them inlined at build time instead.
+const { simpleDocx, vttToBlocks, dedupeVtt } = require('../n8n/lib/docx');
 
 const {
   MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET, MS_SENDER_UPN, GEMINI_API_KEY,
@@ -41,68 +44,6 @@ const MODEL = 'gemini-3.6-flash';
 // channel's Files tab without anyone opening SharePoint.
 const CHANNEL_SITE = 'bextconsultancy.sharepoint.com:/sites/bext_transcriptsrecords';
 const CHANNEL_BASE = 'Bext Transcripts';
-
-/** A plain Word document, assembled directly. Used for the summary, which has no
- *  client template to fill — a .docx is a zip of XML and one flat document needs
- *  no more than that. */
-function simpleDocx(title, blocks) {
-  const PizZip = require('pizzip');
-  const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const p = (text, { bold = false, size = 22, after = 140 } = {}) =>
-    `<w:p><w:pPr><w:spacing w:after="${after}"/></w:pPr><w:r><w:rPr>${bold ? '<w:b/>' : ''}` +
-    `<w:sz w:val="${size}"/></w:rPr><w:t xml:space="preserve">${esc(text)}</w:t></w:r></w:p>`;
-
-  const body = [p(title, { bold: true, size: 32, after: 240 })]
-    .concat(blocks.map(b => b.heading
-      ? p(b.heading, { bold: true, size: 24, after: 120 })
-      : p(b.text, { size: 22, after: b.tight ? 60 : 160 })))
-    .join('');
-
-  const zip = new PizZip();
-  zip.file('[Content_Types].xml',
-    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-    + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
-    + '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
-    + '<Default Extension="xml" ContentType="application/xml"/>'
-    + '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>'
-    + '</Types>');
-  zip.folder('_rels').file('.rels',
-    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-    + '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
-    + '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>'
-    + '</Relationships>');
-  zip.folder('word').file('document.xml',
-    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-    + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'
-    + body
-    + '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/>'
-    + '<w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134"/></w:sectPr>'
-    + '</w:body></w:document>');
-  return zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' });
-}
-
-/** VTT cues as readable paragraphs, one per speaker turn.
- *  Timestamps and cue numbers are dropped — nobody reads a transcript for those,
- *  and consecutive lines from the same speaker are merged so the result reads as
- *  speech rather than as subtitles. */
-function vttToBlocks(vtt) {
-  const out = [];
-  let last = null;
-  for (const raw of String(vtt || '').split(/\r?\n/)) {
-    const line = raw.trim();
-    if (!line || /^(WEBVTT|NOTE|STYLE|REGION)\b/.test(line)) continue;
-    if (line.includes('-->') || /^\d+$/.test(line)) continue;
-    const v = line.match(/^<v\s+([^>]+)>([\s\S]*?)(?:<\/v>)?$/);
-    const who = v ? v[1].trim() : null;
-    const said = (v ? v[2] : line).replace(/<[^>]+>/g, '').trim();
-    if (!said) continue;
-    if (who && who === last) out[out.length - 1].text += ' ' + said;
-    else if (who) { out.push({ text: `${who}:  ${said}` }); last = who; }
-    else if (last === null && out.length) out[out.length - 1].text += ' ' + said;
-    else { out.push({ text: said }); last = null; }
-  }
-  return out.length ? out : [{ text: '(the transcript was empty)' }];
-}
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 // The tenant drops connections often enough that a single attempt regularly
@@ -133,6 +74,9 @@ Return a JSON object with exactly these keys:
               owner is a person named in the transcript, or "Unassigned" — never guess
               closed is true only if the transcript says it is done
   decisions   array of strings — decisions actually made, not options discussed
+  title       a short specific title for this meeting, 4 to 8 words, describing what was
+              actually discussed. The calendar subject is often a placeholder like
+              "reset test" — do not echo it. Example: "Torquay DNSP delay and switchboard order"
   summary     3-5 sentences of prose for the follow-up email
   next_meeting string, or ""
 
@@ -178,9 +122,11 @@ async function token(scope = 'https://graph.microsoft.com/.default') {
   // ── 1. transcript ─────────────────────────────────────────────────────────
   console.log('\n[1] TRANSCRIPT');
   const me = await graph(`/users/${encodeURIComponent(MS_SENDER_UPN)}?$select=id,displayName`);
-  const events = await graph(`/users/${me.id}/calendar/events`
-    + '?$top=10&$orderby=start/dateTime desc'
-    + '&$select=subject,start,end,organizer,isOnlineMeeting,onlineMeeting');
+  // Whoever hosts the meeting owns its transcript, and that is not always the
+  // automation account — Brent runs the client check-ins from his own calendar.
+  // Each host is polled in turn, newest first, so it does not matter who booked it.
+  const HOSTS = (process.env.MEETING_HOSTS || MS_SENDER_UPN)
+    .split(',').map(s => s.trim()).filter(Boolean);
 
   let found = null;
 
@@ -188,52 +134,72 @@ async function token(scope = 'https://graph.microsoft.com/.default') {
   // exercising the fill with content the test meetings did not contain.
   const fileArg = process.argv.indexOf('--file');
   if (fileArg > -1 && process.argv[fileArg + 1]) {
-    const ev = events.value.find(e => e.isOnlineMeeting) || {
-      subject: 'Weekly Program Check-in',
-      start: { dateTime: new Date().toISOString().slice(0, -1) },
-      end: { dateTime: new Date().toISOString().slice(0, -1) },
+    const now = new Date().toISOString().slice(0, -1);
+    found = {
+      ev: { subject: 'Weekly Program Check-in', start: { dateTime: now }, end: { dateTime: now } },
+      host: me, meeting: { id: 'local' }, tr: { createdDateTime: 'from file' },
+      vtt: fs.readFileSync(process.argv[fileArg + 1], 'utf8'),
     };
-    found = { ev, meeting: { id: 'local' }, tr: { createdDateTime: 'from file' },
-              vtt: fs.readFileSync(process.argv[fileArg + 1], 'utf8') };
   }
 
-  for (const ev of found ? [] : events.value.filter(e => e.isOnlineMeeting && e.onlineMeeting?.joinUrl)) {
-    let meeting;
+  for (const upn of found ? [] : HOSTS) {
+    let host;
+    try { host = await graph(`/users/${encodeURIComponent(upn)}?$select=id,displayName`); }
+    catch (e) { console.log(`  ${upn}: no such user — ${e.message.slice(0, 60)}`); continue; }
+
+    let events;
     try {
-      const r = await graph(`/users/${me.id}/onlineMeetings?$filter=`
-        + encodeURIComponent(`JoinWebUrl eq '${ev.onlineMeeting.joinUrl}'`));
-      meeting = r.value?.[0];
-    } catch { continue; }
-    if (!meeting) continue;
-    const list = await graph(`/users/${me.id}/onlineMeetings/${meeting.id}/transcripts`);
-    if (!(list.value || []).length) continue;
-    // Newest transcript on the newest meeting that has one.
-    const tr = list.value[list.value.length - 1];
-    const r = await retry(() => fetch(
-      `${G}/users/${me.id}/onlineMeetings/${meeting.id}/transcripts/${tr.id}/content?$format=text/vtt`,
-      { headers: H }));
-    found = { ev, meeting, tr, vtt: await r.text() };
-    break;
+      events = await graph(`/users/${host.id}/calendar/events`
+        + '?$top=10&$orderby=start/dateTime desc'
+        + '&$select=subject,start,end,organizer,attendees,isOnlineMeeting,onlineMeeting');
+    } catch (e) { console.log(`  ${upn}: calendar unreadable — ${e.message.slice(0, 60)}`); continue; }
+
+    const online = (events.value || []).filter(e => e.isOnlineMeeting && e.onlineMeeting?.joinUrl);
+    console.log(`  ${upn}: ${online.length} online meeting(s)`);
+
+    for (const ev of online) {
+      let meeting;
+      try {
+        const r = await graph(`/users/${host.id}/onlineMeetings?$filter=`
+          + encodeURIComponent(`JoinWebUrl eq '${ev.onlineMeeting.joinUrl}'`));
+        meeting = r.value?.[0];
+      } catch (e) {
+        // 403 here is the application access policy, not a missing permission.
+        // Grant-CsApplicationAccessPolicy must cover this host — see
+        // graph/teams-access-policy.ps1, which grants it -Global.
+        if (/403/.test(e.message)) {
+          console.log(`  ${upn}: 403 on onlineMeetings — access policy does not cover this host`);
+          break;
+        }
+        continue;
+      }
+      if (!meeting) continue;
+
+      let list;
+      try { list = await graph(`/users/${host.id}/onlineMeetings/${meeting.id}/transcripts`); }
+      catch { continue; }
+      if (!(list.value || []).length) continue;
+
+      // Newest transcript on the newest meeting that has one.
+      const tr = list.value[list.value.length - 1];
+      const r = await retry(() => fetch(
+        `${G}/users/${host.id}/onlineMeetings/${meeting.id}/transcripts/${tr.id}/content?$format=text/vtt`,
+        { headers: H }));
+      found = { ev, host, meeting, tr, vtt: await r.text() };
+      break;
+    }
+    if (found) break;
   }
   if (!found) { console.log('  no transcript found on any recent meeting'); return; }
 
-  // Two Teams clients in one call each produce their own stream, so the same
-  // utterance arrives twice with slightly different wording — "rate cards" and
-  // "read cards". Left in, the model sees every action twice. Compared on the
-  // first sixty characters, which is enough to catch the pair without merging
-  // two people who genuinely said similar things.
-  const before = (found.vtt.match(/<v /g) || []).length;
-  const seen = new Set();
-  found.vtt = found.vtt.split('\n').filter(line => {
-    if (!line.includes('<v ')) return true;
-    const key = line.replace(/<\/?v[^>]*>/g, '').trim().slice(0, 60).toLowerCase();
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).join('\n');
-  const after = (found.vtt.match(/<v /g) || []).length;
-  if (before !== after) console.log(`  deduped  ${before} -> ${after} lines`);
 
+  // Two Teams clients in one call each produce their own stream, so the same
+  // utterance arrives twice with slightly different wording. Left in, the model
+  // sees every action twice. Matched on similarity within a time window rather
+  // than on an exact key, because the two streams never word it identically.
+  const ded = dedupeVtt(found.vtt);
+  if (ded.dropped) console.log(`  deduped  ${ded.dropped} duplicate line(s) removed`);
+  found.vtt = ded.vtt;
   const speakers = [...new Set((found.vtt.match(/<v ([^>]+)>/g) || []).map(s => s.slice(3, -1)))];
   console.log(`  meeting   ${found.ev.subject}`);
   console.log(`  created   ${found.tr.createdDateTime}`);
@@ -409,13 +375,24 @@ async function token(scope = 'https://graph.microsoft.com/.default') {
     '', 'Minutes attached to the meeting record in SharePoint.', '', 'Regards',
   ].filter(l => l !== '').join('\n');
 
+  const invited = (found.ev.attendees || []).map(a => a.emailAddress?.address).filter(Boolean);
+  const organiser = found.ev.organizer?.emailAddress?.address;
+  const recipients = [...new Set(invited.concat(organiser ? [organiser] : []))]
+    .filter(a => a.toLowerCase() !== String(MS_SENDER_UPN).toLowerCase())
+    .map(a => ({ emailAddress: { address: a } }));
+  console.log(`  to        ${recipients.length
+    ? recipients.map(r => r.emailAddress.address).join(', ')
+    : '(nobody invited — draft left unaddressed for review)'}`);
+
   const draft = await graph(`/users/${me.id}/messages`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      subject: `${found.ev.subject} — draft minutes and actions`,
+      subject: `${x.title || found.ev.subject} — draft minutes and actions`,
       body: { contentType: 'Text', content: body },
-      toRecipients: found.ev.organizer?.emailAddress?.address
-        ? [{ emailAddress: { address: found.ev.organizer.emailAddress.address } }] : [],
+      // Everyone invited, not just the organiser: the next run will be Brent's
+      // meeting with a different set of people, and a draft addressed to one of
+      // them would have to be re-addressed by hand every time.
+      toRecipients: recipients,
     }),
   });
   console.log(`  draft created  ${draft.id.slice(0, 24)}...  isDraft=${draft.isDraft}`);
@@ -446,7 +423,7 @@ async function token(scope = 'https://graph.microsoft.com/.default') {
   // See docs/TEAMS-WEBHOOK-SETUP.md.
   console.log('\n[6] CHANNEL CARD');
   const card = buildMeetingCard({
-    subject: found.ev.subject,
+    subject: x.title || found.ev.subject,
     program: data.program,
     meetingNo: data.meeting_no,
     date: data.date,

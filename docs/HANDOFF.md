@@ -21,6 +21,64 @@ Paste the "Start here" block into a new session. Everything else is reference.
 
 ---
 
+## Done — 19 August 2026: the daily report, Brent's meetings, and a health check
+
+Four things were broken. All four were found by testing rather than by reading configuration, and
+in three of them the configuration looked correct while the behaviour was not.
+
+**The daily report failed SPF and went to spam.** It had sent successfully 409 times, so every
+dashboard said healthy. The `bext` SPF record named none of the machines that send it: `+a` resolved
+to the VPS, which never sends mail; `+mx` matched nothing because `bext` has no MX; and neither
+listed IP was the sender. Repaired via the cPanel DNS API and verified by sending a real message and
+reading the receiver's verdict — `spf=pass`, `dmarc=pass`, `compauth=pass`, `BCL:0`.
+
+The real sending IP turned out to be **MailChannels** (23.83.x), not the cPanel host. Naming
+`185.2.168.30` alone would still have failed; `include:relay.mailchannels.net` is what makes it pass.
+
+> While fixing it I briefly published a broken record. `mass_edit_zone` stores `data` verbatim and
+> ignores `data_encoding: 'base64'`, so the encoded value became the literal TXT record and the
+> domain had no valid SPF for a few minutes. Send plain text. Each write also bumps the zone serial,
+> so a batch must re-read it between edits.
+
+**Brent's meetings could not be read.** `403 — 3003: User does not have access to lookup meeting`,
+which reads exactly like a missing permission and is not: the application access policy was granted
+per user rather than `-Global`. Two runs of `teams-access-policy.ps1` changed nothing because the
+script set `$ErrorActionPreference = 'Stop'` and the already-present AppId threw, aborting it before
+the grant. Fixed, granted tenant-wide, and both hosts now verify.
+
+**`BEXT — Graph Health` had 7 errors and 0 successes** — the alarm was the broken thing, which is
+why the report's spam problem went unnoticed for weeks. `column "status" is of type health_status
+but expression is of type text`: the cast existed in the repo but had never been deployed.
+
+**The dashboard showed the wrong recipients.** `reports.recipient` is written through
+`queryReplacement`, which splits its value on commas, so a two-address list stored inconsistently —
+one address on some days, both on others. Delivery was never affected; the SMTP node uses a direct
+expression. Now stored semicolon-separated. Confirmed by probe that Brent does receive the report.
+
+### Added
+
+- `graph/health-check.js` — asserts outcomes, not configuration. `--record` appends failures to
+  `docs/REGRESSIONS.md`. Deliberately passes on intentionally-inactive workflows and a missing local
+  tunnel, because a monitor that cries wolf is how Graph Health's failures stayed invisible.
+- `graph/verify-meeting-access.js` — separates a policy 403 from a missing permission, per host.
+- `graph/check-mail-auth.js` — sends a real probe and reads the receiver's SPF/DKIM/DMARC verdict.
+  A published record is not proof; this is.
+- `graph/fix-mail-dns.js` — `--check` / `--apply` against the cPanel DNS API, scoped to `bext` only
+  because the zone is shared with four unrelated domains.
+- `docs/INFRASTRUCTURE.md` — the verified map, referenced from `CLAUDE.md` so it loads every session.
+
+### Still open
+
+1. **DKIM does not verify** — `dkim=fail (signature did not verify)`. DMARC passes on SPF alignment
+   so it is not blocking delivery, but it should be fixed. Likely MailChannels altering the message
+   in transit, or a key that no longer matches DNS.
+2. `MEETING_CODE` still lacks multi-host discovery, the generated title and the real recipient list —
+   they exist only in `graph/run-meeting-once.js`, so the scheduled workflow still polls one calendar.
+3. Brent has not yet hosted a Teams meeting with transcription on, so the end-to-end path is proven
+   only from the automation account's own meetings.
+
+---
+
 ## Done — 18 August 2026: the channel announcement is live
 
 `BEXT — Meeting Report`, Power Automate flow `bbe06a8c-b747-851e-40e7-f1be6157edbc`, Started, posting

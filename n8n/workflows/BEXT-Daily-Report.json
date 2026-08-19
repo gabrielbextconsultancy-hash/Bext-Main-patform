@@ -95,7 +95,7 @@
         "operation": "executeQuery",
         "query": "INSERT INTO reports (report_date, status, html, recipient, item_count, generated_at)\nSELECT report_date::date, 'rendered', html, recipient, item_count, now()\nFROM json_to_recordset($1::json)\n  AS x(report_date text, html text, recipient text, item_count int)\nON CONFLICT (report_date) DO UPDATE SET\n  status = 'rendered', html = EXCLUDED.html, recipient = EXCLUDED.recipient,\n  item_count = EXCLUDED.item_count, generated_at = now(), error = NULL",
         "options": {
-          "queryReplacement": "={{ JSON.stringify([{ report_date: $json.report_date, html: $json.html, recipient: $json.recipient, item_count: $json.item_count }]) }}"
+          "queryReplacement": "={{ JSON.stringify([{ report_date: $json.report_date, html: $json.html, recipient: String($json.recipient).replace(/,\\s*/g, \"; \"), item_count: $json.item_count }]) }}"
         }
       }
     },

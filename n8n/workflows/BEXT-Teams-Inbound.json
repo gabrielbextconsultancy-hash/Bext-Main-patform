@@ -1,0 +1,137 @@
+{
+  "name": "BEXT — Teams Inbound",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Australia/Melbourne"
+  },
+  "nodes": [
+    {
+      "id": "hook",
+      "name": "Teams inbound",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -380,
+        0
+      ],
+      "webhookId": "b7f1c4e2-3a9d-4c17-8e55-2f6a0d91b4c3",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "teams-inbound",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "LRKNYr1yNB1VI1y4",
+          "name": "BEXT Webhook Auth"
+        }
+      }
+    },
+    {
+      "id": "normalise",
+      "name": "Normalise payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -140,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst body = $input.first().json.body || $input.first().json;\n\nconst item = {\n  source: body.source || 'unknown',\n  driveId: body.driveId || '',\n  itemId: body.itemId || '',\n  name: body.name || '',\n  webUrl: body.webUrl || '',\n  createdDateTime: body.createdDateTime || new Date().toISOString(),\n};\n\n// A folder-created event fires for the folder as well as the file, and Teams\n// occasionally replays one. Neither is an error worth alerting on — they are\n// simply not work, so say so and stop.\nif (!item.itemId || !/\\.vtt$/i.test(item.name)) {\n  return [{ json: { ...item, accepted: false, reason: 'not a .vtt transcript' } }];\n}\n\nreturn [{ json: { ...item, accepted: true } }];\n"
+      }
+    },
+    {
+      "id": "gate",
+      "name": "Only transcripts",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        100,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "accepted",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "leftValue": "={{ $json.accepted }}",
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "run",
+      "name": "Run Meeting Intake",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        340,
+        -80
+      ],
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "FZkdjFEmC6K2ymWF",
+          "mode": "id"
+        },
+        "options": {
+          "waitForSubWorkflow": false
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Teams inbound": {
+      "main": [
+        [
+          {
+            "node": "Normalise payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalise payload": {
+      "main": [
+        [
+          {
+            "node": "Only transcripts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Only transcripts": {
+      "main": [
+        [
+          {
+            "node": "Run Meeting Intake",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  }
+}

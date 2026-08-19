@@ -27,6 +27,16 @@ const INGEST_SRC = fs
   .replace(/^module\.exports\s*=.*$/m, '')
   .replace(/^const crypto = require\('crypto'\);$/m, '');
 
+// The tested document writer, minus its export line, for embedding in a Code node.
+const DOCX_SRC = fs
+  .readFileSync(path.join(__dirname, 'lib', 'docx.js'), 'utf8')
+  .replace(/^module\.exports\s*=.*$/m, '');
+
+// The tested card builder, minus its export line, for embedding in a Code node.
+const CARD_SRC = fs
+  .readFileSync(path.join(__dirname, 'lib', 'meeting-card.js'), 'utf8')
+  .replace(/^module\.exports\s*=.*$/m, '');
+
 const pos = (x, y) => [x, y];
 
 // ─── Workflow 1: Source Ingest ───────────────────────────────────────────────
@@ -666,8 +676,14 @@ ON CONFLICT (report_date) DO UPDATE SET
   status = 'rendered', html = EXCLUDED.html, recipient = EXCLUDED.recipient,
   item_count = EXCLUDED.item_count, generated_at = now(), error = NULL`,
           options: {
+            // recipient is stored semicolon-separated, not comma-separated.
+            // queryReplacement splits its value on commas, so a two-address list
+            // arrives mangled and the dashboard showed one recipient on some days
+            // and both on others — which reads as "Brent is not getting the report"
+            // when he is. The send itself is unaffected: the SMTP node uses a direct
+            // expression, not queryReplacement.
             queryReplacement:
-              '={{ JSON.stringify([{ report_date: $json.report_date, html: $json.html, recipient: $json.recipient, item_count: $json.item_count }]) }}',
+              '={{ JSON.stringify([{ report_date: $json.report_date, html: $json.html, recipient: String($json.recipient).replace(/,\\s*/g, "; "), item_count: $json.item_count }]) }}',
           },
         },
       },
@@ -748,6 +764,11 @@ VALUES ('daily_report', 'up', $1)`,
 // secret that expires quietly would otherwise be discovered by a meeting whose
 // minutes never arrived. Checked daily, recorded, and mailed only when it breaks.
 const GRAPH_HEALTH_CODE = `
+// The Code sandbox withholds URLSearchParams the same way it withholds URL.
+// Missing it, the token step failed every night with a message that named the
+// symbol rather than the cause.
+const { URLSearchParams } = require('url');
+
 const TENANT = $env.MS_TENANT_ID;
 const CLIENT = $env.MS_CLIENT_ID;
 const SECRET = $env.MS_CLIENT_SECRET;
@@ -853,7 +874,7 @@ function graphHealthWorkflow() {
         parameters: {
           operation: 'executeQuery',
           query: `INSERT INTO integration_health (service, status, detail)
-SELECT 'microsoft_graph', x.status, x.detail
+SELECT 'microsoft_graph', x.status::health_status, x.detail
 FROM json_to_recordset($1::json) AS x(status text, detail text)`,
           options: {
             queryReplacement:
@@ -908,26 +929,45 @@ FROM json_to_recordset($1::json) AS x(status text, detail text)`,
 // Brief B review area 3, the client's stated highest priority: record a meeting,
 // and minutes, decisions, action items and a follow-up draft appear without
 // anyone taking a note. The consultant reviews; nothing sends itself.
-const MINUTES_PROMPT = `You are writing the minutes of a meeting for an Australian energy and
-sustainability consultancy, from the Teams transcript below.
+const MINUTES_PROMPT = `You are writing the minutes of a recurring weekly program check-in for an
+Australian energy and sustainability consultancy, from the Teams transcript below.
 
 Return a JSON object with exactly these keys:
-  summary      3-5 sentences of prose. What was discussed and what it means. No bullet points.
-  attendees    array of the speaker names appearing in the transcript
-  decisions    array of strings. Decisions actually made. Omit anything merely discussed.
-  actions      array of { task, owner, due }. owner is a person named in the transcript, or
-               "Unassigned". due is a plain date like "22 August" or "" if none was stated.
-  followups    array of strings. Things to raise or check later that are not yet actions.
 
-Write in Australian English. Be specific: name the schemes, clients and figures that were
-mentioned. If a section has nothing in it, return an empty array rather than inventing content.
+  attendees   array of { name, initials, company }. One entry per distinct speaker. Derive
+              initials from the name. Leave company "" unless stated.
+  safety      array of { item, detail, owner, due, status }
+              status here MUST be exactly Open or Closed — not the project vocabulary below
+  projects    array of { project, phase, status, update, next_action, owner, due, network_note }
+              status MUST be exactly one of: On Track, Monitor, At Risk, On Hold, Complete
+              network_note is the DNSP or network position if one was mentioned, else ""
+  finance     array of { item, detail, owner, due, status } — commercial and other business
+              status here MUST also be exactly Open or Closed
+  actions     array of { title, detail, owner, due, status, closed }
+              owner is a person named in the transcript, or "Unassigned" — never guess
+              closed is true only if the transcript says it is done
+  decisions   array of strings — decisions actually made, not options discussed
+  summary     3-5 sentences of prose for the follow-up email
+  next_meeting string, or ""
 
-Return ONLY the JSON object, no markdown fence, no commentary.
+Rules that matter more than completeness:
+  - Do not invent. An empty array is a correct answer for a section not discussed.
+  - Never assign an owner who was not named. "Unassigned" is the honest answer.
+  - Ignore small talk, greetings and side conversation entirely.
+  - Australian English. Keep the speakers' own terms for projects and schemes.
+
+Return ONLY the JSON object, no markdown fence.
 
 TRANSCRIPT:
 `;
 
 const MEETING_CODE = `
+// The Code sandbox does not expose URLSearchParams as a global, the same way it
+// withholds URL. Without this the token request throws "URLSearchParams is not
+// defined" on the first line that matters and the whole run dies before it has
+// read anything — which is exactly what it did, silently, every fifteen minutes.
+const { URLSearchParams } = require('url');
+
 const TENANT = $env.MS_TENANT_ID, CLIENT = $env.MS_CLIENT_ID;
 const SECRET = $env.MS_CLIENT_SECRET, UPN = $env.MS_SENDER_UPN;
 const GEMINI = $env.GEMINI_API_KEY;
@@ -937,6 +977,20 @@ const SITE = 'bextconsultancy.sharepoint.com:/sites/BEXTHQ';
 const BASE = 'API Automation Folder';
 const TEMPLATE = BASE + '/Templates/Minutes Template.docx';
 const MODEL = 'gemini-3.6-flash';
+
+// The channel is the readable record: one folder per meeting holding the
+// transcript, the minutes and the summary, plus PDF renditions for reading.
+const CHANNEL_SITE = 'bextconsultancy.sharepoint.com:/sites/bext_transcriptsrecords';
+const CHANNEL_BASE = 'Bext Transcripts';
+const PROGRAM = 'RACV Property Electrification — Weekly Program Check-in';
+const DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const WEBHOOK = $env.TEAMS_MEETING_WEBHOOK_URL;
+
+// --- shared document writer, generated from n8n/lib/docx.js — do not edit here ---
+${DOCX_SRC}
+// --- shared card builder, generated from n8n/lib/meeting-card.js — do not edit here ---
+${CARD_SRC}
+// --- end shared code ---
 
 // Meetings already minuted, passed down from the database. Re-filing a meeting
 // every fifteen minutes would bury the reviewer in duplicates.
@@ -954,6 +1008,24 @@ const auth = await http({
 });
 const TOKEN = auth.access_token;
 const G = 'https://graph.microsoft.com/v1.0';
+
+// There are eight outbound calls in the per-meeting block and axios reports all of
+// them the same way: "Request failed with status code 401". That message names
+// neither the endpoint nor the response body, which turned a one-line fault into a
+// guessing game. Every risky call goes through this so the recorded error says
+// which one, with the status and the first of the body.
+// ignoreHttpStatusErrors is an HTTP Request NODE option — the Code node's http
+// helper does not honour it, so catching is the only way.
+const call = async (label, opts) => {
+  try {
+    return await http(opts);
+  } catch (e) {
+    const st = e.statusCode || e.status || (e.response && e.response.status) || '?';
+    const b = (e.response && (e.response.body || e.response.data)) || e.message || '';
+    throw new Error(label + ' ' + st + ': ' + String(typeof b === 'string' ? b : JSON.stringify(b)).slice(0, 220));
+  }
+};
+
 const graph = (path, opts = {}) => http({
   url: G + path, json: true, timeout: 60000,
   headers: { Authorization: 'Bearer ' + TOKEN, ...(opts.headers || {}) },
@@ -971,44 +1043,107 @@ const site = await graph('/sites/' + SITE);
 const drives = await graph('/sites/' + site.id + '/drives');
 const DRIVE = (drives.value.find(d => d.name === 'Documents') || drives.value[0]).id;
 
-// Meetings that finished in the last day. Wider than the fifteen-minute cadence
-// on purpose: Teams takes minutes to publish a transcript after a meeting ends,
-// and a run that failed should pick the meeting up next time rather than lose it.
-const since = new Date(Date.now() - 86400000).toISOString();
-const until = new Date(Date.now() + 60000).toISOString();
-const events = await graph('/users/' + me.id + '/calendar/events'
-  + '?$select=subject,start,end,organizer,isOnlineMeeting,onlineMeeting'
-  + '&$filter=' + encodeURIComponent(\`end/dateTime ge '\${since}' and end/dateTime le '\${until}'\`)
-  + '&$top=50');
+// Discovery is by transcript, not by calendar. Walking one mailbox's calendar
+// missed every meeting somebody else organised — on this tenant that was most of
+// them, because Brent books the weekly. getAllTranscripts asks the question we
+// actually have ("what has been transcribed?") instead of the one the calendar
+// can answer ("what was I invited to?"), and it still returns a meeting whose
+// event has since been deleted or declined.
+//
+// Two traps, both silent:
+//   - meetingOrganizerUserId is a required FUNCTION parameter, not a query one.
+//     Omit it and Graph answers 400 with a message that reads like a bad URL.
+//   - $filter=createdDateTime is ACCEPTED AND IGNORED. Filtering has to happen
+//     here, or a full history is reprocessed on every tick.
+// Same variable graph/run-meeting-once.js and graph/verify-meeting-access.js read,
+// so the manual harness and the scheduled run discover exactly the same meetings.
+const ORGANISERS = ($env.MEETING_HOSTS || UPN)
+  .split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+
+// Wider than the fifteen-minute cadence on purpose: Teams takes minutes to
+// publish, and a failed run should pick the meeting up next tick rather than
+// lose it. meeting_minutes dedupes on meeting_id, so overlap is free.
+const WINDOW_MS = 86400000;
+
+const candidates = [];
+for (const upn of ORGANISERS) {
+  let org;
+  try { org = await graph('/users/' + encodeURIComponent(upn) + '?$select=id,displayName'); }
+  catch (e) { continue; }                       // mailbox gone or not readable
+  let list;
+  try {
+    list = await graph('/users/' + org.id + '/onlineMeetings/getAllTranscripts('
+      + 'meetingOrganizerUserId=' + encodeURIComponent("'" + org.id + "'") + ')');
+  } catch (e) { continue; }                     // no licence, no consent, no meetings
+  for (const t of (list.value || [])) {
+    if (Date.now() - new Date(t.createdDateTime).getTime() > WINDOW_MS) continue;
+    if (done.has(t.meetingId)) continue;
+    candidates.push({
+      organiserId: org.id, organiserUpn: upn, organiserName: org.displayName,
+      transcriptId: t.id, meetingId: t.meetingId, createdDateTime: t.createdDateTime,
+    });
+  }
+}
 
 const out = [];
 
-for (const ev of (events.value || [])) {
-  if (!ev.isOnlineMeeting || !ev.onlineMeeting?.joinUrl) continue;
-
-  let meeting, transcripts;
+for (const cand of candidates) {
+  // The onlineMeeting carries subject, times and the participant list. That
+  // participant list is also the only reliable source of attendee addresses —
+  // a transcript gives names alone.
+  let meeting, ev;
   try {
-    const found = await graph('/users/' + me.id + '/onlineMeetings?$filter='
-      + encodeURIComponent(\`JoinWebUrl eq '\${ev.onlineMeeting.joinUrl}'\`));
-    meeting = found.value?.[0];
-    if (!meeting || done.has(meeting.id)) continue;
-    transcripts = await graph('/users/' + me.id + '/onlineMeetings/' + meeting.id + '/transcripts');
+    meeting = await graph('/users/' + cand.organiserId + '/onlineMeetings/' + cand.meetingId);
   } catch (e) {
-    // A meeting we cannot read is not a run failure — an external organiser
-    // outside the access policy is a normal thing to skip.
     continue;
   }
-  if (!(transcripts.value || []).length) continue;
+  {
+    // Downstream was written against a calendar event, whose dateTime carries no
+    // zone suffix and gets a 'Z' appended. Strip it here rather than touching
+    // every consumer.
+    const noZ = function (s) { return String(s || '').replace(/Z$/, ''); };
+    const parts = meeting.participants || {};
+    const attendees = (parts.attendees || [])
+      .map(function (a) { return (a.upn || (a.identity && a.identity.user && a.identity.user.id) || ''); })
+      .filter(Boolean);
+    ev = {
+      subject: meeting.subject || 'Meeting',
+      start: { dateTime: noZ(meeting.startDateTime) },
+      end: { dateTime: noZ(meeting.endDateTime) },
+      organizer: { emailAddress: { address: cand.organiserUpn, name: cand.organiserName || '' } },
+      attendees: attendees,
+    };
+  }
 
   try {
     // --- transcript ---------------------------------------------------------
-    const vtt = await http({
+    // Ask for VTT with an Accept header rather than the ?$format= query parameter.
+    // The query form returns 200 to a plain client but 401 through n8n's HTTP
+    // helper; Accept is the documented negotiation and behaves the same in both.
+    // returnFullResponse + ignoreHttpStatusErrors so a failure records its real
+    // status and body instead of a bare "Request failed with status code 401".
+    // Keep the option set identical to graph(), which demonstrably works against
+    // the same host with the same token — only json differs, because the body is
+    // VTT rather than JSON. Both ?$format=text/vtt and Accept: text/vtt return 200
+    // with no redirect when called from a plain client, so anything fancier here
+    // (encoding, returnFullResponse, ignoreHttpStatusErrors) is n8n-specific
+    // surface that only adds ways to fail; ignoreHttpStatusErrors in particular is
+    // an HTTP Request node option the Code helper silently ignores.
+    const vtt = await call('transcript-content', {
       method: 'GET',
-      url: G + '/users/' + me.id + '/onlineMeetings/' + meeting.id
-         + '/transcripts/' + transcripts.value[0].id + '/content?$format=text/vtt',
-      headers: { Authorization: 'Bearer ' + TOKEN }, timeout: 120000,
+      url: G + '/users/' + cand.organiserId + '/onlineMeetings/' + cand.meetingId
+         + '/transcripts/' + cand.transcriptId + '/content?$format=text/vtt',
+      headers: { Authorization: 'Bearer ' + TOKEN, Accept: 'text/vtt' },
+      json: false,
+      timeout: 120000,
     });
-    const text = typeof vtt === 'string' ? vtt : String(vtt);
+    const rawVtt = typeof vtt === 'string' ? vtt : String(vtt);
+
+    // Two Teams clients in one call each produce their own stream, so the same
+    // utterance arrives twice with slightly different wording. Left in, the
+    // model sees every action twice, and it is matched on similarity within a
+    // time window because the two streams never word it identically.
+    const text = dedupeVtt(rawVtt).vtt;
     if (text.trim().length < 50) continue;   // a transcript of nothing said
 
     // --- extraction ---------------------------------------------------------
@@ -1018,7 +1153,7 @@ for (const ev of (events.value || [])) {
     let res, lastErr;
     for (let attempt = 1; attempt <= 4; attempt++) {
       try {
-        res = await http({
+        res = await call('gemini', {
           method: 'POST',
           url: \`https://generativelanguage.googleapis.com/v1beta/models/\${MODEL}:generateContent?key=\${GEMINI}\`,
           json: true, timeout: 180000,
@@ -1044,28 +1179,43 @@ for (const ev of (events.value || [])) {
     try { x = JSON.parse(raw); }
     catch { throw new Error('Gemini returned unparseable JSON: ' + raw.slice(0, 200)); }
 
+    const TZ = 'Australia/Melbourne';
     const when = new Date(ev.end?.dateTime + 'Z');
+    const fmt = d => d.toLocaleDateString('en-AU',
+      { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: TZ });
+    const hhmm = d => d.toLocaleTimeString('en-AU',
+      { hour: 'numeric', minute: '2-digit', timeZone: TZ });
+
     const data = {
-      subject: ev.subject || 'Meeting',
-      date: when.toLocaleDateString('en-AU',
-        { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Melbourne' }),
-      organiser: ev.organizer?.emailAddress?.name || '',
-      attendees: (x.attendees || []).join(', '),
-      summary: String(x.summary || ''),
-      decisions: (x.decisions || []).map(String),
+      program: PROGRAM,
+      date: fmt(when),
+      time: hhmm(new Date(ev.start.dateTime + 'Z')) + ' – ' + hhmm(when),
+      venue: 'Microsoft Teams',
+      meeting_no: '1',
+      minutes_by: 'BEXT Automation',
+      attendees: (x.attendees || []).map(a => ({
+        name: a.name || '', initials: a.initials || '', company: a.company || '', email: '' })),
+      safety: x.safety || [],
+      // The template writes the network position inside the update cell, the way
+      // the client's own minutes read.
+      projects: (x.projects || []).map(p => Object.assign({}, p, {
+        update: p.network_note ? p.update + '\\nNetwork / DNSP: ' + p.network_note : p.update })),
+      finance: x.finance || [],
       actions: (x.actions || []).map(a => ({
-        task: String(a.task || ''), owner: String(a.owner || 'Unassigned'), due: String(a.due || ''),
-      })),
-      followups: (x.followups || []).map(String),
+        item: a.title || '', detail: a.detail || '', owner: a.owner || 'Unassigned',
+        due: a.due || '',
+        // Stored Open/Closed, rendered Done — the two documents word it
+        // differently and both should keep reading as they do.
+        status: a.closed ? 'Done' : 'Open' })),
     };
 
     // --- document -----------------------------------------------------------
-    const tpl = await http({
+    const tpl = await call('template-download', {
       method: 'GET',
       url: G + '/drives/' + DRIVE + '/root:/' + encodeURI(TEMPLATE) + ':/content',
       headers: { Authorization: 'Bearer ' + TOKEN }, encoding: 'arraybuffer', timeout: 60000,
     });
-    const docx = await http({
+    const docx = await call('render-docx', {
       method: 'POST', url: 'http://fetcher:8080/render-docx',
       json: true, timeout: 60000, encoding: 'arraybuffer',
       body: { template: Buffer.from(tpl).toString('base64'), data },
@@ -1074,59 +1224,179 @@ for (const ev of (events.value || [])) {
     // --- filing -------------------------------------------------------------
     // Date first so the folder sorts chronologically without a custom view, and
     // colons stripped because SharePoint rejects them in a file name.
-    const stamp = when.toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' });
+    const stamp = when.toLocaleDateString('en-CA', { timeZone: TZ });
     const safe = (ev.subject || 'Meeting').replace(/[\\\\/:*?"<>|]/g, '-').slice(0, 80);
 
-    const put = async (path, body, type) => http({
-      method: 'PUT', url: G + '/drives/' + DRIVE + '/root:/' + encodeURI(path) + ':/content',
-      headers: { Authorization: 'Bearer ' + TOKEN, 'Content-Type': type },
-      body, json: false, timeout: 120000,
-    });
+    // Failures are collected rather than thrown: a bad write should not cost the
+    // draft email. The card is the one thing gated on a clean run.
+    const failures = [];
+    const put = async (driveId, p, body, type) => {
+      try {
+        const r = await call('file-upload', {
+          method: 'PUT', url: G + '/drives/' + driveId + '/root:/' + encodeURI(p) + ':/content',
+          headers: { Authorization: 'Bearer ' + TOKEN, 'Content-Type': type },
+          body, json: false, timeout: 120000,
+        });
+        return typeof r === 'string' ? JSON.parse(r) : r;
+      } catch (err) { failures.push(p); return {}; }
+    };
 
-    await put(\`\${BASE}/Meeting Transcripts/\${stamp} \${safe}.vtt\`, text, 'text/vtt');
-    await put(\`\${BASE}/Meeting Minutes/\${stamp} \${safe} — Minutes.docx\`, Buffer.from(docx),
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    const chSite = await graph('/sites/' + CHANNEL_SITE);
+    const chDrives = await graph('/sites/' + chSite.id + '/drives');
+    const CH = (chDrives.value.find(d => d.name === 'Documents') || chDrives.value[0]).id;
+    const folder = CHANNEL_BASE + '/' + stamp + ' ' + safe;
+
+    const summaryDoc = simpleDocx(data.program + ' — Meeting Summary', [
+      { text: data.date + '  ·  ' + data.venue },
+      { heading: 'Summary' }, { text: String(x.summary || '') },
+    ].concat((x.decisions || []).length ? [{ heading: 'Decisions' }] : [])
+     .concat((x.decisions || []).map(d => ({ text: '•  ' + d })))
+     .concat((x.actions || []).length ? [{ heading: 'Actions' }] : [])
+     .concat((x.actions || []).map(a => ({
+       text: '•  ' + a.title + ' — ' + (a.owner || 'Unassigned')
+         + (a.due ? ', due ' + a.due : '') + (a.closed ? '  [closed]' : '') })))
+     .concat([{ heading: 'Attendees' },
+       { text: (x.attendees || []).map(a => a.name).join(', ') }]));
+
+    const transcriptDoc = simpleDocx(data.program + ' — Transcript', [
+      { text: data.date + '  ·  ' + data.venue },
+    ].concat(vttToBlocks(text)));
+
+    // Minutes last, in both places, so the card never announces a half-filed record.
+    const arcTr = BASE + '/Meeting Transcripts/' + stamp + ' ' + safe + '.vtt';
+    const arcMin = BASE + '/Meeting Minutes/' + stamp + ' ' + safe + ' — Minutes.docx';
+    await put(DRIVE, arcTr, text, 'text/vtt');
+    const chTr = await put(CH, folder + '/Transcript.vtt', text, 'text/vtt');
+    const chSum = await put(CH, folder + '/Summary.docx', summaryDoc, DOCX);
+    await put(CH, folder + '/Transcript.docx', transcriptDoc, DOCX);
+    await put(DRIVE, arcMin, Buffer.from(docx), DOCX);
+    const chMin = await put(CH, folder + '/Minutes.docx', Buffer.from(docx), DOCX);
+
+    // SharePoint has no preview handler for .vtt, so the readable rendition is
+    // what the card links to. Conversion is best effort and the button falls back;
+    // the filled minutes in particular are refused by the Word export service.
+    const toPdf = async (src, dst) => {
+      try {
+        const raw = await call('pdf-convert', {
+          method: 'GET',
+          url: G + '/drives/' + CH + '/root:/' + encodeURI(src) + ':/content?format=pdf',
+          headers: { Authorization: 'Bearer ' + TOKEN }, encoding: 'arraybuffer', timeout: 120000,
+        });
+        const b = Buffer.from(raw);
+        // The service answers 200 with a JSON error body on some inputs, so trust
+        // the magic bytes rather than the status code.
+        if (b.slice(0, 5).toString('latin1') !== '%PDF-') return {};
+        return await put(CH, dst, b, 'application/pdf');
+      } catch (err) { return {}; }
+    };
+    const pdfMin = await toPdf(folder + '/Minutes.docx', folder + '/Minutes.pdf');
+    const pdfSum = await toPdf(folder + '/Summary.docx', folder + '/Summary.pdf');
+    const pdfTr = await toPdf(folder + '/Transcript.docx', folder + '/Transcript.pdf');
+
+    const chFolder = await graph('/drives/' + CH + '/root:/' + encodeURI(folder));
 
     // --- follow-up draft ----------------------------------------------------
     // Created as a draft and never sent. The brief is explicit that nothing
     // leaves without review, and a draft enforces that structurally rather than
     // by convention.
-    const lines = [
-      \`Thanks all for today's discussion on \${data.subject}.\`, '',
-      data.summary, '',
-      data.decisions.length ? 'Decisions:' : '',
-      ...data.decisions.map(d => '  - ' + d),
-      data.actions.length ? '' : '', data.actions.length ? 'Actions:' : '',
-      ...data.actions.map(a => \`  - \${a.task} (\${a.owner}\${a.due ? ', due ' + a.due : ''})\`),
-      '', 'Minutes are attached to the meeting record in SharePoint.', '', 'Regards',
-    ].filter(l => l !== null);
+    const lines = ['Thanks all for the ' + data.program + '.', '', String(x.summary || ''), '']
+      .concat((x.decisions || []).length ? ['Decisions:'] : [])
+      .concat((x.decisions || []).map(d => '  - ' + d))
+      .concat((x.actions || []).length ? ['', 'Actions:'] : [])
+      .concat((x.actions || []).map(a => '  - ' + a.title + ' (' + (a.owner || 'Unassigned')
+        + (a.due ? ', due ' + a.due : '') + ')'))
+      .concat(['', 'Minutes are attached to the meeting record in SharePoint.', '', 'Regards']);
 
     const draft = await graph('/users/' + me.id + '/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: {
-        subject: \`\${data.subject} — draft minutes and actions\`,
+        subject: (ev.subject || 'Meeting') + ' — draft minutes and actions',
         body: { contentType: 'Text', content: lines.join('\\n') },
         toRecipients: ev.organizer?.emailAddress?.address
           ? [{ emailAddress: { address: ev.organizer.emailAddress.address } }] : [],
       },
     });
 
+    // --- channel card -------------------------------------------------------
+    // Graph publishes no application permission for posting a channel message, so
+    // this goes through the Power Automate webhook. A failure here leaves the
+    // record complete and only the announcement missing, so it never sets failed.
+    let postedAt = null, postError = null;
+    if (!WEBHOOK) postError = 'TEAMS_MEETING_WEBHOOK_URL not set';
+    else if (failures.length) postError = 'not posted, ' + failures.length + ' file(s) failed to land';
+    else {
+      try {
+        // A transcript gives display names only, so most attendees will not
+        // resolve. Those that do become real Teams mentions.
+        const people = [];
+        for (const a of (x.attendees || [])) {
+          const nm = ((a && a.name) || '').trim();
+          if (!nm) continue;
+          try {
+            const q = 'displayName eq ' + JSON.stringify(nm).replace(/"/g, "'");
+            const f = await graph('/users?$select=id,displayName&$filter=' + encodeURIComponent(q));
+            const hit = f && f.value && f.value[0];
+            people.push(hit ? Object.assign({}, a, { id: hit.id }) : a);
+          } catch (err) { people.push(a); }
+        }
+
+        const card = buildMeetingCard({
+          subject: ev.subject, program: data.program, meetingNo: data.meeting_no,
+          date: data.date, time: data.time, venue: data.venue,
+          organiser: ev.organizer?.emailAddress?.name || '',
+          attendees: people, summary: x.summary || '', decisions: x.decisions || [],
+          actions: x.actions || [], projects: x.projects || [], safety: x.safety || [],
+          urls: {
+            folder: chFolder.webUrl,
+            minutes: pdfMin.webUrl || chMin.webUrl,
+            summary: pdfSum.webUrl || chSum.webUrl,
+            transcript: pdfTr.webUrl || chTr.webUrl,
+          },
+        });
+
+        // A URL carrying its own sig is self-authenticating. Without one the
+        // trigger is tenant-restricted and wants an app-only bearer token.
+        const hdrs = { 'Content-Type': 'application/json' };
+        if (!/[?&]sig=/.test(WEBHOOK)) {
+          const ft = await call('webhook-token', {
+            method: 'POST',
+            url: 'https://login.microsoftonline.com/' + TENANT + '/oauth2/v2.0/token',
+            form: {
+              client_id: CLIENT, client_secret: SECRET, grant_type: 'client_credentials',
+              scope: 'https://service.flow.microsoft.com/.default',
+            },
+            json: true, timeout: 30000,
+          });
+          hdrs.Authorization = 'Bearer ' + ft.access_token;
+        }
+        await call('channel-webhook', { method: 'POST', url: WEBHOOK, headers: hdrs, body: card, json: true, timeout: 60000 });
+        postedAt = new Date().toISOString();
+      } catch (err) { postError = String(err.message || err).slice(0, 400); }
+    }
+
     out.push({ json: {
       meeting_id: meeting.id,
-      subject: data.subject,
+      subject: ev.subject || 'Meeting',
       organiser_upn: ev.organizer?.emailAddress?.address || '',
       started_at: ev.start?.dateTime ? ev.start.dateTime + 'Z' : null,
       ended_at: ev.end?.dateTime ? ev.end.dateTime + 'Z' : null,
-      attendees: x.attendees || [],
+      attendees: (x.attendees || []).map(a => a.name || '').filter(Boolean),
       status: 'drafted',
-      transcript_path: \`\${BASE}/Meeting Transcripts/\${stamp} \${safe}.vtt\`,
-      minutes_path: \`\${BASE}/Meeting Minutes/\${stamp} \${safe} — Minutes.docx\`,
+      transcript_path: arcTr,
+      minutes_path: arcMin,
       draft_message_id: draft.id,
       extracted: x,
       model: MODEL,
       error: null,
+      folder_url: chFolder.webUrl || null,
+      minutes_url: (pdfMin.webUrl || chMin.webUrl) || null,
+      summary_url: (pdfSum.webUrl || chSum.webUrl) || null,
+      transcript_url: (pdfTr.webUrl || chTr.webUrl) || null,
+      posted_at: postedAt,
+      post_error: postError,
     } });
+
   } catch (e) {
     // Recorded rather than thrown: one unreadable meeting must not stop the
     // others, and a failure with no record is a meeting silently lost.
@@ -1155,11 +1425,25 @@ function meetingIntakeWorkflow() {
         // Polling rather than a webhook: this n8n is Community and reachable
         // publicly only through traefik, and a fifteen-minute lag on minutes is
         // invisible against the time Teams itself takes to publish a transcript.
-        parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 15 }] } },
+        // A cron expression rather than a minutes interval. n8n 2.32.6 fails to
+        // register the interval form when a workflow is activated through the
+        // public API — the scheduler throws
+        //   TypeError: r.firstEvent.getTime is not a function
+        // and the workflow then reads active with nothing actually scheduled.
+        // The two workflows that have always fired, the 05:00 report and the
+        // 06:00 health check, both use cronExpression.
+        parameters: { rule: { interval: [{ field: 'cronExpression', expression: '*/15 * * * *' }] } },
       },
       {
         id: 'seen', name: 'Load processed meetings', type: 'n8n-nodes-base.postgres',
         typeVersion: 2.5, position: pos(-160, 0),
+        // An n8n node that emits zero items does not run the nodes after it. This
+        // query returns nothing until the first meeting has been filed, so without
+        // this the workflow could never bootstrap: it ran, produced no items, and
+        // "succeeded" doing nothing — invisible, because EXECUTIONS_DATA_SAVE_ON_SUCCESS
+        // is none. The exclusion list being empty is the normal first state, not a
+        // reason to stop.
+        alwaysOutputData: true,
         credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
         parameters: {
           operation: 'executeQuery',
@@ -1185,19 +1469,32 @@ WHERE created_at > now() - interval '3 days'`,
           // splits on commas, and every one of these fields is full of them.
           query: `INSERT INTO meeting_minutes
   (meeting_id, subject, organiser_upn, started_at, ended_at, attendees, status,
-   transcript_path, minutes_path, draft_message_id, extracted, model, error)
+   transcript_path, minutes_path, draft_message_id, extracted, model, error,
+   folder_url, minutes_url, summary_url, transcript_url, posted_at, post_error)
 SELECT meeting_id, subject, organiser_upn, started_at, ended_at,
        coalesce(attendees, '{}'), status::minutes_status,
-       transcript_path, minutes_path, draft_message_id, extracted, model, error
+       transcript_path, minutes_path, draft_message_id, extracted, model, error,
+       folder_url, minutes_url, summary_url, transcript_url, posted_at, post_error
 FROM json_to_recordset($1::json) AS x(
   meeting_id text, subject text, organiser_upn text,
   started_at timestamptz, ended_at timestamptz, attendees text[], status text,
   transcript_path text, minutes_path text, draft_message_id text,
-  extracted jsonb, model text, error text)
-ON CONFLICT (meeting_id) DO UPDATE SET
+  extracted jsonb, model text, error text,
+  folder_url text, minutes_url text, summary_url text, transcript_url text,
+  posted_at timestamptz, post_error text)
+-- The unique index on meeting_id is PARTIAL (WHERE meeting_id IS NOT NULL), which
+-- lets several rows carry a null id. Postgres will not match a partial index unless
+-- the inference repeats its predicate, so omitting the WHERE here fails with
+-- "no unique or exclusion constraint matching the ON CONFLICT specification".
+ON CONFLICT (meeting_id) WHERE meeting_id IS NOT NULL DO UPDATE SET
   status = EXCLUDED.status, minutes_path = EXCLUDED.minutes_path,
   draft_message_id = EXCLUDED.draft_message_id, extracted = EXCLUDED.extracted,
-  error = EXCLUDED.error, updated_at = now()`,
+  error = EXCLUDED.error, folder_url = EXCLUDED.folder_url,
+  minutes_url = EXCLUDED.minutes_url, summary_url = EXCLUDED.summary_url,
+  transcript_url = EXCLUDED.transcript_url,
+  -- A re-run that fails to post must not erase the timestamp of one that did.
+  posted_at = coalesce(EXCLUDED.posted_at, meeting_minutes.posted_at),
+  post_error = EXCLUDED.post_error, updated_at = now()`,
           options: { queryReplacement: '={{ $json.payload }}' },
         },
       },

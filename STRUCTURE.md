@@ -1,6 +1,7 @@
 # STRUCTURE.md — session bootstrap for BEXT Automation
 
-Read order for a fresh session: `CLAUDE.md` → this file → `docs/SETUP-CHECKLIST.md`.
+Read order for a fresh session: `CLAUDE.md` → this file → `docs/INFRASTRUCTURE.md` →
+`docs/SETUP-CHECKLIST.md`.
 The repo is the source of truth — never the n8n UI.
 
 ## Repo map
@@ -12,6 +13,7 @@ The repo is the source of truth — never the n8n UI.
 | `sources/registry.yaml` | Single source of truth for the 68 monitored sources; seeds the `sources` table |
 | `dashboard/` | Next.js 16 App Router + Tailwind v4, direct `pg` from server components. Deployed to Hostinger VPS via `.github/workflows/deploy.yml` |
 | `graph/` | Microsoft Graph setup: `app-registration.md` (instructions + blocker log), `verify.js` (4-step health check) |
+| `docs/INFRASTRUCTURE.md` | **Verified map of hosting, cPanel/DNS, mail and M365.** Read before touching any of them |
 | `docs/` | Deliverable drafts, runbook (`05-runbook.md`), `SETUP-CHECKLIST.md` (manual human steps) |
 | `deliverables/` | Client-facing PDFs |
 | `api/`, `fetcher/`, `infra/` | Support code and infra config |

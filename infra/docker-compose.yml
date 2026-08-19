@@ -131,6 +131,10 @@ services:
       # See docs/TEAMS-WEBHOOK-SETUP.md.
       TEAMS_MEETING_WEBHOOK_URL: ${TEAMS_MEETING_WEBHOOK_URL}
 
+      # Calendars the meeting workflow polls. Whoever hosts a meeting owns its
+      # transcript, so this is not just the automation account.
+      MEETING_HOSTS: ${MEETING_HOSTS}
+
       # Code nodes may not require Node builtins unless named here. The ingest
       # parser hashes article content with crypto to deduplicate stories that are
       # syndicated across several sources under different URLs.
