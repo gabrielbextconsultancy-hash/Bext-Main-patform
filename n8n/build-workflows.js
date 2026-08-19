@@ -952,6 +952,9 @@ Return a JSON object with exactly these keys:
               owner is a person named in the transcript, or "Unassigned" — never guess
               closed is true only if the transcript says it is done
   decisions   array of strings — decisions actually made, not options discussed
+  title       a short specific title for this meeting, 4 to 8 words, describing what was
+              actually discussed. The calendar subject is often a placeholder like
+              "reset test" — do not echo it. Example: "Torquay DNSP delay and switchboard order"
   summary     3-5 sentences of prose for the follow-up email
   next_meeting string, or ""
 
@@ -1462,7 +1465,7 @@ for (const cand of candidates) {
         }
 
         const card = buildMeetingCard({
-          subject: ev.subject, program: data.program, meetingNo: data.meeting_no,
+          subject: x.title || ev.subject, program: data.program, meetingNo: data.meeting_no,
           date: data.date, time: data.time, venue: data.venue,
           organiser: ev.organizer?.emailAddress?.name || '',
           attendees: people, summary: x.summary || '', decisions: x.decisions || [],
@@ -1497,7 +1500,7 @@ for (const cand of candidates) {
 
     out.push({ json: {
       meeting_id: meeting.id,
-      subject: ev.subject || 'Meeting',
+      subject: x.title || ev.subject || 'Meeting',
       organiser_upn: ev.organizer?.emailAddress?.address || '',
       started_at: ev.start?.dateTime ? ev.start.dateTime + 'Z' : null,
       ended_at: ev.end?.dateTime ? ev.end.dateTime + 'Z' : null,
