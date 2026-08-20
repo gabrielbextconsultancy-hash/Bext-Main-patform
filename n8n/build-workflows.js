@@ -456,37 +456,72 @@ const REPORT_SECTIONS = [
 // day's intake, and the brief asks for the day's coverage, not a shortlist.
 // The join to article_analysis is therefore LEFT — an article the scorer has
 // not reached yet is still that day's news and still belongs in the sheet.
+// Relevance is a filter, not just a sort order.
+//
+// Until 19 Aug 2026 this published everything from the prior day and used the
+// score only in ORDER BY, so the sheet ran to 92 items and carried a tobacco
+// bill scoring 0, a copper-gold project at 15 and a graduate recruitment notice
+// at 20. The client asked for the non-industry items to be culled.
+//
+// The scorer was already right. On the day complained about, every item flagged
+// as irrelevant scored 20 or less, and everything genuinely useful — the VNI
+// West reversal at 92, the offshore wind auction at 85, the Mortlake BESS at 82,
+// the bushfire outlook and the ENA regulator keynote at 60 — scored 55 or more.
+// Nothing needed re-scoring; the judgement simply was not being applied.
+//
+// 50 sits in the empty band between those two groups. Tunable rather than
+// hardcoded because the right cut depends on how the sheet reads over a few
+// weeks, not on one day's data.
+const REPORT_MIN_RELEVANCE = Number(process.env.REPORT_MIN_RELEVANCE || 50);
+// A quiet day self-limits; a busy one should not bury the top items under
+// thirty. Applied per section so a flood of international news cannot crowd out
+// the Australian items.
+const REPORT_MAX_PER_SECTION = Number(process.env.REPORT_MAX_PER_SECTION || 12);
+
 const REPORT_SELECT = `
 WITH win AS (
   SELECT date_trunc('day', now() AT TIME ZONE 'Australia/Melbourne')
            - interval '1 day' AS day_start
+),
+ranked AS (
+  SELECT a.id, a.url, a.title,
+         -- What the sheet prints beside each item. published_at where the source
+         -- gives one, otherwise when we first saw it; date_is_exact says which,
+         -- so the sheet never presents a fetch time as a publication date.
+         coalesce(a.published_at, a.fetched_at) AS shown_at,
+         (a.published_at IS NOT NULL)           AS date_is_exact,
+         s.name AS source_name, s.category,
+         coalesce(an.summary, '') AS summary,
+         an.relevance_score,
+         row_number() OVER (
+           PARTITION BY s.category
+           ORDER BY an.relevance_score DESC, a.published_at DESC NULLS LAST
+         ) AS rn
+  FROM articles a
+  JOIN sources s          ON s.id = a.source_id
+  -- An inner join, deliberately. An article with no analysis row has not been
+  -- judged, and an unjudged article must not reach the client — that is how the
+  -- noise got in. Analysis runs every 30 minutes, so anything from the prior day
+  -- has been scored long before 05:00.
+  JOIN article_analysis an ON an.article_id = a.id
+  CROSS JOIN win w
+  -- Only about a quarter of these sources publish a machine-readable date, so
+  -- fall back to when we first saw the article. Ingest runs hourly, which keeps
+  -- that within an hour of publication for the sources that omit it.
+  WHERE (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')
+          >= w.day_start
+    AND (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')
+          <  w.day_start + interval '1 day'
+    AND an.relevance_score >= ${REPORT_MIN_RELEVANCE}
 )
-SELECT a.id, a.url, a.title,
-       -- What the sheet prints beside each item. published_at where the source
-       -- gives one, otherwise when we first saw it; date_is_exact says which,
-       -- so the sheet never presents a fetch time as a publication date.
-       coalesce(a.published_at, a.fetched_at) AS shown_at,
-       (a.published_at IS NOT NULL)           AS date_is_exact,
-       s.name AS source_name, s.category,
-       coalesce(an.summary, '') AS summary,
-       an.relevance_score,
+SELECT id, url, title, shown_at, date_is_exact, source_name, category,
+       summary, relevance_score,
        -- Carried on every row so the footer can state coverage without a
        -- second query: how many sources are being pulled right now.
        (SELECT count(*) FROM sources WHERE active) AS sources_monitored
-FROM articles a
-JOIN sources s               ON s.id = a.source_id
-LEFT JOIN article_analysis an ON an.article_id = a.id
-CROSS JOIN win w
--- Only about a quarter of these sources publish a machine-readable date, so
--- fall back to when we first saw the article. Ingest runs hourly, which keeps
--- that within an hour of publication for the sources that omit it.
-WHERE (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')
-        >= w.day_start
-  AND (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')
-        <  w.day_start + interval '1 day'
-ORDER BY s.category,
-         an.relevance_score DESC NULLS LAST,
-         a.published_at DESC NULLS LAST`;
+FROM ranked
+WHERE rn <= ${REPORT_MAX_PER_SECTION}
+ORDER BY category, relevance_score DESC, shown_at DESC`;
 
 function dailyReportWorkflow() {
   return {
