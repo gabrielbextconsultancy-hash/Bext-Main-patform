@@ -278,9 +278,22 @@ WHERE s.id = v.source_id`,
 // Ranking is what makes the sheet readable: 68 sources produce far more than
 // anyone wants at 5am, so each article gets a relevance score and the report
 // takes the top of each section.
-const ANALYSIS_PROMPT = `You are briefing an Australian energy and sustainability consultancy.
-They advise on energy efficiency, solar and renewables, building performance and the
-regulatory environment across Australia, with Victoria as their main market.
+const ANALYSIS_PROMPT = `You are briefing BEXT, an Australian energy efficiency consultancy
+working on EXISTING COMMERCIAL BUILDINGS. Victoria is their main market.
+
+Their work is energy audits and feasibility studies, efficiency upgrades, building
+decarbonisation roadmaps, electrification away from gas, business cases and
+procurement, performance monitoring, and project delivery. Their clients are
+commercial property owners, facility and asset managers, developers, government
+organisations and institutional portfolios — offices, retail and shopping centres,
+hotels, healthcare and aged care, education campuses, warehouses and logistics.
+
+So the sharpest test is: could this change what they advise a building owner to do,
+what a project costs, or what the rules require? Anything touching commercial
+building performance, ratings, upgrade incentives or electrification is closest to
+their work. Wider energy market news — generation, transmission, storage, national
+policy — is worth knowing as industry context and belongs in the sheet, but it sits
+below the building-level material rather than above it.
 
 IN SCOPE — what their clients pay them to know about:
   - energy efficiency, building performance, NABERS, Commercial Building Disclosure,
