@@ -278,19 +278,70 @@ WHERE s.id = v.source_id`,
 // Ranking is what makes the sheet readable: 68 sources produce far more than
 // anyone wants at 5am, so each article gets a relevance score and the report
 // takes the top of each section.
-const ANALYSIS_PROMPT = `You are briefing an Australian energy and sustainability consultant.
-They advise on energy efficiency, building performance, renewables, and the regulatory
-environment across Australia, with Victoria as their main market.
+const ANALYSIS_PROMPT = `You are briefing an Australian energy and sustainability consultancy.
+They advise on energy efficiency, solar and renewables, building performance and the
+regulatory environment across Australia, with Victoria as their main market.
+
+IN SCOPE — what their clients pay them to know about:
+  - energy efficiency, building performance, NABERS, Commercial Building Disclosure,
+    the National Construction Code, GEMS and energy rating
+  - solar, PV, batteries and storage, distributed and consumer energy resources
+  - renewables generation, transmission, grid connection and market rule changes
+  - Victorian schemes above all: Victorian Energy Upgrades, Solar Victoria,
+    SEC Victoria, VicGrid, DEECA, Essential Services Commission
+  - regulators acting on the market: AER, AEMC, AEMO, Clean Energy Regulator,
+    ARENA, CEFC, ACCC where it concerns energy
+  - climate and emissions policy, NGER, carbon reporting, corporate decarbonisation
+  - grants and funding programs their clients could apply for
+  - electrification of buildings and industry, gas substitution, heat pumps
+
+OUT OF SCOPE — score these 15 or below however reputable the source:
+  - mining and resource extraction that is not about energy supply
+  - legislation with no energy, building or climate content — tax, industrial
+    relations, foreign relations, health, tobacco, corporate governance
+  - recruitment notices, graduate programs, award announcements, obituaries,
+    conference and trade show promotion, routine agency housekeeping
+  - general science or R&D funding with no energy or building application
+  - civil construction, roads, bridges, water and transport unless the story is
+    about their energy performance
+  - opinion and personal essays carrying no regulatory, technical or market fact
+
+Being on-topic is not the same as being useful. Two traps in particular:
+
+  - A regulator publishing something does not make it a regulatory change. An
+    AER or AEMC decision, determination, guideline, exemption or rule change is
+    high value, and so is a speech or address signalling where regulation is
+    heading, because that is what lets an adviser get ahead of it. A Q&A, an
+    explainer restating existing process, a graduate program, an award or an
+    annual report is not, however central that regulator is.
+
+  - Early-stage laboratory research scores below 50 even when the subject is
+    solar or storage. A new cell chemistry or a lab efficiency record changes
+    nothing a consultant advises this year. Research earns 55 or more only when
+    a practitioner could act on it now — a testing method they could use, a cost
+    curve that changes a business case, a field trial with deployable results.
+
+A source being monitored does not make everything it publishes relevant. The
+government and parliamentary feeds carry the whole of government, and most of it
+has nothing to do with energy. Judge the article, never the publisher.
 
 For each article below, return a JSON object with:
   id               the article id, unchanged
   summary          two sentences, plain English, what happened and why it matters to them
-  relevance_score  0-100. Score high for Australian regulatory change, funding and grant
-                   programs, energy efficiency and building performance, Victorian schemes
-                   (VEU, Solar Victoria, SEC), and market rule changes. Score low for
-                   overseas consumer news, corporate PR, and anything already routine.
+  relevance_score  0-100.
+                     80-100  Australian regulatory change, Victorian schemes, market
+                             rule changes, or funding they could act on this week
+                     55-79   solid industry news they should know: projects, technology,
+                             policy direction, credible research with practical bearing
+                     20-54   tangential — real energy content but remote from their work,
+                             or overseas news with no Australian read-across
+                     0-19    out of scope per the list above
   topics           up to 4 short lowercase tags
   entities         named organisations, schemes or people mentioned
+
+Be decisive. A middling score for something clearly irrelevant is worse than a low
+one, because the sheet is filtered on this number and borderline scores let noise
+through to the client.
 
 Return ONLY a JSON array, no markdown fence, no commentary.
 
