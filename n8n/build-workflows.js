@@ -671,12 +671,82 @@ return [{ json: { empty: false, item_count: rows.length, sections, intro,
         },
       },
       {
+        id: 'deliv', name: 'Check deliverability', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(170, 180),
+        parameters: {
+          mode: 'runOnceForAllItems', language: 'javaScript',
+          jsCode: `
+// Why this exists: the sheet spent weeks in Gmail's spam folder while every
+// dashboard read healthy, because "the workflow ran" is not "the mail arrived".
+// These are the settings that decide whether a receiver trusts the message, and
+// they now travel with the report so a regression is visible the next morning.
+//
+// DNS over HTTPS rather than require('dns') — the Code sandbox exposes only the
+// modules in NODE_FUNCTION_ALLOW_BUILTIN.
+const http = this.helpers.httpRequest;
+const DOMAIN = String($env.REPORT_SENDER || '').split('@')[1] || '';
+
+const lookup = async (name, type) => {
+  try {
+    const r = await http({
+      method: 'GET', url: 'https://dns.google/resolve',
+      qs: { name: name, type: type }, json: true, timeout: 15000,
+    });
+    return (r.Answer || []).map(a => String(a.data || '').replace(/^"|"$/g, ''));
+  } catch (e) { return []; }
+};
+
+const checks = [];
+if (!DOMAIN) {
+  checks.push({ name: 'sender', ok: false, detail: 'REPORT_SENDER not set' });
+} else {
+  const spf = (await lookup(DOMAIN, 'TXT')).find(t => /^v=spf1/i.test(t)) || '';
+  checks.push({
+    name: 'SPF',
+    ok: /-all/.test(spf) && /mailchannels|ip4:/i.test(spf),
+    detail: spf ? (/-all/.test(spf) ? 'published, hard fail' : 'published, soft ~all') : 'MISSING',
+  });
+
+  const dmarc = (await lookup('_dmarc.' + DOMAIN, 'TXT')).find(t => /^v=DMARC1/i.test(t)) || '';
+  checks.push({
+    name: 'DMARC', ok: !!dmarc,
+    detail: dmarc ? (/rua=/.test(dmarc) ? 'published with reporting' : 'published, no reporting') : 'MISSING',
+  });
+
+  const dkim = (await lookup('default._domainkey.' + DOMAIN, 'TXT')).join('');
+  checks.push({ name: 'DKIM', ok: /v=DKIM1/i.test(dkim), detail: /v=DKIM1/i.test(dkim) ? 'key published' : 'MISSING' });
+
+  const mx = await lookup(DOMAIN, 'MX');
+  // A sending domain that cannot receive mail is a long-standing spam heuristic,
+  // and it also means every reply to the sheet disappears.
+  checks.push({ name: 'MX', ok: mx.length > 0, detail: mx.length ? 'can receive replies' : 'MISSING — replies vanish' });
+}
+
+const failed = checks.filter(c => !c.ok);
+const line = checks.map(c => c.name + ' ' + (c.ok ? 'ok' : 'FAIL')).join(' · ');
+return [{ json: {
+  deliverability: line,
+  deliverability_ok: failed.length === 0,
+  deliverability_detail: checks.map(c => c.name + ': ' + c.detail).join(' | '),
+} }];
+`,
+        },
+      },
+      {
         id: 'render', name: 'Render HTML', type: 'n8n-nodes-base.code',
         typeVersion: 2, position: pos(280, 0),
         parameters: {
           mode: 'runOnceForAllItems', language: 'javaScript',
           jsCode: `
 const d = $input.first().json;
+// Carried from the deliverability node so the footer can state, every morning,
+// whether the settings that decide inbox placement are still in order.
+let deliv = 'not checked', delivOk = true;
+try {
+  const dc = $("Check deliverability").first().json;
+  deliv = dc.deliverability || deliv;
+  delivOk = dc.deliverability_ok !== false;
+} catch (e) { /* the sheet must go out even if the check did not run */ }
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
   ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 // The sheet goes out at 05:00 covering the day before, so the heading and the
@@ -734,9 +804,28 @@ const html = \`<!doctype html><html><body style="margin:0;padding:0;background:#
     \${d.sources_monitored
       ? \`Generated automatically from \${d.sources_monitored} monitored sources; \${d.sources_contributing} published on this day.\`
       : 'Generated automatically.'}
+    <br>Delivery: \${esc(deliv)}\${delivOk ? '' : ' — this sheet may be filtered; see docs/INFRASTRUCTURE.md'}
     Grants / Funding and LinkedIn sections are covered in a separate report.
   </div>
 </div></body></html>\`;
+
+// The plain-text alternative. Not a courtesy: a message with only an HTML part
+// is a long-standing bulk-mail signal, and some clients render this instead.
+const text = d.empty
+  ? 'No qualifying articles published on this day.'
+  : [
+      'BEXT CONSULTANCY - INDUSTRY DAILY',
+      coverage,
+      d.item_count + ' items across ' + d.sections.length + ' sections',
+      d.intro ? '\\n' + d.intro : '',
+    ].concat(d.sections.map(sec =>
+      '\\n' + sec.name.toUpperCase() + '\\n' +
+      sec.items.map(a =>
+        '- ' + a.title + '\\n  ' + a.source_name + ' - ' + itemDate(a) +
+        (a.summary ? '\\n  ' + a.summary : '') + '\\n  ' + a.url
+      ).join('\\n\\n')
+    )).concat([ '\\nGenerated automatically from ' + (d.sources_monitored || 0) +
+      ' monitored sources.' ]).filter(Boolean).join('\\n');
 
 const date = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Melbourne' });
 // REPORT_RECIPIENT is a comma-separated list — the sheet goes to the consultant
@@ -756,7 +845,7 @@ const items = d.sections.flatMap(sec =>
     blurb: String(it.summary || '').slice(0, 500),
   }))
 );
-return [{ json: { html, items, subject: 'BEXT Industry Daily — ' + coverage,
+return [{ json: { html, text, items, subject: 'BEXT Industry Daily — ' + coverage,
                   report_date: date, item_count: d.item_count,
                   recipient, detail, generated_by: d.generated_by } }];
 `,
@@ -817,12 +906,22 @@ ON CONFLICT (report_id, article_id) DO NOTHING`,
         typeVersion: 2.1, position: pos(720, 0),
         credentials: { smtp: { id: SMTP_CRED, name: 'BEXT SMTP' } },
         parameters: {
-          fromEmail: '={{ $env.REPORT_SENDER }}',
+          // A display name rather than a bare address. Mail from a naked machine
+          // address reads as automated to a filter and to a person.
+          fromEmail: '={{ "BEXT Consultancy <" + $env.REPORT_SENDER + ">" }}',
           toEmail: '={{ $("Render HTML").first().json.recipient }}',
           subject: '={{ $("Render HTML").first().json.subject }}',
-          emailFormat: 'html',
+          // Both parts, not HTML alone. A single-part text/html message with no
+          // plain-text alternative is one of the oldest bulk-mail signals there is,
+          // and the sheet reads perfectly well as text.
+          emailFormat: 'both',
+          text: '={{ $("Render HTML").first().json.text }}',
           html: '={{ $("Render HTML").first().json.html }}',
-          options: {},
+          options: {
+            // Replies went to a mailbox on a domain with no MX record, so they
+            // vanished. Point them at one someone actually reads.
+            replyTo: '={{ $env.REPORT_REPLY_TO || $env.MS_SENDER_UPN }}',
+          },
         },
       },
       {
@@ -851,7 +950,8 @@ VALUES ('daily_report', 'up', $1)`,
     connections: {
       'Daily 05:00 AEST': { main: [[{ node: 'Top articles, prior day', type: 'main', index: 0 }]] },
       'Top articles, prior day': { main: [[{ node: 'Hermes writes the brief', type: 'main', index: 0 }]] },
-      'Hermes writes the brief': { main: [[{ node: 'Render HTML', type: 'main', index: 0 }]] },
+      'Hermes writes the brief': { main: [[{ node: 'Check deliverability', type: 'main', index: 0 }]] },
+      'Check deliverability': { main: [[{ node: 'Render HTML', type: 'main', index: 0 }]] },
       'Render HTML': { main: [[{ node: 'Save report', type: 'main', index: 0 }]] },
       'Save report': { main: [[{ node: 'Record items sent', type: 'main', index: 0 }]] },
       'Record items sent': { main: [[{ node: 'Send via SMTP', type: 'main', index: 0 }]] },
