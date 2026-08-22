@@ -85,16 +85,24 @@ sources:
     url: "https://www.reuters.com/markets/carbon/"
     method: scrape
     requires_browser: true
-    note: Returns 401 to every automated request; subscription-gated. Needs a licensed feed or a paid seat — raise with the client.
     active: false
+    note: >-
+      Still 401 to every automated request, including browser-fingerprint
+      impersonation — confirmed 22 Aug 2026. Unlike DCCEEW and S&P this is a real
+      account wall, not a fingerprint. Route is the free Reuters newsletter into
+      gabriel.bextconsultancy@gmail.com; see docs/SUBSCRIPTION-SOURCES.md. Left
+      inactive so it cannot report false health while the mail route is set up.
   - slug: spglobal-energy-transition
     name: "S&P Global — Energy Transition"
     category: International Industry Updates
-    url: "https://www.spglobal.com/en/research-insights/market-insights/energy-transition#news"
+    url: "https://www.spglobal.com/commodity-insights/en/news-research"
     method: scrape
-    requires_browser: true
-    note: Returns 403 to plain HTTP and to headless Chromium with challenge solving. Subscriber content. Raise with the client.
-    active: false
+    active: true
+    note: >-
+      Previously 403 to plain HTTP and to headless Chromium alike. The block was
+      a TLS fingerprint, not a subscription wall; the Scrapling fetcher returns
+      200. Verified 22 Aug 2026. The old research-insights URL now redirects, so
+      the canonical newsroom path is used here.
   - slug: iea-energy-efficiency
     name: IEA — Energy Efficiency
     category: International Industry Updates
@@ -285,11 +293,15 @@ sources:
   - slug: dcceew
     name: DCCEEW
     category: Industry Updates
-    url: "https://www.dcceew.gov.au/about/news/all?f%5B0%5D=news_type%3A1863&f%5B1%5D=topic%3A1883"
+    url: "https://www.dcceew.gov.au/about/news"
     method: scrape
-    requires_browser: true
-    active: false
-    note: Returns a hard 403 with no solvable challenge, to both HTTP and headless Chromium. The DCCEEW newsroom needs another route — RSS by topic, or the minister feed as a partial substitute.
+    active: true
+    note: >-
+      Was marked unfixable on a 403. Two things were wrong. The block was a TLS
+      fingerprint, which the Scrapling fetcher defeats, and the faceted URL
+      (?f[0]=news_type…) trips the WAF even with impersonation while the plain
+      newsroom path does not. Verified 200 on 22 Aug 2026. If the 403 returns,
+      check the URL for query parameters before assuming the site blocked us.
   - slug: energy-gov-au
     name: Energy.gov.au — News
     category: Industry Updates

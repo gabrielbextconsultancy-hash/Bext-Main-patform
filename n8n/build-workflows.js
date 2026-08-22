@@ -27,6 +27,12 @@ const INGEST_SRC = fs
   .replace(/^module\.exports\s*=.*$/m, '')
   .replace(/^const crypto = require\('crypto'\);$/m, '');
 
+// The model-backed fallback reader, minus its export line. Runs only when the
+// ordinary parser finds nothing, so a broken source degrades instead of dying.
+const HERMES_SRC = fs
+  .readFileSync(path.join(__dirname, 'lib', 'hermes-extract.js'), 'utf8')
+  .replace(/^module\.exports\s*=.*$/m, '');
+
 // The tested document writer, minus its export line, for embedding in a Code node.
 const DOCX_SRC = fs
   .readFileSync(path.join(__dirname, 'lib', 'docx.js'), 'utf8')
@@ -55,7 +61,25 @@ const { URL } = require('url');
 ${INGEST_SRC}
 // --- end shared parser ---
 
+// --- model-backed fallback reader ---
+${HERMES_SRC}
+// --- end fallback reader ---
+
 const FETCHER = 'http://fetcher:8080/fetch';
+// Reproduces Chrome's TLS fingerprint, which is what the 403s were actually
+// about. See scrapling/app.py for the before-and-after per source.
+const SCRAPLING = 'http://scrapling:8090/fetch';
+
+// Did this page yield anything parseable? Used to decide whether it is worth
+// paying for a browser render, and later whether to ask Hermes.
+const parseIndex_isEmpty = (html, url, method) => {
+  try {
+    const got = method === 'rss' ? parseFeed(html, url) : parseIndex(html, url);
+    return !Array.isArray(got) || got.length === 0;
+  } catch (e) {
+    return true;
+  }
+};
 // Dated items older than this are ignored. Long enough that a slow-publishing
 // regulator still lands, short enough that archive pages cannot refill the table.
 const FRESHNESS_DAYS = 14;
@@ -72,15 +96,35 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function fetchOne(s) {
   const config = typeof s.config === 'string' ? JSON.parse(s.config) : (s.config || {});
   const target = s.method === 'rss' ? (config.feed_url || s.url) : s.url;
-  let articles = [], status = 'ok', error = null, seen = 0;
+  let articles = [], status = 'ok', error = null, seen = 0, via = 'http';
 
   try {
+    // Retrieval is a ladder, because the ways a source fails are different in
+    // kind and no single client handles all of them. Measured 22 Aug 2026:
+    //
+    //   plain HTTP        DCCEEW 403, EcoGeneration 403, NABERS unreachable
+    //   TLS impersonation all three answer 200 — the WAF was fingerprinting the
+    //                     handshake, so more Chromium was never going to help
+    //   Chromium          still the only thing that runs client-side JavaScript
+    //
+    // Scrapling therefore goes first for everything, and Chromium is kept for
+    // what it is genuinely needed for rather than used as a blunt retry.
     let html;
-    if (config.requires_browser) {
-      // Imperva-protected or client-rendered — the fetcher renders it in Chromium
-      // and solves the challenge. It only runs two browsers at a time and answers
-      // 503 when both are busy, so back off and try again rather than dropping
-      // the source for the whole hour.
+
+    const viaScrapling = async () => {
+      const r = await helpers.httpRequest({
+        method: 'POST', url: SCRAPLING, json: true, timeout: 90000,
+        body: { url: target, include_html: true, timeout: 45 },
+      });
+      // A block page is not content. Returning it anyway is how a dead source
+      // reports "ok" for weeks, which is the failure this whole ladder exists for.
+      if (!r || !r.ok) throw new Error('scrapling status ' + ((r && r.status) || '?'));
+      return r.html || '';
+    };
+
+    const viaBrowser = async () => {
+      // The fetcher runs two browsers at a time and answers 503 when both are
+      // busy, so back off rather than dropping the source for the whole hour.
       let last;
       for (let attempt = 0; attempt < 6; attempt++) {
         try {
@@ -88,22 +132,53 @@ async function fetchOne(s) {
             method: 'POST', url: FETCHER, json: true, timeout: 120000,
             body: { url: target, timeout: 60000 },
           });
-          html = r.html || '';
-          break;
+          return r.html || '';
         } catch (e) {
           last = e;
           if (!String(e.message || '').includes('503')) throw e;
           await sleep(5000 + attempt * 3000);
         }
       }
-      if (html === undefined) throw last ?? new Error('fetcher unavailable');
-    } else {
-      html = await helpers.httpRequest({
-        method: 'GET', url: target, headers: HEADERS, timeout: 45000,
-      });
+      throw last || new Error('fetcher unavailable');
+    };
+
+    try {
+      html = await viaScrapling();
+      via = 'scrapling';
+    } catch (e) {
+      // Client-rendered pages and anything Scrapling could not get: try the browser.
+      html = await viaBrowser();
+      via = 'browser';
     }
 
-    const raw = s.method === 'rss' ? parseFeed(html, target) : parseIndex(html, target);
+    // A page that came back but yielded nothing is usually client-rendered, and
+    // the browser sees what a raw fetch cannot.
+    if (via === 'scrapling' && html && parseIndex_isEmpty(html, target, s.method)) {
+      try {
+        const rendered = await viaBrowser();
+        if (rendered && !parseIndex_isEmpty(rendered, target, s.method)) {
+          html = rendered;
+          via = 'browser';
+        }
+      } catch (e) { /* keep what Scrapling gave us */ }
+    }
+
+    let raw = s.method === 'rss' ? parseFeed(html, target) : parseIndex(html, target);
+
+    // Last resort. The page came back, so the site is not the problem — our
+    // reader simply does not recognise this markup. Rather than add another
+    // site-specific selector to a pile that silently rots, ask the model the
+    // question a person would ask: which of these links are stories? Only ever
+    // runs when the ordinary parser found nothing, so the cost is bounded to
+    // genuinely broken sources.
+    if ((!raw || raw.length === 0) && html) {
+      const h = await hermesExtract({ html, baseUrl: target, http: helpers.httpRequest });
+      if (h.articles.length) {
+        raw = h.articles.map(a => ({ title: a.title, url: a.url, published_at: null }));
+        via = via + '+hermes';
+      }
+    }
+
     const all = normalise(raw, { id: s.id, config });
 
     // Only what this source has not given us before. Index pages repeat their
@@ -130,7 +205,10 @@ async function fetchOne(s) {
     error = String(e.message || e).slice(0, 500);
   }
 
-  return { json: { source_id: s.id, slug: s.slug, status, error, articles, seen } };
+  // via records which tier actually produced the page. Without it a source that
+  // has quietly fallen back to the model every hour looks identical to a healthy
+  // one, and the whole point of the ladder is that degradation stays visible.
+  return { json: { source_id: s.id, slug: s.slug, status, error, articles, seen, via } };
 }
 
 // Sequentially, 64 sources take longer than the task timeout — the browser-backed
@@ -537,10 +615,15 @@ const REPORT_SECTIONS = [
 // hardcoded because the right cut depends on how the sheet reads over a few
 // weeks, not on one day's data.
 const REPORT_MIN_RELEVANCE = Number(process.env.REPORT_MIN_RELEVANCE || 50);
-// A quiet day self-limits; a busy one should not bury the top items under
-// thirty. Applied per section so a flood of international news cannot crowd out
-// the Australian items.
-const REPORT_MAX_PER_SECTION = Number(process.env.REPORT_MAX_PER_SECTION || 12);
+// A backstop against a genuinely abnormal day, not a way of shortening the
+// sheet — the relevance floor already does that, cutting 92 items to 15.
+//
+// Set to 12 originally, which quietly cost the client articles: on 20 August
+// eighteen items cleared the floor in Industry Updates and only twelve were
+// printed, so six relevant pieces were dropped with no trace, including one
+// scoring 60. A cap that bites in normal operation is not a backstop, it is an
+// undocumented second filter.
+const REPORT_MAX_PER_SECTION = Number(process.env.REPORT_MAX_PER_SECTION || 40);
 
 const REPORT_SELECT = `
 WITH win AS (
@@ -1214,6 +1297,8 @@ ${EMAIL_SRC}
 const inputRows = $input.all().map(i => i.json);
 const done = new Set(
   inputRows.filter(r => r.kind === 'done').map(r => r.a).filter(Boolean));
+const ALREADY_SENT = new Set(
+  inputRows.filter(r => r.kind === 'sent').map(r => r.a).filter(Boolean));
 const PARTICIPANTS = inputRows
   .filter(r => r.kind === 'participant')
   .map(r => ({ name: r.a, company: r.b, email: r.c, aliases: r.d || [] }));
@@ -1744,7 +1829,13 @@ for (const cand of candidates) {
     // Send only when a recipient is configured. The attachments have to be on the
     // message before this, because a sent message cannot be added to.
     let sentAt = null;
-    if (SEND_TO) {
+    if (SEND_TO && ALREADY_SENT.has(cand.meetingId)) {
+      // Reprocessed for some other reason — refile the documents, but do not mail
+      // the client a second copy of the same minutes. Not a failure: the record is
+      // fine and the card should still post. sent_at is left null here and the
+      // upsert coalesces it, so the original send time survives.
+      sentAt = null;
+    } else if (SEND_TO) {
       try {
         await graph('/users/' + me.id + '/messages/' + draft.id + '/send', {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: {},
@@ -1902,11 +1993,29 @@ function meetingIntakeWorkflow() {
           // single input, and a second Postgres node would have to fan in — this
           // keeps the graph flat. `done` is the exclusion list; `participant`
           // supplies the person → company mapping the follow-up email groups by.
+          // The exclusion window MUST be at least as long as the discovery window.
+          //
+          // Discovery looks back MEETING_LOOKBACK_HOURS (7 days). This list used
+          // to look back 3. Anything between the two aged out of "already done"
+          // while still being discoverable, so it was reprocessed on every tick —
+          // refiling the documents, reposting the card, and re-sending the minutes
+          // email to the client every fifteen minutes. Eight went out before it
+          // was caught.
+          //
+          // 90 days is deliberately far beyond any plausible discovery window, so
+          // widening the lookback again cannot reopen this. The list stays small
+          // because it holds ids, not rows.
           query: `SELECT 'done' AS kind, meeting_id AS a, NULL::text AS b, NULL::text AS c,
                          NULL::text[] AS d
   FROM meeting_minutes
  WHERE status <> 'failed'
-   AND created_at > now() - interval '3 days'
+   AND created_at > now() - interval '90 days'
+UNION ALL
+-- Every meeting whose minutes email has already gone out, whatever its status.
+-- This is the backstop: the window arithmetic above can be wrong again, but a
+-- client must never receive the same minutes twice.
+SELECT 'sent', meeting_id, NULL, NULL, NULL::text[]
+  FROM meeting_minutes WHERE sent_at IS NOT NULL
 UNION ALL
 SELECT 'participant', name, company, email, aliases FROM participants`,
           options: {},
@@ -1955,7 +2064,9 @@ ON CONFLICT (meeting_id) WHERE meeting_id IS NOT NULL DO UPDATE SET
   minutes_pdf_url = EXCLUDED.minutes_pdf_url,
   summary_pdf_url = EXCLUDED.summary_pdf_url,
   transcript_pdf_url = EXCLUDED.transcript_pdf_url,
-  sent_at = EXCLUDED.sent_at,
+  -- Never clear a send that already happened: a later reprocess writes null here,
+  -- and overwriting would re-arm the duplicate-send guard that reads this column.
+  sent_at = COALESCE(EXCLUDED.sent_at, meeting_minutes.sent_at),
   transcript_url = EXCLUDED.transcript_url,
   -- A re-run that fails to post must not erase the timestamp of one that did.
   posted_at = coalesce(EXCLUDED.posted_at, meeting_minutes.posted_at),

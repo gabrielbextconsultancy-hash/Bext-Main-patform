@@ -74,6 +74,34 @@ services:
       retries: 3
       start_period: 20s
 
+  # Retrieval for sources that refuse an ordinary HTTP client. Separate from the
+  # Node fetcher because the capability is a TLS fingerprint that only curl_cffi
+  # reproduces — not something more Chromium solves. See scrapling/app.py for the
+  # before-and-after numbers that justified the extra service.
+  scrapling:
+    build: ../scrapling
+    image: bext-scrapling:latest
+    container_name: bext-scrapling
+    restart: always
+    environment:
+      PORT: 8090
+      FETCH_TIMEOUT: 45
+      # Session cookies for subscriber-only sources, JSON, from .env. Never commit.
+      SOURCE_COOKIES: ${SOURCE_COOKIES:-}
+    ports:
+      # Loopback only, as with Postgres and Qdrant. n8n reaches it in-network as
+      # http://scrapling:8090; this publish exists so the repair harness can drive
+      # it through an SSH tunnel.
+      - "127.0.0.1:8090:8090"
+    networks:
+      - bext_internal
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8090/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
   n8n:
     image: docker.n8n.io/n8nio/n8n:2.32.6
     container_name: bext-n8n
@@ -141,7 +169,7 @@ services:
       # syndicated across several sources under different URLs.
       # crypto hashes article content to deduplicate syndicated stories; url
       # provides the URL constructor, which the sandbox does not expose globally.
-      NODE_FUNCTION_ALLOW_BUILTIN: crypto,url,https
+      NODE_FUNCTION_ALLOW_BUILTIN: crypto,url,https,dns
 
       # Code nodes are denied $env by default, which silently killed the analysis
       # workflow on every tick: it loaded 40 articles then died reading

@@ -313,3 +313,60 @@ Three of these — R020, R021, R022 — were introduced *while fixing* the one b
 it. Each fix was correct in isolation and wrong in the running environment. The
 check that caught the last one was the dashboard, which is the argument for
 building the monitoring view early rather than last.
+
+---
+
+## R023 — the client was emailed the same minutes every 15 minutes
+
+**Cost:** eight identical emails to Brent between 02:31 and 04:15 on 22 Aug, for
+one meeting. Client-visible, and not recallable.
+
+**Cause:** two windows that must agree, and did not.
+
+```
+discovery window   MEETING_LOOKBACK_HOURS = 168   (7 days)
+exclusion window   created_at > now() - '3 days'
+```
+
+Widening discovery to 7 days without widening the exclusion list left a gap.
+A meeting older than 3 days but newer than 7 was still discovered, no longer
+counted as done, and so was reprocessed on every tick — refiling documents,
+reposting the card, and re-sending the minutes. It stayed invisible until
+sending was switched on; before that it silently rewrote the same files.
+
+**Fix, in three layers:**
+
+1. exclusion window widened to **90 days**, far beyond any plausible discovery
+   window, so widening the lookback again cannot reopen the gap
+2. a **duplicate-send guard**: every meeting with a `sent_at` is loaded and the
+   send is skipped, whatever the windows say. Window arithmetic can be wrong
+   again; "never send the same minutes twice" must not depend on it
+3. `sent_at = COALESCE(EXCLUDED.sent_at, meeting_minutes.sent_at)` — a later
+   reprocess writes null, and overwriting would have cleared the very record
+   layer 2 reads, re-arming the loop
+
+**Guard:** R023 — asserts exclusion ≥ discovery, that the dedupe set exists, and
+that `sent_at` cannot be cleared.
+
+### The lesson
+
+Two windows that must agree, changed one at a time. The first change was
+requested and correct; the second was implied and never made. A derived value or
+an assertion at the point of change would have caught it — and R023 is now that
+assertion.
+
+Also worth noting: this was only visible because sending was enabled. The same
+loop had been refiling documents and reposting cards for days without anyone
+noticing. **Idempotence deserves a check even when the side effects are invisible.**
+
+---
+
+## R022b — a require() the sandbox blocks, found before it ran
+
+R022 flagged `require('dns')` in `BEXT — Daily Report`'s deliverability node
+against an allow-list of `crypto,url,https`. That node would have failed at
+runtime with `Module 'dns' is disallowed`, exactly as the `https` upload did.
+
+Caught by the check rather than by a failed report. `NODE_FUNCTION_ALLOW_BUILTIN`
+is now `crypto,url,https,dns` in the repo compose and on the VPS, and the R022
+default mirrors it.

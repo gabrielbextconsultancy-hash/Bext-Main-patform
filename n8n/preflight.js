@@ -286,7 +286,9 @@ check('R021', 'binary uploads bypass the n8n HTTP helper', () => {
 // meeting failed at runtime with "Module 'https' is disallowed" — deployed
 // cleanly, broke only when it ran.
 check('R022', 'every require() in a Code node is allowed by the sandbox', () => {
-  const allowed = (process.env.NODE_FUNCTION_ALLOW_BUILTIN || 'crypto,url,https')
+  // Mirrors NODE_FUNCTION_ALLOW_BUILTIN in infra/docker-compose.yml. Keep the two
+  // in step: this check is only as good as the list it compares against.
+  const allowed = (process.env.NODE_FUNCTION_ALLOW_BUILTIN || 'crypto,url,https,dns')
     .split(',').map(s => s.trim()).filter(Boolean);
   const missing = new Set();
   for (const f of fs.readdirSync(path.join(ROOT, 'n8n/workflows'))) {
@@ -301,6 +303,32 @@ check('R022', 'every require() in a Code node is allowed by the sandbox', () => 
   return missing.size
     ? { ok: false, detail: [...missing].join('; ') + ` (allowed: ${allowed.join(',')})` }
     : { ok: true, detail: `allowed: ${allowed.join(',')}` };
+});
+
+// ── R023 ─ the exclusion window must outlast the discovery window ───────────
+// Discovery looks back MEETING_LOOKBACK_HOURS; the "already done" list looked
+// back 3 days. Anything older than the exclusion window but newer than the
+// discovery window was reprocessed on every tick — and with sending enabled that
+// mailed the client the same minutes every fifteen minutes. Eight went out.
+check('R023', 'exclusion window outlasts discovery, and sends are deduped', () => {
+  const wf = workflow('BEXT-Meeting-Intake');
+  const n = (wf.nodes || []).find(x => /processed meetings/i.test(x.name || ''));
+  const q = (n && n.parameters && n.parameters.query) || '';
+  const m = q.match(/created_at\s*>\s*now\(\)\s*-\s*interval\s*'(\d+)\s*days?'/i);
+  if (!m) return { ok: false, detail: 'no exclusion window found' };
+  const exclusionDays = Number(m[1]);
+
+  const code = codeNodes(wf).map(x => x.parameters.jsCode).join('\n');
+  const lk = code.match(/MEETING_LOOKBACK_HOURS\s*\|\|\s*(\d+)/);
+  const discoveryDays = lk ? Number(lk[1]) / 24 : 1;
+
+  if (exclusionDays < discoveryDays)
+    return { ok: false, detail: `exclusion ${exclusionDays}d < discovery ${discoveryDays}d — meetings reprocess forever` };
+  if (!/ALREADY_SENT/.test(code))
+    return { ok: false, detail: 'no duplicate-send guard' };
+  if (!/COALESCE\(EXCLUDED\.sent_at/i.test(code + q + JSON.stringify(wf)))
+    return { ok: false, detail: 'sent_at can be cleared by a reprocess' };
+  return { ok: true, detail: `exclusion ${exclusionDays}d ≥ discovery ${discoveryDays}d, sends deduped` };
 });
 
 check('R012', 'required env is set locally', () => {
