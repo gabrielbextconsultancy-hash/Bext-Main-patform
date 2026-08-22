@@ -964,11 +964,18 @@ if (!DOMAIN) {
 
 const failed = checks.filter(c => !c.ok);
 const line = checks.map(c => c.name + ' ' + (c.ok ? 'ok' : 'FAIL')).join(' · ');
-return [{ json: {
+// Carry the input forward. This node sits mid-chain between the brief and the
+// renderer, and returning only its own fields silently dropped the entire report
+// — sections, item_count, recipient — so Render HTML received a payload with no
+// articles in it and died on sections.map. Four consecutive scheduled runs
+// errored or crashed that way before anyone looked at an execution.
+//
+// A node inserted into a pipeline has to pass through what it did not produce.
+return [{ json: Object.assign({}, $input.first().json, {
   deliverability: line,
   deliverability_ok: failed.length === 0,
   deliverability_detail: checks.map(c => c.name + ': ' + c.detail).join(' | '),
-} }];
+}) }];
 `,
         },
       },
