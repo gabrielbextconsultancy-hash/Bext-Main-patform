@@ -55,6 +55,12 @@ services:
       PORT: 8080
       # Chromium is memory-hungry; two at a time is what this VPS comfortably takes.
       MAX_CONCURRENT: 2
+      # Member-portal logins for tier 3 of the ingest ladder. Set in .env on the
+      # VPS, which is gitignored. The fetcher reads these at request time; they
+      # never travel over the wire and are never logged. Absent, tier 3 reports
+      # "credentials not configured" and the ladder moves on rather than failing.
+      CEC_PORTAL_USER: ${CEC_PORTAL_USER:-}
+      CEC_PORTAL_PASS: ${CEC_PORTAL_PASS:-}
     # Chromium needs more than Docker's default 64 MB of shared memory or it
     # crashes partway through rendering.
     shm_size: 512mb

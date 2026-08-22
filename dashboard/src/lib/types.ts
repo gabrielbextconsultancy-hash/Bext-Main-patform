@@ -36,7 +36,27 @@ export interface SourceRow {
   consecutive_failures: number;
   requires_browser: boolean;
   note: string | null;
+  /** Which tier of the retrieval ladder delivered, or null if none did. */
+  satisfied_by_tier: number | null;
+  /** Whether a newsletter alone is enough for this source (the account walls). */
+  email_authoritative: boolean;
+  /**
+   * The last run's outcome per tier, ordered 0-4, as "tier:outcome:count".
+   * Flattened to strings rather than nested objects because the dashboard reads
+   * through a read-only SQL proxy that returns plain rows.
+   */
+  tiers: string[] | null;
+  articles_last_run: number | null;
 }
+
+/** The five routes tried in order. Index is the tier number. */
+export const TIER_LABELS = [
+  'Email — a newsletter already delivered',
+  'Direct — browser TLS fingerprint',
+  'Browser — Chromium render',
+  'Signed in — member or subscriber session',
+  'Model — Hermes reads the page',
+] as const;
 
 export const ENGAGEMENTS: Record<Engagement, { label: string; short: string; accent: string }> = {
   infrastructure: { label: 'Infrastructure', short: 'Infra', accent: 'var(--accent-infra)' },

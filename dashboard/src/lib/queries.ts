@@ -56,11 +56,48 @@ export const getSourceSummary = async () => {
 
 export const getSources = () =>
   tryQuery<SourceRow>(
-    `SELECT id, slug, name, category, method, active, last_fetch_at::text,
-            last_status, consecutive_failures,
-            coalesce((config->>'requires_browser')::boolean, false) AS requires_browser,
-            config->>'note' AS note
-     FROM sources ORDER BY category, name`
+    // The tier strip comes from the most recent run only. fetch_attempts keeps
+    // every run, so without the run_at bound this would show a source as having
+    // tried every route it has ever tried, which is the opposite of the point.
+    `WITH latest AS (
+       SELECT source_id, max(run_at) AS run_at FROM fetch_attempts GROUP BY source_id
+     ),
+     strip AS (
+       SELECT a.source_id,
+              array_agg(a.tier || ':' || a.outcome || ':' || a.articles_found
+                        ORDER BY a.tier) AS tiers,
+              sum(a.articles_found) FILTER (WHERE a.outcome = 'success') AS articles_last_run
+       FROM fetch_attempts a
+       JOIN latest l ON l.source_id = a.source_id AND a.run_at = l.run_at
+       GROUP BY a.source_id
+     )
+     SELECT s.id, s.slug, s.name, s.category, s.method, s.active, s.last_fetch_at::text,
+            s.last_status, s.consecutive_failures, s.satisfied_by_tier, s.email_authoritative,
+            coalesce((s.config->>'requires_browser')::boolean, false) AS requires_browser,
+            s.config->>'note' AS note,
+            strip.tiers, strip.articles_last_run::int
+     FROM sources s
+     LEFT JOIN strip ON strip.source_id = s.id
+     ORDER BY s.category, s.name`
+  );
+
+export interface TierSummary {
+  tier: number;
+  sources: number;
+  articles: number;
+}
+
+/** How many sources each route ended up carrying, on the most recent run. */
+export const getTierSummary = () =>
+  tryQuery<TierSummary>(
+    `SELECT satisfied_by_tier AS tier, count(*)::int AS sources,
+            coalesce(sum(
+              (SELECT max(a.articles_found) FROM fetch_attempts a
+                WHERE a.source_id = s.id AND a.outcome = 'success')
+            ), 0)::int AS articles
+     FROM sources s
+     WHERE s.active AND s.satisfied_by_tier IS NOT NULL
+     GROUP BY 1 ORDER BY 1`
   );
 
 export interface ReportRow {

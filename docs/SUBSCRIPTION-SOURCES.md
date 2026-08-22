@@ -112,6 +112,56 @@ what arrives. It just should not be the load-bearing path.
 
 ---
 
+## When a logged-in fetch is possible, and when it is not
+
+Member-only sources fall into three classes. The class decides the remedy, so
+check which one you are looking at before spending effort.
+
+### Class A — cookie export works
+
+The site uses an ordinary form login and keeps the session in cookies. Export
+them once and the fetcher is a member until they expire. **This is the good case.**
+
+Signals: a `<input type="password">` form on the site's own domain; session
+cookies set on that domain; no redirect to a separate identity provider.
+
+- **Clean Energy Council member portal** — confirmed 22 Aug 2026. Craft CMS form
+  login at `portal.cleanenergycouncil.org.au/account/login`, session held in
+  `CraftSessionId` plus the `*_identity` pair, alongside `AWSALB` and
+  `CRAFT_CSRF_TOKEN`. No SSO, no MFA in the flow. The Monday Megawatt archive
+  lives here and is not on the public site.
+- **AFR** — same shape, though only article bodies are gated.
+
+### Class B — needs a live browser session
+
+The login redirects through a separate identity provider (Azure AD B2C, Auth0,
+Okta, Microsoft Entra, Cognito), or the session is bound to more than a cookie —
+a device fingerprint, a rotating token, a TLS-bound session. An exported cookie
+either will not authenticate or dies within minutes.
+
+Signals: a redirect to `login.microsoftonline.com`, `*.b2clogin.com`,
+`*.auth0.com`, `*.okta.com`; a `code`/`state` query dance; tokens in local
+storage rather than cookies.
+
+Remedy is a browser that stays signed in and is driven per fetch — heavier, and
+worth building only for a source that earns it. None of the current sources need
+this.
+
+### Class C — not automatable
+
+Multi-factor on every request, a CAPTCHA on the login, or terms that forbid
+automated access. Remedy is the newsletter route, or nothing.
+
+### Before using a member session for client work
+
+Member portal content is licensed to **you** as a member. Republishing it in a
+report that goes to a client can breach the membership terms even though the
+fetching is trivially possible. Worth a glance at the CEC terms, or a word with
+them, before Monday Megawatt items appear in a BEXT deliverable. Flagging it
+because it is easy to miss — technically nothing stops it. Your call, not mine.
+
+---
+
 ## Using your logged-in session
 
 For a source where an account unlocks content rather than merely access, the
@@ -127,6 +177,13 @@ password or SSO flow passes through the automation.
    ```
 
 4. `docker compose up -d scrapling`
+5. Prove it worked: `node sources/check-session.js`
+
+Step 5 matters more than it looks. A signed-out fetch returns **200 and a
+perfectly valid page** — just the visitor's version. Nothing errors and the health
+table stays green while the member articles quietly never arrive. `check-session.js`
+asks for a page only a member can see and looks for a marker only a member gets,
+so an expired cookie reports as expired instead of as healthy.
 
 Treat these as credentials: they are in `.env`, which is gitignored, and they
 expire. **When a subscriber source starts returning the paywall again, an expired

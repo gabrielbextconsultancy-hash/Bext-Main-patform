@@ -19,6 +19,9 @@ const DRY = process.argv.includes('--dry');
 const PG_CRED = process.env.N8N_PG_CREDENTIAL_ID;
 const SMTP_CRED = process.env.N8N_SMTP_CREDENTIAL_ID;
 const WEBHOOK_CRED = process.env.N8N_WEBHOOK_CREDENTIAL_ID;
+// IMAP credential for the newsletter mailbox — tier 0. Absent, that workflow is
+// not deployed at all; see the note where it is skipped.
+const IMAP_CRED = process.env.N8N_IMAP_CREDENTIAL_ID;
 const TAG = 'BEXT Consultancy';
 
 // The tested parser, minus its CommonJS export line, for embedding in a Code node.
@@ -69,6 +72,9 @@ const FETCHER = 'http://fetcher:8080/fetch';
 // Reproduces Chrome's TLS fingerprint, which is what the 403s were actually
 // about. See scrapling/app.py for the before-and-after per source.
 const SCRAPLING = 'http://scrapling:8090/fetch';
+// Authenticated retrieval. The fetcher holds the logged-in browser context and
+// reads credentials from its own environment; none of that passes through here.
+const SESSION_FETCH = 'http://fetcher:8080/session-fetch';
 
 // Did this page yield anything parseable? Used to decide whether it is worth
 // paying for a browser render, and later whether to ask Hermes.
@@ -98,7 +104,41 @@ async function fetchOne(s) {
   const target = s.method === 'rss' ? (config.feed_url || s.url) : s.url;
   let articles = [], status = 'ok', error = null, seen = 0, via = 'http';
 
+  // Every tier logs what it did, whether it ran or not. A checklist that only
+  // shows the winner cannot answer "was this even attempted?", which is the
+  // question that went unanswered while DCCEEW reported ok and returned nothing.
+  const attempts = [];
+  const record = (tier, outcome, found, detail, ms) => {
+    attempts.push({
+      tier: tier, outcome: outcome, articles_found: found || 0,
+      detail: detail || null, duration_ms: typeof ms === 'number' ? ms : null,
+    });
+  };
+  // A refusal and a crash need telling apart: one means the site declined us and
+  // escalating may help, the other means our own code broke and it probably will not.
+  const refusalOutcome = (e) => (/\b(401|403|404|429|451|not signed in)\b/i.test(String(e.message || e)) ? 'refused' : 'error');
+
   try {
+    // Tier 0. A newsletter may already have delivered this source's articles, in
+    // which case there is nothing to fetch. This satisfies the source only where
+    // scraping cannot work at all — the account walls. Everywhere else the
+    // newsletter is additive, because a daily edition carries a fraction of what
+    // a publisher ran, and treating it as sufficient would quietly shrink the sheet.
+    if (s.email_authoritative) {
+      const fresh = Number(s.email_articles_recent || 0);
+      if (fresh > 0) {
+        record(0, 'success', fresh, 'newsletter delivered within the freshness window');
+        for (const t of [1, 2, 3, 4]) record(t, 'skipped', 0, 'the newsletter already delivered');
+        return { json: {
+          source_id: s.id, slug: s.slug, status: 'ok', error: null,
+          articles: [], seen: fresh, via: 'email', satisfied_by_tier: 0, attempts: attempts,
+        } };
+      }
+      record(0, 'empty', 0, 'no newsletter for this source in the window');
+    } else {
+      record(0, 'skipped', 0, 'newsletter is additive for this source, not authoritative');
+    }
+
     // Retrieval is a ladder, because the ways a source fails are different in
     // kind and no single client handles all of them. Measured 22 Aug 2026:
     //
@@ -142,44 +182,88 @@ async function fetchOne(s) {
       throw last || new Error('fetcher unavailable');
     };
 
-    try {
-      html = await viaScrapling();
-      via = 'scrapling';
-    } catch (e) {
-      // Client-rendered pages and anything Scrapling could not get: try the browser.
-      html = await viaBrowser();
-      via = 'browser';
-    }
+    const viaSession = async () => {
+      // Subscriber and member content. Credentials live in n8n's environment and
+      // are read by the fetcher at request time — they are never in this workflow,
+      // in the repo, or in any log line here.
+      const r = await helpers.httpRequest({
+        method: 'POST', url: SESSION_FETCH, json: true, timeout: 150000,
+        body: { url: target, site: config.session_site, timeout: 90000 },
+      });
+      // Signed out, these sites return 200 and a perfectly valid visitor page.
+      // Trusting the status code here is exactly how member articles would go
+      // missing while the health table stayed green.
+      if (!r || !r.authenticated) {
+        throw new Error('not signed in' + (r && r.detail ? ': ' + r.detail : ''));
+      }
+      return r.html || '';
+    };
 
-    // A page that came back but yielded nothing is usually client-rendered, and
-    // the browser sees what a raw fetch cannot.
-    if (via === 'scrapling' && html && parseIndex_isEmpty(html, target, s.method)) {
+    let raw = null;
+
+    // The tiers, in escalation order. Each says what it costs and when it applies,
+    // so the loop below stays a loop rather than a chain of special cases.
+    const TIERS = [
+      { n: 1, name: 'scrapling', run: viaScrapling, when: () => true },
+      { n: 2, name: 'browser',   run: viaBrowser,   when: () => true },
+      // Only where a login recipe is configured; otherwise this tier is a
+      // guaranteed failure and logging it as one would be noise, not signal.
+      { n: 3, name: 'session',   run: viaSession,   when: () => !!config.session_site },
+    ];
+
+    for (const tier of TIERS) {
+      if (!tier.when()) { record(tier.n, 'skipped', 0, 'no login configured'); continue; }
+
+      const started = Date.now();
+      let got;
       try {
-        const rendered = await viaBrowser();
-        if (rendered && !parseIndex_isEmpty(rendered, target, s.method)) {
-          html = rendered;
-          via = 'browser';
-        }
-      } catch (e) { /* keep what Scrapling gave us */ }
+        got = await tier.run();
+      } catch (e) {
+        record(tier.n, refusalOutcome(e), 0, String(e.message || e).slice(0, 200), Date.now() - started);
+        continue;
+      }
+
+      html = got || '';
+      const parsed = s.method === 'rss' ? parseFeed(html, target) : parseIndex(html, target);
+      if (parsed && parsed.length) {
+        raw = parsed;
+        via = tier.name;
+        record(tier.n, 'success', parsed.length, null, Date.now() - started);
+        break;
+      }
+      // Retrieved but unreadable: keep the HTML for the model and escalate.
+      record(tier.n, 'empty', 0, 'retrieved ' + html.length + ' bytes, parser found nothing', Date.now() - started);
     }
 
-    let raw = s.method === 'rss' ? parseFeed(html, target) : parseIndex(html, target);
-
-    // Last resort. The page came back, so the site is not the problem — our
-    // reader simply does not recognise this markup. Rather than add another
+    // Tier 4. The page came back, so the site is not the problem — our reader
+    // simply does not recognise this markup. Rather than add another
     // site-specific selector to a pile that silently rots, ask the model the
     // question a person would ask: which of these links are stories? Only ever
-    // runs when the ordinary parser found nothing, so the cost is bounded to
+    // runs when every retrieval tier failed to parse, so the cost is bounded to
     // genuinely broken sources.
-    if ((!raw || raw.length === 0) && html) {
+    if ((!raw || !raw.length) && html) {
+      const started = Date.now();
       const h = await hermesExtract({ html, baseUrl: target, http: helpers.httpRequest });
       if (h.articles.length) {
         raw = h.articles.map(a => ({ title: a.title, url: a.url, published_at: null }));
-        via = via + '+hermes';
+        via = (via === 'http' ? 'hermes' : via + '+hermes');
+        record(4, 'success', h.articles.length, null, Date.now() - started);
+      } else {
+        record(4, 'empty', 0, h.reason || null, Date.now() - started);
       }
+    } else if (!html) {
+      record(4, 'skipped', 0, 'no page was retrieved to read');
+    } else {
+      record(4, 'skipped', 0, 'an earlier tier succeeded');
     }
 
-    const all = normalise(raw, { id: s.id, config });
+    // Tiers after the winner never ran. Saying so explicitly is the difference
+    // between "we stopped because we had what we needed" and "we never tried".
+    for (const tier of TIERS) {
+      if (!attempts.some(a => a.tier === tier.n)) record(tier.n, 'skipped', 0, 'an earlier tier succeeded');
+    }
+
+    const all = normalise(raw || [], { id: s.id, config });
 
     // Only what this source has not given us before. Index pages repeat their
     // whole contents every hour, so without this the run re-parses roughly 2,500
@@ -208,7 +292,12 @@ async function fetchOne(s) {
   // via records which tier actually produced the page. Without it a source that
   // has quietly fallen back to the model every hour looks identical to a healthy
   // one, and the whole point of the ladder is that degradation stays visible.
-  return { json: { source_id: s.id, slug: s.slug, status, error, articles, seen, via } };
+  const won = attempts.find(a => a.outcome === 'success');
+  return { json: {
+    source_id: s.id, slug: s.slug, status, error, articles, seen, via,
+    satisfied_by_tier: won ? won.tier : null,
+    attempts: attempts,
+  } };
 }
 
 // Sequentially, 64 sources take longer than the task timeout — the browser-backed
@@ -256,12 +345,23 @@ function sourceIngestWorkflow() {
           // relying on the unique index to reject the duplicate. 120 covers well
           // over one page of any index we read.
           query: `SELECT s.id, s.slug, s.name, s.url, s.method::text AS method, s.config,
-       coalesce(k.urls, '[]'::json) AS known_urls
+       s.email_authoritative,
+       coalesce(k.urls, '[]'::json) AS known_urls,
+       coalesce(n.recent, 0) AS email_articles_recent
 FROM sources s
 LEFT JOIN LATERAL (
   SELECT json_agg(u.url) AS urls
   FROM (SELECT url FROM articles WHERE source_id = s.id ORDER BY fetched_at DESC LIMIT 120) u
 ) k ON true
+-- Tier 0 asks whether a newsletter has already delivered for this source, so the
+-- ladder can stop before spending anything. Scoped to the freshness window: a
+-- newsletter from last fortnight does not excuse us from fetching today.
+LEFT JOIN LATERAL (
+  SELECT count(*) AS recent
+  FROM articles a
+  WHERE a.source_id = s.id
+    AND a.fetched_at > now() - interval '20 hours'
+) n ON true
 WHERE s.active
 ORDER BY s.id`,
           options: {},
@@ -320,10 +420,31 @@ ON CONFLICT (url) DO NOTHING`,
   last_fetch_at = now(),
   last_status = v.status::fetch_status,
   last_error = nullif(v.error, ''),
+  satisfied_by_tier = v.satisfied_by_tier,
   consecutive_failures = CASE WHEN v.status = 'ok' THEN 0 ELSE s.consecutive_failures + 1 END
-FROM (SELECT * FROM json_to_recordset($1::json) AS x(source_id int, status text, error text)) v
+FROM (SELECT * FROM json_to_recordset($1::json)
+      AS x(source_id int, status text, error text, satisfied_by_tier smallint)) v
 WHERE s.id = v.source_id`,
           options: { queryReplacement: '={{ JSON.stringify($json.statuses) }}' },
+        },
+      },
+      {
+        id: 'attempts', name: 'Record fetch attempts', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(800, 200),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        parameters: {
+          operation: 'executeQuery',
+          // The per-tier log behind each verdict. This is what lets the dashboard
+          // answer "was this route even tried?" rather than only "did it end ok?".
+          query: `INSERT INTO fetch_attempts (source_id, tier, outcome, articles_found, detail, duration_ms)
+SELECT source_id, tier, outcome::fetch_tier_outcome, articles_found, detail, duration_ms
+FROM json_to_recordset($1::json) AS x(
+  source_id int, tier smallint, outcome text,
+  articles_found int, detail text, duration_ms int)`,
+          // Named explicitly rather than $json: this node runs after the health
+          // update, and a Postgres node emits its query result, not the payload
+          // it was given. $json here would be the previous statement's output.
+          options: { queryReplacement: '={{ $(\'Collect statuses\').first().json.attempts }}' },
         },
       },
       {
@@ -331,8 +452,28 @@ WHERE s.id = v.source_id`,
         typeVersion: 2, position: pos(360, 200),
         parameters: {
           mode: 'runOnceForAllItems', language: 'javaScript',
-          jsCode: `return [{ json: { statuses: $input.all().map(i => ({
-  source_id: i.json.source_id, status: i.json.status, error: i.json.error || '' })) } }];`,
+          jsCode: `const items = $input.all().map(i => i.json);
+// Two payloads from one pass: the per-source verdict, and the flattened
+// per-tier log behind it. Both go out as JSON strings because n8n's
+// queryReplacement splits parameters on commas, and article titles are full of them.
+const attempts = [];
+for (const i of items) {
+  for (const a of (i.attempts || [])) {
+    attempts.push({
+      source_id: i.source_id, tier: a.tier, outcome: a.outcome,
+      articles_found: a.articles_found || 0,
+      detail: a.detail || null, duration_ms: a.duration_ms,
+    });
+  }
+}
+return [{ json: {
+  statuses: items.map(i => ({
+    source_id: i.source_id, status: i.status, error: i.error || '',
+    satisfied_by_tier: i.satisfied_by_tier === null || i.satisfied_by_tier === undefined ? null : i.satisfied_by_tier,
+  })),
+  attempts: JSON.stringify(attempts),
+  attempt_count: attempts.length,
+} }];`,
         },
       },
     ],
@@ -346,7 +487,11 @@ WHERE s.id = v.source_id`,
         ]],
       },
       'Collect articles': { main: [[{ node: 'Insert articles', type: 'main', index: 0 }]] },
+      // Health and the attempt log both hang off the same collected payload.
+      // Sequential rather than parallel so a failure writing the log cannot leave
+      // the verdict updated with no evidence behind it.
       'Collect statuses': { main: [[{ node: 'Record source health', type: 'main', index: 0 }]] },
+      'Record source health': { main: [[{ node: 'Record fetch attempts', type: 'main', index: 0 }]] },
     },
   };
 }
@@ -2225,12 +2370,207 @@ async function deploy(wf) {
   return j.id;
 }
 
+const NEWSLETTER_CODE = `
+// --- shared parser ---
+${INGEST_SRC}
+// --- end shared parser ---
+
+// --- model-backed reader ---
+${HERMES_SRC}
+// --- end model-backed reader ---
+
+const helpers = this.helpers;
+
+// Mail that is plainly not a newsletter. Cheap to exclude here rather than
+// spending forty seconds of model time discovering it.
+const NOT_NEWS = /^(re|fwd|out of office|undeliverable|delivery status|password|verify your|confirm your|receipt|invoice|your order)\\b/i;
+
+// Tracking wrappers are the norm in newsletters, and the real URL is usually a
+// parameter inside them. Storing the wrapper would defeat deduplication, since
+// the same article arrives with a different tracking id every time.
+const unwrap = (u) => {
+  try {
+    const parsed = new URL(u);
+    for (const key of ['url', 'u', 'target', 'redirect', 'link', 'dest']) {
+      const inner = parsed.searchParams.get(key);
+      if (inner && /^https?:\\/\\//i.test(inner)) return inner.split('#')[0];
+    }
+    // Strip the campaign parameters so two sends of one article agree.
+    for (const junk of ['utm_source','utm_medium','utm_campaign','utm_term','utm_content','mc_cid','mc_eid']) {
+      parsed.searchParams.delete(junk);
+    }
+    return parsed.toString().split('#')[0];
+  } catch (e) { return u; }
+};
+
+const rows = [];
+const messages = [];
+
+for (const item of $input.all()) {
+  const j = item.json;
+  const from = String(j.from || (j.headers && j.headers.from) || '').toLowerCase();
+  const subject = String(j.subject || '');
+  const messageId = String((j.headers && j.headers['message-id']) || j.messageId || '').trim()
+    || (from + '|' + subject + '|' + String(j.date || ''));
+  const html = String(j.textHtml || j.html || j.textPlain || j.text || '');
+
+  if (!html || NOT_NEWS.test(subject.trim())) continue;
+
+  // Which source this belongs to is resolved in SQL, by matching the sending
+  // address against newsletter_senders. Doing it there rather than here means
+  // adding a publisher is one row, not a code change and a redeploy.
+  //
+  // Every message is read regardless of whether the sender is known. A
+  // newsletter subscribed to next month should work immediately, and a publisher
+  // quietly changing its sending domain is exactly the failure that goes
+  // unnoticed for weeks.
+  const domain = (from.match(/@([a-z0-9.-]+)/) || [null, 'mail.invalid'])[1];
+  const h = await hermesExtract({
+    html, baseUrl: 'https://' + domain, http: helpers.httpRequest,
+  });
+
+  const kept = [];
+  for (const a of h.articles) {
+    const url = unwrap(a.url);
+    if (!/^https?:\\/\\//i.test(url)) continue;
+    kept.push({ url: url, title: a.title, from_address: from.slice(0, 200), published_at: j.date || null });
+  }
+
+  messages.push({
+    message_id: messageId.slice(0, 400),
+    from_address: from.slice(0, 200),
+    subject: subject.slice(0, 400),
+    received_at: j.date || null,
+    links_found: h.considered || 0,
+    articles_kept: kept.length,
+  });
+  for (const k of kept) rows.push(k);
+}
+
+return [{ json: {
+  payload: JSON.stringify(rows),
+  messages: JSON.stringify(messages),
+  article_count: rows.length,
+  message_count: messages.length,
+} }];
+`;
+
+/**
+ * Tier 0 — articles that arrive by post rather than being fetched.
+ *
+ * Four sources cannot be scraped at all: Reuters answers 401, the IEA 403, and
+ * AFR and The Australian serve a truncated page behind "already a subscriber".
+ * All four publish a free newsletter carrying the same headlines, so the
+ * articles come in through the mailbox instead and land in the same table.
+ *
+ * For sources that scrape perfectly well this is still worth running. An index
+ * page shows what the publisher features right now and rolls items off as new
+ * ones arrive; between hourly fetches a story can appear and be pushed under.
+ * The newsletter is an independent second record of what was published, which is
+ * the shape of several articles the client reported missing on 21 August. The
+ * content hash already deduplicates a story that arrives by both routes.
+ */
+const newsletterIntakeWorkflow = () => ({
+  name: 'BEXT — Newsletter Intake',
+  nodes: [
+    {
+      id: 'imap', name: 'Watch the mailbox', type: 'n8n-nodes-base.emailReadImap',
+      typeVersion: 2, position: pos(-320, 0),
+      credentials: { imap: { id: IMAP_CRED, name: 'BEXT Newsletter Mailbox' } },
+      parameters: {
+        // UNSEEN only. Marking as read is what stops the same newsletter being
+        // reprocessed every poll; newsletter_messages.message_id is the backstop
+        // for when a client marks something unread by hand.
+        format: 'resolved',
+        options: { customEmailConfig: '["UNSEEN"]', forceReconnect: 60 },
+      },
+    },
+    {
+      id: 'classify', name: 'Read the newsletter', type: 'n8n-nodes-base.code',
+      typeVersion: 2, position: pos(-80, 0),
+      parameters: {
+        mode: 'runOnceForAllItems', language: 'javaScript',
+        jsCode: NEWSLETTER_CODE,
+      },
+    },
+    {
+      id: 'insert', name: 'Insert articles', type: 'n8n-nodes-base.postgres',
+      typeVersion: 2.5, position: pos(180, -80),
+      credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+      parameters: {
+        operation: 'executeQuery',
+        // The sending address is matched to a source here rather than in the Code
+        // node, so registering a new publisher is one row in newsletter_senders.
+        // Mail from a sender we do not recognise is still stored, against the
+        // catch-all source — losing it would defeat the point of reading everything.
+        query: `INSERT INTO articles (source_id, url, title, published_at)
+SELECT coalesce(
+         (SELECT s.id FROM newsletter_senders ns
+            JOIN sources s ON s.slug = ns.source_slug
+           WHERE ns.active AND x.from_address ILIKE ns.from_pattern
+           LIMIT 1),
+         (SELECT id FROM sources WHERE slug = 'newsletter-other')
+       ),
+       x.url, x.title, x.published_at
+FROM json_to_recordset($1::json) AS x(
+  url text, title text, from_address text, published_at timestamptz)
+WHERE x.url IS NOT NULL
+ON CONFLICT (url) DO NOTHING`,
+        options: { queryReplacement: '={{ $json.payload }}' },
+      },
+    },
+    {
+      id: 'seen', name: 'Record the message', type: 'n8n-nodes-base.postgres',
+      typeVersion: 2.5, position: pos(180, 100),
+      credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+      parameters: {
+        operation: 'executeQuery',
+        // Message-ID is the only stable key a mail server gives us. Without this
+        // a re-poll re-imports the same edition and the daily sheet doubles up.
+        query: `INSERT INTO newsletter_messages
+  (message_id, source_slug, from_address, subject, received_at, links_found, articles_kept)
+SELECT x.message_id,
+       (SELECT ns.source_slug FROM newsletter_senders ns
+         WHERE ns.active AND x.from_address ILIKE ns.from_pattern LIMIT 1),
+       x.from_address, x.subject, x.received_at, x.links_found, x.articles_kept
+FROM json_to_recordset($1::json) AS x(
+  message_id text, from_address text, subject text,
+  received_at timestamptz, links_found int, articles_kept int)
+ON CONFLICT (message_id) DO NOTHING`,
+        options: { queryReplacement: '={{ $json.messages }}' },
+      },
+    },
+  ],
+  connections: {
+    'Watch the mailbox': { main: [[{ node: 'Read the newsletter', type: 'main', index: 0 }]] },
+    'Read the newsletter': {
+      main: [[
+        { node: 'Insert articles', type: 'main', index: 0 },
+        { node: 'Record the message', type: 'main', index: 0 },
+      ]],
+    },
+  },
+  settings: { executionOrder: 'v1' },
+});
+
 (async () => {
   if (!PG_CRED) {
     console.error('Set N8N_PG_CREDENTIAL_ID in .env first.');
     process.exit(1);
   }
   await deploy(sourceIngestWorkflow());
+  // Tier 0 of the ladder. Without a mailbox credential the workflow would sit
+  // there failing every poll, which is worse than not deploying it — a red
+  // workflow that is expected to be red trains everyone to ignore red.
+  if (!IMAP_CRED) {
+    console.error('N8N_IMAP_CREDENTIAL_ID not set — skipping Newsletter Intake (tier 0).');
+    console.error('  In n8n: Credentials -> IMAP, name it "BEXT Newsletter Mailbox".');
+    console.error('  Host imap.gmail.com, port 993, SSL on, and a Google app password');
+    console.error('  from https://myaccount.google.com/apppasswords (needs 2-step verification).');
+    console.error('  Then put the credential id in .env as N8N_IMAP_CREDENTIAL_ID.');
+  } else {
+    await deploy(newsletterIntakeWorkflow());
+  }
   await deploy(articleAnalysisWorkflow());
   if (!SMTP_CRED) console.error('N8N_SMTP_CREDENTIAL_ID not set — skipping the daily report and Graph health.');
   else {

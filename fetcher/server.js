@@ -20,6 +20,7 @@
  */
 const http = require('http');
 const { chromium } = require('playwright');
+const { sessionFetch, listRecipes } = require('./sessions');
 
 const PORT = Number(process.env.PORT ?? 8080);
 const MAX_CONCURRENT = Number(process.env.MAX_CONCURRENT ?? 2);
@@ -194,8 +195,28 @@ const server = http.createServer(async (req, res) => {
     });
     return;
   }
+  if (req.method === 'POST' && req.url === '/session-fetch') {
+    let raw = '';
+    req.on('data', c => { raw += c; if (raw.length > 1e6) req.destroy(); });
+    req.on('end', async () => {
+      try {
+        const { url, site, timeout } = JSON.parse(raw);
+        if (!url || !site) return send(res, 400, { error: 'url and site required' });
+        if (!listRecipes().includes(site)) {
+          return send(res, 400, { error: 'unknown site', known: listRecipes() });
+        }
+        const out = await sessionFetch(await getBrowser(), { url, site, timeout });
+        // authenticated is the field that matters. A 200 with authenticated:false
+        // is a signed-out page, and the caller must not treat it as content.
+        send(res, 200, { url, site, ...out });
+      } catch (e) {
+        send(res, 500, { error: String(e.message || e).slice(0, 300) });
+      }
+    });
+    return;
+  }
   if (req.method !== 'POST' || req.url !== '/fetch') {
-    return send(res, 404, { error: 'POST /fetch, POST /render-docx, POST /pdf, or GET /health' });
+    return send(res, 404, { error: 'POST /fetch, POST /session-fetch, POST /render-docx, POST /pdf, or GET /health' });
   }
   if (active >= MAX_CONCURRENT) {
     // A 2 GB container running Chromium will thrash rather than queue politely.
