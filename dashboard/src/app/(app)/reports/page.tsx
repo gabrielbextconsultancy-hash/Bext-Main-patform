@@ -7,10 +7,12 @@ import {
   getScoreBands,
   getScoredCount,
   getCategories,
+  getReportReferences,
 } from '@/lib/queries';
 import { Card, DatabaseDown, Empty } from '@/components/ui';
 import { ReportViewer } from '@/components/ReportViewer';
 import { ScoredBrowser } from '@/components/ScoredBrowser';
+import { SourceReferences } from '@/components/SourceReferences';
 
 /** Next 05:00 Australia/Melbourne, expressed in that zone. */
 function nextRun() {
@@ -106,7 +108,7 @@ function groupByDate(rows: SentArticle[]): [string, SentArticle[]][] {
 }
 
 export default async function ReportsPage() {
-  const [reports, ready, health, delivered, bands, totalScored, cats] = await Promise.all([
+  const [reports, ready, health, delivered, bands, totalScored, cats, refs] = await Promise.all([
     getReports(),
     getPipelineReadiness(),
     getHealth(),
@@ -114,6 +116,7 @@ export default async function ReportsPage() {
     getScoreBands(),
     getScoredCount(),
     getCategories(),
+    getReportReferences(),
   ]);
 
   if (!reports) return <DatabaseDown />;
@@ -134,13 +137,6 @@ export default async function ReportsPage() {
 
   return (
     <div className="space-y-5">
-      <header>
-        <h1 className="text-xl font-semibold tracking-tight text-ink-100">Daily Report</h1>
-        <p className="mt-1 text-sm text-ink-400">
-          Scheduled 05:00 Australia/Melbourne. Sent over SMTP; switches to Microsoft Graph once
-          the tenant exists.
-        </p>
-      </header>
 
       {/* Readiness — the pass/fail check */}
       <Card
@@ -201,6 +197,16 @@ export default async function ReportsPage() {
         subtitle="Opens the exact HTML that was emailed, not a reconstruction of it."
       >
         <ReportViewer dates={reports.filter(r => r.status === 'sent').map(r => r.report_date)} />
+      </Card>
+
+      {/* Provenance. Deliberately here and not in the emailed sheet: the client
+          gets headlines and article links, while which index page each item was
+          read from is operational detail. */}
+      <Card
+        title="Source references"
+        subtitle="Where each sheet's articles were read from, and by which route. Internal — not included in the emailed report."
+      >
+        {refs ? <SourceReferences rows={refs} /> : <Empty>Reference data unavailable.</Empty>}
       </Card>
 
       {/* Schedule */}

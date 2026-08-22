@@ -244,6 +244,43 @@ export const getSentArticles = () =>
      LIMIT 60`
   );
 
+export interface ReportReference {
+  report_date: string;
+  source_name: string;
+  source_url: string;
+  method: string;
+  satisfied_by_tier: number | null;
+  items: number;
+}
+
+/**
+ * Which sources fed each sheet, and the page each was read from.
+ *
+ * This is deliberately dashboard-only. The sheet the client receives carries
+ * headlines and article links; it should not carry our plumbing — which index
+ * page we scraped and by what route is an operational detail, and printing it in
+ * a client deliverable would be noise at best.
+ *
+ * Here it answers the question that keeps coming up: an article appeared, where
+ * did it actually come from.
+ */
+export const getReportReferences = () =>
+  tryQuery<ReportReference>(
+    `SELECT r.report_date::text,
+            s.name AS source_name,
+            coalesce(s.config->>'feed_url', s.url) AS source_url,
+            s.method::text AS method,
+            s.satisfied_by_tier,
+            count(*)::int AS items
+     FROM report_items ri
+     JOIN reports  r ON r.id = ri.report_id AND r.status = 'sent'
+     JOIN articles a ON a.id = ri.article_id
+     JOIN sources  s ON s.id = a.source_id
+     GROUP BY r.report_date, s.name, s.config, s.url, s.method, s.satisfied_by_tier
+     ORDER BY r.report_date DESC, count(*) DESC, s.name
+     LIMIT 200`
+  );
+
 /** Score distribution, so the panel shows the filter is doing real work. */
 export const getScoreBands = () =>
   tryQuery<{ band: string; n: number }>(
