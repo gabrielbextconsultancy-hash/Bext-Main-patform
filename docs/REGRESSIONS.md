@@ -370,3 +370,38 @@ runtime with `Module 'dns' is disallowed`, exactly as the `https` upload did.
 Caught by the check rather than by a failed report. `NODE_FUNCTION_ALLOW_BUILTIN`
 is now `crypto,url,https,dns` in the repo compose and on the VPS, and the R022
 default mirrors it.
+
+---
+
+## R002b — a symbol required but never bound
+
+**Cost:** every upload in `BEXT — Meeting Intake` threw `ReferenceError: URL is not
+defined`. `put()` catches upload errors into `failures` so a bad write does not cost
+the draft, so nothing surfaced — until the folder lookup 404'd on a folder that
+nothing had created. The recorded error described a missing folder; the fault was
+an unbound symbol three steps earlier.
+
+**Cause:** `putBinary` calls `new URL(...)`, and the file had
+`const { URLSearchParams } = require('url')`. The sandbox withholds `URL` as a
+global, so requiring the module is not enough — the symbol has to be destructured.
+
+**Fix:** `const { URLSearchParams, URL } = require('url')`.
+
+**Guard:** R002, rewritten. The old version asserted that `require('url')` appeared
+somewhere in the node, which passed while `URL` was still unbound. It now parses
+the destructuring list and checks each symbol actually used.
+
+The rewritten check immediately found the same latent fault in two other
+workflows — `BEXT — Daily Report` (`Fetch article images`) and
+`BEXT — Newsletter Intake` (`Read the newsletter`) — both using `new URL()` with no
+`require('url')` at all. Both fixed before they ran.
+
+### Two lessons
+
+**A check that passes for the wrong reason is worse than no check.** R002 had been
+green for days over code that would throw on first execution.
+
+**Swallowing an error to protect a later step hides the cause of that step's
+failure.** `put()` collecting failures is right — a bad write should not cost the
+draft — but the filing stage now raises those collected failures before anything
+downstream can produce a more visible, less true error.
