@@ -14,12 +14,23 @@
  * proven when a message we sent turns up in the mailbox we poll.
  *
  *   node graph/verify-inbound-mail.js
+ *
+ * With --to, sends somewhere else and still waits on our mailbox — which is how
+ * you prove a FORWARDING rule rather than direct delivery. Confirming the rule in
+ * Gmail's interface only proves Gmail accepted the address; it says nothing about
+ * whether mail traverses the hop.
+ *
+ *   node graph/verify-inbound-mail.js --to gabriel.bextconsultancy@gmail.com
  */
 'use strict';
 require('dotenv').config();
 const tls = require('tls');
 
-const TO = process.env.SMTP_USER;                 // the mailbox the pipeline polls
+const MAILBOX = process.env.SMTP_USER;            // the mailbox the pipeline polls
+// Where the probe is addressed. Defaults to the mailbox itself; point it
+// elsewhere to prove a forwarding hop instead of direct delivery.
+const argTo = process.argv.indexOf('--to');
+const TO = argTo > -1 ? process.argv[argTo + 1] : MAILBOX;
 const HOST = (process.env.SMTP_HOST || '').replace(/^smtp\./, 'mail.');
 const PASS = process.env.SMTP_PASS;
 const TAG = 'bext-inbound-probe-' + Date.now();
@@ -70,7 +81,7 @@ const look = () => new Promise((resolve) => {
       buf += d.toString();
       if (!/\r\n$/.test(buf)) return;
       const chunk = buf; buf = '';
-      if (step === 0) { step = 1; w('a1 LOGIN "' + TO + '" "' + PASS.replace(/(["\\])/g, '\\$1') + '"'); return; }
+      if (step === 0) { step = 1; w('a1 LOGIN "' + MAILBOX + '" "' + PASS.replace(/(["\\])/g, '\\$1') + '"'); return; }
       if (step === 1) {
         if (!/^a1 OK/mi.test(chunk)) { sock.end(); return resolve({ ok: false, why: 'login failed' }); }
         step = 2; w('a2 SELECT INBOX'); return;
@@ -89,8 +100,10 @@ const look = () => new Promise((resolve) => {
 });
 
 (async () => {
-  if (!TO || !PASS || !HOST) { console.error('SMTP_USER / SMTP_PASS / SMTP_HOST missing'); process.exit(1); }
-  console.log('mailbox : ' + TO + '  (IMAP ' + HOST + ':993)\n');
+  if (!MAILBOX || !PASS || !HOST) { console.error('SMTP_USER / SMTP_PASS / SMTP_HOST missing'); process.exit(1); }
+  console.log('mailbox : ' + MAILBOX + '  (IMAP ' + HOST + ':993)');
+  if (TO !== MAILBOX) console.log('probing : forwarding hop via ' + TO);
+  console.log('');
   await send();
 
   const deadline = Date.now() + WAIT_MS;
