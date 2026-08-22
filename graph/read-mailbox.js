@@ -99,8 +99,15 @@ const run = () => new Promise((resolve, reject) => {
         // A confirmation code, if the sender uses one. Dates and years are not codes.
         const code = (text.match(/(?:confirmation|verification|security)\s+code[^\d]{0,60}(\d{4,12})/i) || [])[1];
         if (code) console.log('    CODE: ' + code);
-        const link = (text.match(/https?:\/\/[^\s"'<>]*(?:confirm|verify|activate|subscription|optin|opt-in)[^\s"'<>]*/i) || [])[0];
-        if (link) console.log('    LINK: ' + link.slice(0, 160));
+        // Gmail's forwarding confirmation comes from mail-settings.google.com and
+        // carries no word like "confirm" in the URL — the action is encoded as the
+        // vf- prefix, with a uf- twin that CANCELS. Matching the generic words
+        // alone finds neither, so the two are handled explicitly and the cancel
+        // link is never offered.
+        const gmailConfirm = (text.match(/https?:\/\/mail(?:-settings)?\.google\.com\/mail\/vf-[^\s"'<>]+/) || [])[0];
+        const generic = (text.match(/https?:\/\/[^\s"'<>]*(?:confirm|verify|activate|subscription|optin|opt-in)[^\s"'<>]*/i) || [])[0];
+        const link = gmailConfirm || generic;
+        if (link) console.log('    LINK: ' + link.slice(0, 240));
         console.log('');
         shown++;
       }

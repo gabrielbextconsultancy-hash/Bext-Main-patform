@@ -50,17 +50,26 @@ check('R001', 'Code nodes using URLSearchParams require it from url', () => {
 });
 
 // Same class of trap: URL is also withheld.
-check('R002', 'Code nodes using URL require it from url', () => {
+// The symbol must be DESTRUCTURED, not merely required. `require('url')` for
+// URLSearchParams alone satisfied the old version of this check while `new URL()`
+// still threw ReferenceError at runtime — every upload failed, put() swallowed it
+// into `failures`, and the visible symptom was a 404 on a folder that nothing had
+// created. Check the binding, not the import.
+check('R002', 'Code nodes destructure every url symbol they use', () => {
   const bad = [];
   for (const f of fs.readdirSync(path.join(ROOT, 'n8n/workflows'))) {
     if (!f.endsWith('.json')) continue;
     const wf = JSON.parse(read(`n8n/workflows/${f}`));
     for (const n of codeNodes(wf)) {
       const c = n.parameters.jsCode;
-      if (/new URL\(/.test(c) && !/require\(['"]url['"]\)/.test(c)) bad.push(`${f}:${n.name}`);
+      const destructured = [...c.matchAll(/const\s*\{([^}]*)\}\s*=\s*require\(['"]url['"]\)/g)]
+        .flatMap(m => m[1].split(',').map(s => s.trim()));
+      if (/new URL\(/.test(c) && !destructured.includes('URL')) bad.push(`${f}:${n.name} uses URL`);
+      if (/new URLSearchParams\(/.test(c) && !destructured.includes('URLSearchParams'))
+        bad.push(`${f}:${n.name} uses URLSearchParams`);
     }
   }
-  return bad.length ? { ok: false, detail: bad.join(', ') } : { ok: true, detail: 'all guarded' };
+  return bad.length ? { ok: false, detail: bad.join(', ') } : { ok: true, detail: 'all bound' };
 });
 
 // ── R003 ─ integration_health.status is an enum, json_to_recordset yields text ──

@@ -2,8 +2,14 @@
 /**
  * Sends the most recent stored report again, using the current envelope settings.
  *
- *   node graph/send-test-report.js --to me           only MS_SENDER_UPN
- *   node graph/send-test-report.js                   the real REPORT_RECIPIENT list
+ *   node graph/send-test-report.js --to me                 only MS_SENDER_UPN
+ *   node graph/send-test-report.js --to a@b.com            one named address
+ *   node graph/send-test-report.js --html preview.html     send a file instead of the stored report
+ *   node graph/send-test-report.js                         the real REPORT_RECIPIENT list
+ *
+ * REPORT_RECIPIENT includes the client. Naming an address explicitly is the
+ * difference between showing someone a draft and mailing it to the client by
+ * accident, so --to takes an address and not just a flag.
  *
  * The daily report is schedule-triggered, so there is no way to ask n8n to run it
  * on demand through the public API. This sends the same content the same way, so
@@ -127,7 +133,14 @@ const send = ({ from, to, subject, html, text }) => new Promise((resolve, reject
   const row = r.rows[0];
   const subject = 'BEXT Industry Daily — ' + new Date(row.report_date)
     .toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  const to = ONLY_ME ? MS_SENDER_UPN : (REPORT_RECIPIENT || MS_SENDER_UPN);
+  // --to accepts an address as well as the "me" shorthand.
+  const toArg = process.argv.indexOf('--to');
+  const named = toArg > -1 && process.argv[toArg + 1] && process.argv[toArg + 1] !== 'me'
+    ? process.argv[toArg + 1] : null;
+  const to = named || (ONLY_ME ? MS_SENDER_UPN : (REPORT_RECIPIENT || MS_SENDER_UPN));
+  if (!named && !ONLY_ME && /,/.test(to)) {
+    console.log('NOTE: sending to the full recipient list, which includes the client.');
+  }
 
   console.log('report   ' + row.report_date + ', ' + row.item_count + ' items');
   console.log('from     ' + FROM_NAME + ' <' + REPORT_SENDER + '>');
@@ -135,9 +148,17 @@ const send = ({ from, to, subject, html, text }) => new Promise((resolve, reject
   console.log('to       ' + to);
   console.log('parts    text + html');
 
+  // --html sends a file instead of the stored HTML, so a layout change can be
+  // seen in a real inbox before it is ever sent to the recipient list.
+  const htmlArg = process.argv.indexOf('--html');
+  const html = htmlArg > -1 && process.argv[htmlArg + 1]
+    ? require('fs').readFileSync(process.argv[htmlArg + 1], 'utf8')
+    : row.html;
+  if (htmlArg > -1) console.log('html     ' + process.argv[htmlArg + 1] + ' (not the stored report)');
+
   const sent = await send({
     from: REPORT_SENDER, to, subject,
-    html: row.html, text: toText(row.html, subject),
+    html, text: toText(html, subject),
   });
   console.log('\naccepted by ' + SMTP_HOST + ' for ' + sent.length + ' recipient(s).');
   console.log('Check the inbox — and if it is in spam, mark it Not spam once.');

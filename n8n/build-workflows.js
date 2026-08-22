@@ -978,6 +978,9 @@ return [{ json: {
         parameters: {
           mode: 'runOnceForAllItems', language: 'javaScript',
           jsCode: `
+// The Code sandbox withholds URL as a global; it has to be destructured from
+// the url builtin or new URL() throws ReferenceError at runtime.
+const { URL } = require('url');
 // Lead artwork for the card layout, taken from each publisher's own og:image.
 //
 // Only the articles that reached the sheet are looked up — a few dozen a day
@@ -1552,7 +1555,11 @@ const MEETING_CODE = `
 // withholds URL. Without this the token request throws "URLSearchParams is not
 // defined" on the first line that matters and the whole run dies before it has
 // read anything — which is exactly what it did, silently, every fifteen minutes.
-const { URLSearchParams } = require('url');
+// URL as well as URLSearchParams: the sandbox withholds both, and putBinary
+// parses the upload address with new URL(). Destructuring only URLSearchParams
+// left every upload throwing ReferenceError, which put() swallowed into
+// failures -- so the visible symptom was a 404 on a folder nothing had created.
+const { URLSearchParams, URL } = require('url');
 
 const TENANT = $env.MS_TENANT_ID, CLIENT = $env.MS_CLIENT_ID;
 const SECRET = $env.MS_CLIENT_SECRET, UPN = $env.MS_SENDER_UPN;
@@ -2015,6 +2022,17 @@ for (const cand of candidates) {
     const pdfMin = await toPdf(folder + '/Minutes.docx', folder + '/Minutes.pdf');
     const pdfSum = await toPdf(folder + '/Summary.docx', folder + '/Summary.pdf');
     const pdfTr = await toPdf(folder + '/Transcript.docx', folder + '/Transcript.pdf');
+
+    // Every upload is caught into failures rather than thrown, so that a bad
+    // write does not cost the draft. The consequence is that when they ALL fail,
+    // the next thing to touch the folder is this lookup — which 404s, because
+    // nothing created it. That 404 is what gets recorded, and it describes a
+    // missing folder rather than the upload errors that are the actual fault.
+    //
+    // Surface the real reasons here, before the misleading symptom.
+    if (failures.length) {
+      throw new Error('filing failed (' + failures.length + '): ' + failures.join(' | ').slice(0, 400));
+    }
 
     const chFolder = await graph('/drives/' + CH + '/root:/' + encodeURI(folder));
 
@@ -2522,6 +2540,10 @@ async function deploy(wf) {
 }
 
 const NEWSLETTER_CODE = `
+// The Code sandbox withholds URL as a global; it has to be destructured from
+// the url builtin or new URL() throws ReferenceError at runtime.
+const { URL } = require('url');
+
 // --- shared parser ---
 ${INGEST_SRC}
 // --- end shared parser ---
