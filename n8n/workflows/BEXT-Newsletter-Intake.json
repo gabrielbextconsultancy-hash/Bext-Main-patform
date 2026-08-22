@@ -1,0 +1,121 @@
+{
+  "name": "BEXT — Newsletter Intake",
+  "nodes": [
+    {
+      "id": "imap",
+      "name": "Watch the mailbox",
+      "type": "n8n-nodes-base.emailReadImap",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        0
+      ],
+      "credentials": {
+        "imap": {
+          "id": "YFVOH6u1A1JGfmvd",
+          "name": "BEXT Newsletter Mailbox"
+        }
+      },
+      "parameters": {
+        "format": "resolved",
+        "options": {
+          "customEmailConfig": "[\"UNSEEN\"]",
+          "forceReconnect": 60
+        }
+      }
+    },
+    {
+      "id": "classify",
+      "name": "Read the newsletter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// --- shared parser ---\n/**\n * Article extraction shared by the n8n Source Ingest workflow and the dry-run\n * script. Pure functions with no n8n dependency so they can be tested directly\n * and pasted into a Code node.\n *\n * Two paths:\n *   parseFeed(xml)      — RSS 2.0, Atom and RDF, which is what the 37 feed\n *                         sources between them emit\n *   parseIndex(html,..) — heuristic article discovery for the sources with no\n *                         feed, scored rather than driven by per-site selectors\n *                         because 31 hand-written selector sets would rot faster\n *                         than they could be maintained\n */\n\n\n// ─── Feeds ───────────────────────────────────────────────────────────────────\n\nconst strip = s =>\n  (s ?? '')\n    .replace(/<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>/g, '$1')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/&(#\\d+|#x[0-9a-f]+|\\w+);/gi, ent => {\n      const named = { amp: '&', lt: '<', gt: '>', quot: '\"', apos: \"'\", nbsp: ' ', '#39': \"'\" };\n      const key = ent.slice(1, -1);\n      if (named[key]) return named[key];\n      if (key[0] === '#') {\n        const code = key[1] === 'x' ? parseInt(key.slice(2), 16) : parseInt(key.slice(1), 10);\n        return Number.isFinite(code) ? String.fromCodePoint(code) : ' ';\n      }\n      return ' ';\n    })\n    .replace(/\\s+/g, ' ')\n    .trim();\n\nconst tag = (block, name) => {\n  const m = block.match(new RegExp(`<${name}(?:\\\\s[^>]*)?>([\\\\s\\\\S]*?)</${name}>`, 'i'));\n  return m ? strip(m[1]) : null;\n};\n\n/** Atom puts the URL in an attribute, RSS in element text. */\nfunction entryLink(block) {\n  const alt = block.match(/<link[^>]+rel=[\"']alternate[\"'][^>]*href=[\"']([^\"']+)[\"']/i);\n  if (alt) return alt[1];\n  const href = block.match(/<link[^>]+href=[\"']([^\"']+)[\"']/i);\n  if (href) return href[1];\n  const text = tag(block, 'link');\n  if (text) return text;\n  // Some feeds only carry a permalink guid.\n  const guid = block.match(/<guid[^>]*>([\\s\\S]*?)<\\/guid>/i);\n  if (guid && /^https?:\\/\\//.test(strip(guid[1]))) return strip(guid[1]);\n  return null;\n}\n\nfunction parseDate(raw) {\n  if (!raw) return null;\n  const t = Date.parse(raw);\n  return Number.isFinite(t) ? new Date(t).toISOString() : null;\n}\n\nfunction parseFeed(xml, baseUrl) {\n  const blocks = [...xml.matchAll(/<(item|entry)(?:\\s[^>]*)?>([\\s\\S]*?)<\\/\\1>/gi)];\n  const out = [];\n  for (const [, , block] of blocks) {\n    const link = entryLink(block);\n    const title = tag(block, 'title');\n    if (!link || !title) continue;\n    out.push({\n      url: absolute(link, baseUrl),\n      title,\n      author: tag(block, 'dc:creator') ?? tag(block, 'author') ?? null,\n      published_at:\n        parseDate(tag(block, 'pubDate')) ??\n        parseDate(tag(block, 'published')) ??\n        parseDate(tag(block, 'updated')) ??\n        parseDate(tag(block, 'dc:date')),\n      summary_raw:\n        tag(block, 'description') ?? tag(block, 'summary') ?? tag(block, 'content') ?? null,\n    });\n  }\n  return out;\n}\n\n// ─── HTML indexes ────────────────────────────────────────────────────────────\n\nfunction absolute(href, base) {\n  try {\n    return new URL(href, base).href;\n  } catch {\n    return href;\n  }\n}\n\n// Paths that are navigation, not articles.\nconst CHROME = /\\/(tag|tags|category|categories|author|page|search|login|subscribe|contact|about|privacy|terms|sitemap|feed|rss|wp-|cdn-cgi)\\b/i;\nconst ASSET = /\\.(pdf|jpe?g|png|gif|svg|zip|docx?|xlsx?|pptx?|mp4|mp3)(\\?|$)/i;\n\n/**\n * Article links on a news index share a URL shape — most sites put a date or a\n * long slug in the path. Scoring on those signals finds articles across sites\n * that share no markup, which is the whole point: 31 sources, no two the same.\n */\nfunction scoreLink(url, text, origin) {\n  let score = 0;\n  let path;\n  try {\n    const u = new URL(url);\n    if (u.origin !== origin) return -1; // off-site\n    path = u.pathname;\n  } catch {\n    return -1;\n  }\n  if (CHROME.test(path) || ASSET.test(path)) return -1;\n  if (path === '/' || path.length < 12) return -1;\n\n  if (/\\/\\d{4}\\/\\d{1,2}\\//.test(path)) score += 4; // /2026/07/\n  if (/\\/\\d{4}-\\d{2}-\\d{2}/.test(path)) score += 4;\n  if (/-.*-.*-/.test(path)) score += 3; // multi-word slug\n  score += Math.min(path.split('/').filter(Boolean).length, 4);\n\n  const words = text.trim().split(/\\s+/).length;\n  if (words >= 4) score += 3;\n  if (words >= 7) score += 2;\n  if (words > 40) score -= 4; // whole paragraph scraped as link text\n  if (text.trim().length < 15) score -= 3;\n\n  return score;\n}\n\n/**\n * Some sites render the bare URL as the anchor text (AIDC does this for every\n * media release). Rebuilding a headline from the slug beats discarding the link.\n */\nfunction titleFromSlug(url) {\n  try {\n    const last = new URL(url).pathname.replace(/\\/+$/, '').split('/').pop() ?? '';\n    const words = decodeURIComponent(last)\n      .replace(/\\.\\w{2,5}$/, '')\n      .replace(/[-_]+/g, ' ')\n      .trim();\n    if (words.split(/\\s+/).length < 3) return null;\n    return words.charAt(0).toUpperCase() + words.slice(1);\n  } catch {\n    return null;\n  }\n}\n\nfunction parseIndex(html, pageUrl, { minScore = 6, limit = 40 } = {}) {\n  const origin = new URL(pageUrl).origin;\n  const seen = new Map();\n\n  for (const m of html.matchAll(/<a\\b[^>]*href=[\"']([^\"'#]+)[\"'][^>]*>([\\s\\S]*?)<\\/a>/gi)) {\n    const url = absolute(m[1], pageUrl);\n    let title = strip(m[2]);\n    // Anchor text that is just the href carries no information — the slug does.\n    if (!title || /^https?:\\/\\//i.test(title) || title.length < 12) {\n      title = titleFromSlug(url) ?? title;\n    }\n    if (!title) continue;\n    const score = scoreLink(url, title, origin);\n    if (score < minScore) continue;\n    // Same URL can appear as image link and headline link; keep the better title.\n    const prev = seen.get(url);\n    if (!prev || title.length > prev.title.length) {\n      seen.set(url, { url, title, author: null, published_at: null, summary_raw: null, _score: score });\n    }\n  }\n\n  return [...seen.values()]\n    .sort((a, b) => b._score - a._score)\n    .slice(0, limit)\n    .map(({ _score, ...rest }) => rest);\n}\n\n// ─── Normalisation ───────────────────────────────────────────────────────────\n\n/**\n * Hash of the normalised title plus the opening of the body. The same story is\n * syndicated across AEMO, RenewEconomy and the trade press under different URLs,\n * so URL identity alone will not deduplicate the sheet.\n */\nfunction contentHash(article) {\n  const basis = [\n    (article.title ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(),\n    (article.summary_raw ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 300),\n  ].join(' | ');\n  return crypto.createHash('sha256').update(basis).digest('hex');\n}\n\n/** Applies the per-source filters declared in sources/registry.yaml. */\nfunction passesFilter(article, filter) {\n  if (!filter) return true;\n  if (filter.path_contains?.length) {\n    const path = (() => {\n      try {\n        return new URL(article.url).pathname;\n      } catch {\n        return article.url;\n      }\n    })();\n    if (!filter.path_contains.some(p => path.includes(p))) return false;\n  }\n  if (filter.keywords?.length) {\n    const hay = `${article.title} ${article.summary_raw ?? ''}`.toLowerCase();\n    if (!filter.keywords.some(k => hay.includes(k.toLowerCase()))) return false;\n  }\n  if (filter.author && article.author) {\n    if (!article.author.toLowerCase().includes(filter.author.toLowerCase())) return false;\n  }\n  return true;\n}\n\n/**\n * Google News appends \" - Publisher\" to every headline. The sheet already\n * prints the source beside each item, so the suffix is duplication — and on a\n * long regulator name it pushes the actual headline out of view.\n *\n * Only the last segment is removed, and only when it is short and free of\n * sentence punctuation, so a headline that legitimately contains \" - \" keeps\n * its own text.\n */\nfunction cleanSyndicatedTitle(title, url) {\n  const t = String(title || '').trim();\n  if (!/(^|\\.)news\\.google\\.com$/i.test(safeHost(url))) return t;\n  // \" - Publisher\" with nothing before it: Google indexed the page with no\n  // headline. Trimming has already moved the dash to position 0, so the split\n  // below cannot see it — catch the case explicitly and return nothing.\n  if (/^-\\s+/.test(t)) return '';\n  // Greedy, so a headline containing its own \" - \" splits at the LAST separator\n  // and keeps its text: \"SUPA ENERGY - THE BASE network exemption - AER\".\n  const m = t.match(/^([\\s\\S]*)\\s+-\\s+([^-]{2,60})$/);\n  if (!m) return t;\n  if (/[.!?]$/.test(m[2].trim())) return t;\n  // May legitimately come back empty: Google indexes some pages with no\n  // headline at all, leaving only \" - Publisher\". normalise() drops those.\n  return m[1].trim();\n}\n\nfunction safeHost(url) {\n  try { return new URL(url).hostname; } catch { return ''; }\n}\n\nfunction normalise(raw, source) {\n  return raw\n    .map(a => ({ ...a, title: cleanSyndicatedTitle(a.title, a.url) }))\n    // Title is checked after cleaning, not before. Twenty of thirty-five AER\n    // entries arrived as \" - Australian Energy Regulator (AER)\" — Google had\n    // indexed the page with no headline, so once the publisher suffix goes\n    // there is nothing left. Storing those means rows whose title is a\n    // publisher's name, which is worse than not having the row.\n    .filter(a => a.url && a.title && a.title.length >= 8)\n    .filter(a => passesFilter(a, source.config?.filter))\n    .map(a => ({\n      source_id: source.id,\n      url: a.url,\n      title: a.title.slice(0, 500),\n      author: a.author?.slice(0, 200) ?? null,\n      published_at: a.published_at,\n      summary_raw: a.summary_raw?.slice(0, 4000) ?? null,\n      content_hash: contentHash(a),\n    }));\n}\n\n\n\n// --- end shared parser ---\n\n// --- model-backed reader ---\n/**\n * Last-resort article extraction, using the Hermes model already on the VPS.\n *\n * Shared by the ingest workflow and the source-repair harness, so it is written\n * to be inlined into an n8n Code node: no require, no backticks, no dollar-brace.\n *\n * Why this exists. Thirty-one of the sixty-eight sources have no feed and are\n * parsed out of HTML, and the site-by-site guesswork in that parser quietly fails.\n * On 22 August the Clean Energy Council page carried 533 article links and the\n * parser returned two — both navigation. NABERS, Commercial Building Disclosure,\n * Victorian Energy Upgrades and DEECA have between zero and one article each,\n * having reported \"ok\" for months. Writing a bespoke reader per site is a\n * maintenance treadmill; the markup changes and the failure is silent.\n *\n * So when the ordinary parser comes back with nothing useful, the page is handed\n * to the model with the question a person would ask: which of these links are\n * news articles, and what are they called.\n *\n * What this CANNOT do, and must not be asked to: a page we are refused. DCCEEW\n * and the IEA return 403 to both plain HTTP and headless Chromium. No model reads\n * a page it cannot fetch — that needs a different route, not a cleverer parser.\n */\n\n// Hermes 3 8B runs at roughly 7.5 tokens a second on this VPS, so the prompt has\n// to be small. Candidates are pre-filtered and capped rather than sending markup.\nconst MAX_CANDIDATES = 60;\nconst MIN_TEXT = 18;\n\n/** Anchors that could plausibly be articles, as {url, text}. */\nconst candidates = (html, baseUrl) => {\n  const out = [];\n  const seen = new Set();\n  // The inner cap has to be generous. A modern card link wraps an image, a\n  // category chip and a date in nested divs, and at 200 characters the lazy match\n  // simply never reached the closing tag — Clean Energy Council yielded 8 links\n  // out of 533, and premier.vic.gov.au yielded none at all from 125 KB.\n  const re = /<a[^>]+href=[\"']([^\"']+)[\"'][^>]*>([\\s\\S]{0,4000}?)<\\/a>/gi;\n  let m;\n  while ((m = re.exec(html)) !== null) {\n    let url = m[1];\n    const text = m[2].replace(/<[^>]+>/g, ' ').replace(/&[a-z#0-9]+;/gi, ' ')\n      .replace(/\\s+/g, ' ').trim();\n    if (text.length < MIN_TEXT) continue;\n    if (/^(#|mailto:|tel:|javascript:)/i.test(url)) continue;\n    // Navigation, legal and social links are never the article.\n    if (/\\/(tag|category|author|search|login|privacy|terms|contact|about|subscribe)\\b/i.test(url)) continue;\n    if (/^(home|menu|search|login|sign in|subscribe|read more|learn more|view all|next|previous)$/i.test(text)) continue;\n    try { url = new URL(url, baseUrl).toString(); } catch (e) { continue; }\n    const key = url.split('#')[0];\n    if (seen.has(key)) continue;\n    seen.add(key);\n    out.push({ url: key, text: text.slice(0, 120) });\n  }\n  return out;\n};\n\n/**\n * Ask the model which candidates are real articles.\n *\n * http is the caller's request function — this.helpers.httpRequest inside n8n, or\n * a small wrapper elsewhere — so the module stays free of imports.\n */\nconst hermesExtract = async (opts) => {\n  const html = opts.html || '';\n  const baseUrl = opts.baseUrl || '';\n  const http = opts.http;\n  const model = opts.model || 'hermes3:8b';\n  const url = opts.ollamaUrl || 'http://ollama:11434/api/generate';\n\n  const all = candidates(html, baseUrl);\n  if (!all.length) return { articles: [], considered: 0, reason: 'no candidate links in the page' };\n\n  // Same-host links first: an index page is mostly its own articles, and the rest\n  // is usually syndication and social.\n  let host = '';\n  try { host = new URL(baseUrl).host; } catch (e) { host = ''; }\n  const ranked = all\n    .filter(c => !host || c.url.indexOf(host) > -1)\n    .slice(0, MAX_CANDIDATES);\n  if (!ranked.length) return { articles: [], considered: all.length, reason: 'no same-host links' };\n\n  const listing = ranked.map((c, i) => (i + 1) + '. ' + c.text + '  ->  ' + c.url).join('\\n');\n\n  const prompt = 'You are reading the news index of an Australian energy or building industry site.\\n'\n    + 'Below are the links on the page. Decide which are individual NEWS ARTICLES or MEDIA RELEASES.\\n\\n'\n    + 'Include: news stories, media releases, announcements, articles with a headline.\\n'\n    + 'Exclude: navigation, section pages, report downloads, event listings, membership or\\n'\n    + 'contact pages, category indexes, and anything that is a heading rather than a story.\\n\\n'\n    + 'Return ONLY a JSON array, no prose and no markdown fence, of the form\\n'\n    + '[{\"n\": <the number from the list>, \"title\": \"<the headline, cleaned up>\"}]\\n'\n    + 'If none of them are articles, return [].\\n\\n'\n    + 'LINKS:\\n' + listing + '\\n';\n\n  let text = '';\n  try {\n    const res = await http({\n      method: 'POST', url: url, json: true, timeout: 180000,\n      body: { model: model, stream: false, options: { temperature: 0.1, num_predict: 900 }, prompt: prompt },\n    });\n    text = String((res && res.response) || '');\n  } catch (e) {\n    return { articles: [], considered: ranked.length, reason: 'model unavailable: ' + String(e.message || e).slice(0, 80) };\n  }\n\n  // Small models wander outside the fence even when told not to.\n  const start = text.indexOf('[');\n  const end = text.lastIndexOf(']');\n  if (start < 0 || end <= start) {\n    return { articles: [], considered: ranked.length, reason: 'model returned no JSON array' };\n  }\n  let picked;\n  try { picked = JSON.parse(text.slice(start, end + 1)); }\n  catch (e) { return { articles: [], considered: ranked.length, reason: 'unparseable JSON from model' }; }\n  if (!Array.isArray(picked)) return { articles: [], considered: ranked.length, reason: 'model did not return an array' };\n\n  const articles = [];\n  const used = new Set();\n  for (const p of picked) {\n    const n = Number(p && p.n);\n    if (!n || n < 1 || n > ranked.length || used.has(n)) continue;\n    used.add(n);\n    const c = ranked[n - 1];\n    const title = String((p && p.title) || c.text).replace(/\\s+/g, ' ').trim();\n    if (title.length < MIN_TEXT) continue;\n    articles.push({ url: c.url, title: title.slice(0, 300) });\n  }\n  return { articles: articles, considered: ranked.length, reason: '' };\n};\n\n\n\n// --- end model-backed reader ---\n\nconst helpers = this.helpers;\n\n// Mail that is plainly not a newsletter. Cheap to exclude here rather than\n// spending forty seconds of model time discovering it.\nconst NOT_NEWS = /^(re|fwd|out of office|undeliverable|delivery status|password|verify your|confirm your|receipt|invoice|your order)\\b/i;\n\n// Tracking wrappers are the norm in newsletters, and the real URL is usually a\n// parameter inside them. Storing the wrapper would defeat deduplication, since\n// the same article arrives with a different tracking id every time.\nconst unwrap = (u) => {\n  try {\n    const parsed = new URL(u);\n    for (const key of ['url', 'u', 'target', 'redirect', 'link', 'dest']) {\n      const inner = parsed.searchParams.get(key);\n      if (inner && /^https?:\\/\\//i.test(inner)) return inner.split('#')[0];\n    }\n    // Strip the campaign parameters so two sends of one article agree.\n    for (const junk of ['utm_source','utm_medium','utm_campaign','utm_term','utm_content','mc_cid','mc_eid']) {\n      parsed.searchParams.delete(junk);\n    }\n    return parsed.toString().split('#')[0];\n  } catch (e) { return u; }\n};\n\nconst rows = [];\nconst messages = [];\n\nfor (const item of $input.all()) {\n  const j = item.json;\n  const from = String(j.from || (j.headers && j.headers.from) || '').toLowerCase();\n  const subject = String(j.subject || '');\n  const messageId = String((j.headers && j.headers['message-id']) || j.messageId || '').trim()\n    || (from + '|' + subject + '|' + String(j.date || ''));\n  const html = String(j.textHtml || j.html || j.textPlain || j.text || '');\n\n  if (!html || NOT_NEWS.test(subject.trim())) continue;\n\n  // Which source this belongs to is resolved in SQL, by matching the sending\n  // address against newsletter_senders. Doing it there rather than here means\n  // adding a publisher is one row, not a code change and a redeploy.\n  //\n  // Every message is read regardless of whether the sender is known. A\n  // newsletter subscribed to next month should work immediately, and a publisher\n  // quietly changing its sending domain is exactly the failure that goes\n  // unnoticed for weeks.\n  const domain = (from.match(/@([a-z0-9.-]+)/) || [null, 'mail.invalid'])[1];\n  const h = await hermesExtract({\n    html, baseUrl: 'https://' + domain, http: helpers.httpRequest,\n  });\n\n  const kept = [];\n  for (const a of h.articles) {\n    const url = unwrap(a.url);\n    if (!/^https?:\\/\\//i.test(url)) continue;\n    kept.push({ url: url, title: a.title, from_address: from.slice(0, 200), published_at: j.date || null });\n  }\n\n  messages.push({\n    message_id: messageId.slice(0, 400),\n    from_address: from.slice(0, 200),\n    subject: subject.slice(0, 400),\n    received_at: j.date || null,\n    links_found: h.considered || 0,\n    articles_kept: kept.length,\n  });\n  for (const k of kept) rows.push(k);\n}\n\nreturn [{ json: {\n  payload: JSON.stringify(rows),\n  messages: JSON.stringify(messages),\n  article_count: rows.length,\n  message_count: messages.length,\n} }];\n"
+      }
+    },
+    {
+      "id": "insert",
+      "name": "Insert articles",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        180,
+        -80
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "0SoqGGqUOqbwYTmJ",
+          "name": "BEXT Postgres"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO articles (source_id, url, title, published_at)\nSELECT coalesce(\n         (SELECT s.id FROM newsletter_senders ns\n            JOIN sources s ON s.slug = ns.source_slug\n           WHERE ns.active AND x.from_address ILIKE ns.from_pattern\n           LIMIT 1),\n         (SELECT id FROM sources WHERE slug = 'newsletter-other')\n       ),\n       x.url, x.title, x.published_at\nFROM json_to_recordset($1::json) AS x(\n  url text, title text, from_address text, published_at timestamptz)\nWHERE x.url IS NOT NULL\nON CONFLICT (url) DO NOTHING",
+        "options": {
+          "queryReplacement": "={{ $json.payload }}"
+        }
+      }
+    },
+    {
+      "id": "seen",
+      "name": "Record the message",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        180,
+        100
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "0SoqGGqUOqbwYTmJ",
+          "name": "BEXT Postgres"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO newsletter_messages\n  (message_id, source_slug, from_address, subject, received_at, links_found, articles_kept)\nSELECT x.message_id,\n       (SELECT ns.source_slug FROM newsletter_senders ns\n         WHERE ns.active AND x.from_address ILIKE ns.from_pattern LIMIT 1),\n       x.from_address, x.subject, x.received_at, x.links_found, x.articles_kept\nFROM json_to_recordset($1::json) AS x(\n  message_id text, from_address text, subject text,\n  received_at timestamptz, links_found int, articles_kept int)\nON CONFLICT (message_id) DO NOTHING",
+        "options": {
+          "queryReplacement": "={{ $json.messages }}"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Watch the mailbox": {
+      "main": [
+        [
+          {
+            "node": "Read the newsletter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read the newsletter": {
+      "main": [
+        [
+          {
+            "node": "Insert articles",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Record the message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
