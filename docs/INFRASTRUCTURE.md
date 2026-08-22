@@ -62,6 +62,30 @@ The zone is shared with unrelated domains — `billing-agent`, `content.engine`,
 `neuralyx.ai`. Scope every edit; a careless mass edit breaks someone else's mail.
 
 `cpanel-cli` on PATH handles **email accounts and forwarders only** — it has no DNS verbs.
+
+### Inbound mail needs two things, not one
+
+Fixed 22 Aug 2026 after nothing had ever been delivered to
+`reports@bext.dev-environment.site`. Outbound was unaffected throughout, so the
+daily report kept arriving and the fault stayed invisible for weeks.
+
+1. **The MX must point at the mail host.** `bext` had `MX → itself`, and its A
+   record is `187.127.213.243` — the Hostinger VPS, which runs no mail server.
+   Mail is on iFastNet at `185.2.168.30` with the parent domain.
+2. **Exim must treat the domain as local.** Correcting DNS is not sufficient.
+   With a subdomain on `mxcheck: auto`, Exim decides once and keeps that answer;
+   decided while the MX pointed at a remote host, it holds `alwaysaccept: 0` and
+   replies `550 Relay not permitted - domain is not a local domain` — while
+   cPanel simultaneously lists the domain as a mail domain and reports
+   `detected: local`. That contradiction is the signature of this fault.
+
+Both are repaired by `node graph/fix-mail-mx.js --apply`.
+
+**Never conclude a mailbox works from an IMAP login.** A successful login with
+messages present proves only that the mailbox can be *read*; it says nothing
+about whether anything can reach it. That is exactly how this was missed. Prove
+delivery with `node graph/verify-inbound-mail.js`, which sends from outside the
+hosting account and waits to read the message back.
 Use `graph/fix-mail-dns.js`.
 
 ### Mail
