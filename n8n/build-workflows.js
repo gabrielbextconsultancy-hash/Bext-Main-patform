@@ -353,14 +353,22 @@ LEFT JOIN LATERAL (
   SELECT json_agg(u.url) AS urls
   FROM (SELECT url FROM articles WHERE source_id = s.id ORDER BY fetched_at DESC LIMIT 120) u
 ) k ON true
--- Tier 0 asks whether a newsletter has already delivered for this source, so the
--- ladder can stop before spending anything. Scoped to the freshness window: a
--- newsletter from last fortnight does not excuse us from fetching today.
+-- Tier 0 asks whether a NEWSLETTER has already delivered for this source, so the
+-- ladder can stop before spending anything.
+--
+-- This must count newsletter deliveries, not articles. Counting articles was
+-- wrong and briefly shipped: AFR is scraped for headlines as well as subscribed
+-- to, so its own scraped rows satisfied the check and it reported "newsletter
+-- delivered" on a day no newsletter had ever been processed — then skipped the
+-- scrape on the strength of it. Ask the mail table, which only the email tier
+-- writes to.
+--
+-- Scoped to the window: an edition from last fortnight does not excuse us today.
 LEFT JOIN LATERAL (
-  SELECT count(*) AS recent
-  FROM articles a
-  WHERE a.source_id = s.id
-    AND a.fetched_at > now() - interval '20 hours'
+  SELECT coalesce(sum(m.articles_kept), 0) AS recent
+  FROM newsletter_messages m
+  WHERE m.source_slug = s.slug
+    AND m.processed_at > now() - interval '20 hours'
 ) n ON true
 WHERE s.active
 ORDER BY s.id`,
