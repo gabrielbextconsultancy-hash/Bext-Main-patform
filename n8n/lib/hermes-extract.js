@@ -30,7 +30,11 @@ const MIN_TEXT = 18;
 const candidates = (html, baseUrl) => {
   const out = [];
   const seen = new Set();
-  const re = /<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]{0,200}?)<\/a>/gi;
+  // The inner cap has to be generous. A modern card link wraps an image, a
+  // category chip and a date in nested divs, and at 200 characters the lazy match
+  // simply never reached the closing tag — Clean Energy Council yielded 8 links
+  // out of 533, and premier.vic.gov.au yielded none at all from 125 KB.
+  const re = /<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]{0,4000}?)<\/a>/gi;
   let m;
   while ((m = re.exec(html)) !== null) {
     let url = m[1];

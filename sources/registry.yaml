@@ -65,6 +65,15 @@ sources:
     category: Australian News
     url: "https://www.afr.com/companies/energy"
     method: scrape
+    note: >-
+      The index page is readable and headlines are collected from it, but article
+      bodies are behind a subscriber wall ("already a subscriber"), so scoring
+      sees only the headline and standfirst. AFR retired its RSS feeds — the
+      /newsfeed/about page now offers only subscribe links. Two ways to deepen
+      this: the free AFR newsletters into the ingest mailbox, or a session cookie
+      from a logged-in subscriber in SOURCE_COOKIES. See
+      docs/SUBSCRIPTION-SOURCES.md. Several articles the client flagged as
+      missing on 21 Aug 2026 were AFR ones.
   - slug: conversation-au
     name: "The Conversation AU — Environment & Energy"
     category: Australian News
@@ -137,6 +146,13 @@ sources:
     category: International Industry Updates
     url: "https://www.iea.org/news"
     method: scrape
+    active: false
+    note: >-
+      403 to plain HTTP, to headless Chromium, and to browser-fingerprint
+      impersonation alike — confirmed 22 Aug 2026. A genuine account wall rather
+      than the TLS fingerprinting that DCCEEW and S&P turned out to be. Route is
+      the free IEA newsletter into gabriel.bextconsultancy@gmail.com; see
+      docs/SUBSCRIPTION-SOURCES.md. Inactive so it cannot report false health.
   - slug: nz-herald-energy
     name: NZ Herald — Energy
     category: International Industry Updates
@@ -173,7 +189,7 @@ sources:
   - slug: aer-news
     name: AER — News
     category: Industry Updates
-    url: "https://www.aer.gov.au/news/articles"
+    url: "https://www.aer.gov.au/news"
     method: scrape
     requires_browser: true
     note: aer.gov.au is JavaScript-rendered and terminates HTTP/2 connections; headless Chromium then times out. Needs investigation — possibly their JSON API.
@@ -422,7 +438,7 @@ sources:
   - slug: ahc
     name: Australian Hydrogen Council
     category: Industry Updates
-    url: "https://aidc.org.au/media-releases/"
+    url: "https://aidc.org.au/aidc-media-releases/"
     method: scrape
     note: Brief supplied no link for the Australian Hydrogen Council. h2council.com.au redirects to aidc.org.au — CONFIRM with client before relying on this.
   - slug: smart-energy-council
