@@ -2414,9 +2414,29 @@ const unwrap = (u) => {
 const rows = [];
 const messages = [];
 
+// The IMAP node does not hand back a plain string. Depending on the message it
+// is { value: [{ address, name }], text }, or a bare string, or only present in
+// the raw headers. String() on the object form yields "[object Object]", which
+// matched no sender pattern and quietly filed every newsletter under the
+// catch-all source — found on the first real message through the pipeline.
+const addressOf = (v) => {
+  if (!v) return '';
+  if (typeof v === 'string') return v;
+  if (Array.isArray(v)) return addressOf(v[0]);
+  if (v.address) return String(v.address);
+  if (Array.isArray(v.value) && v.value.length) return addressOf(v.value[0]);
+  if (v.text) return String(v.text);
+  return '';
+};
+// A From header is "Name <addr@host>" as often as it is bare; keep the address.
+const bareAddress = (s) => {
+  const m = String(s).match(/<([^>]+)>/);
+  return (m ? m[1] : String(s)).trim().toLowerCase();
+};
+
 for (const item of $input.all()) {
   const j = item.json;
-  const from = String(j.from || (j.headers && j.headers.from) || '').toLowerCase();
+  const from = bareAddress(addressOf(j.from) || addressOf(j.headers && j.headers.from));
   const subject = String(j.subject || '');
   const messageId = String((j.headers && j.headers['message-id']) || j.messageId || '').trim()
     || (from + '|' + subject + '|' + String(j.date || ''));
