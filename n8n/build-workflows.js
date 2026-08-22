@@ -785,6 +785,10 @@ WITH win AS (
 ),
 ranked AS (
   SELECT a.id, a.url, a.title,
+         -- The publisher's own lead image, where they declare one. Carried here
+         -- so the card layout has artwork, and image_state so an item without a
+         -- picture is explicable rather than looking like a rendering fault.
+         a.image_url, a.image_state::text AS image_state,
          -- What the sheet prints beside each item. published_at where the source
          -- gives one, otherwise when we first saw it; date_is_exact says which,
          -- so the sheet never presents a fetch time as a publication date.
@@ -814,7 +818,7 @@ ranked AS (
           <  w.day_start + interval '1 day'
     AND an.relevance_score >= ${REPORT_MIN_RELEVANCE}
 )
-SELECT id, url, title, shown_at, date_is_exact, source_name, category,
+SELECT id, url, title, image_url, image_state, shown_at, date_is_exact, source_name, category,
        summary, relevance_score,
        -- Carried on every row so the footer can state coverage without a
        -- second query: how many sources are being pulled right now.
@@ -969,6 +973,91 @@ return [{ json: {
         },
       },
       {
+        id: 'images', name: 'Fetch article images', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(140, 0),
+        parameters: {
+          mode: 'runOnceForAllItems', language: 'javaScript',
+          jsCode: `
+// Lead artwork for the card layout, taken from each publisher's own og:image.
+//
+// Only the articles that reached the sheet are looked up — a few dozen a day
+// rather than the couple of hundred ingested — and the result is written back so
+// tomorrow's run does not repeat the work. A page we cannot read simply has no
+// picture; the card layout is built to look right without one, because a good
+// third of government and industry sites publish no og:image at all.
+const d = $input.first().json;
+const sections = d.sections || [];
+const all = sections.flatMap(s => s.items || []);
+const need = all.filter(a => !a.image_url && a.image_state !== 'none' && a.image_state !== 'blocked');
+
+const SCRAPLING = 'http://scrapling:8090/fetch';
+const helpers = this.helpers;
+
+const pick = (html, base) => {
+  // og:image first, then twitter:image. Property and content appear in either
+  // order depending on the CMS, so both arrangements are matched.
+  const pats = [
+    /<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i,
+    /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i,
+  ];
+  for (const p of pats) {
+    const m = html.match(p);
+    if (m && m[1]) {
+      try { return new URL(m[1].trim(), base).toString(); } catch (e) { /* skip */ }
+    }
+  }
+  return null;
+};
+
+const updates = [];
+const limit = 12;
+const queue = need.slice(0, 60);   // a hard ceiling, so an odd day cannot stall the 05:00 send
+
+await Promise.all(Array.from({ length: Math.min(limit, queue.length) }, async () => {
+  while (queue.length) {
+    const a = queue.shift();
+    try {
+      const r = await helpers.httpRequest({
+        method: 'POST', url: SCRAPLING, json: true, timeout: 30000,
+        body: { url: a.url, include_html: true, timeout: 20 },
+      });
+      if (!r || !r.ok) { updates.push({ url: a.url, image_url: null, image_state: 'blocked' }); continue; }
+      const img = pick(r.html || '', a.url);
+      a.image_url = img;
+      updates.push({ url: a.url, image_url: img, image_state: img ? 'found' : 'none' });
+    } catch (e) {
+      updates.push({ url: a.url, image_url: null, image_state: 'blocked' });
+    }
+  }
+}));
+
+const found = updates.filter(u => u.image_state === 'found').length;
+return [{ json: Object.assign({}, d, {
+  sections,
+  image_updates: JSON.stringify(updates),
+  image_summary: found + ' of ' + all.length + ' items have artwork',
+}) }];
+`,
+        },
+      },
+      {
+        id: 'saveimages', name: 'Save article images', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(140, 200),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        parameters: {
+          operation: 'executeQuery',
+          // Written back so a rerun, or tomorrow's sheet carrying the same story,
+          // costs nothing.
+          query: `UPDATE articles a SET image_url = v.image_url,
+       image_state = v.image_state::article_image_state
+FROM (SELECT * FROM json_to_recordset($1::json)
+      AS x(url text, image_url text, image_state text)) v
+WHERE a.url = v.url`,
+          options: { queryReplacement: '={{ $json.image_updates }}' },
+        },
+      },
+      {
         id: 'render', name: 'Render HTML', type: 'n8n-nodes-base.code',
         typeVersion: 2, position: pos(280, 0),
         parameters: {
@@ -1004,26 +1093,72 @@ const itemDate = (a) => {
 };
 
 // Inline styles throughout — Outlook and Gmail strip <style> blocks.
+//
+// The layout is a card grid, and it is built from nested tables rather than CSS
+// grid or flexbox. That is not a stylistic choice: Outlook renders through Word,
+// which supports neither, and a flexbox grid there collapses into one column of
+// full-width images. Tables are the only construct every mail client agrees on.
+//
+// Two cards per row. Three fits the eye on a wide screen but leaves roughly
+// 200px per card at the 680px width mail clients allow, which is too narrow for
+// a headline plus a source line.
+const CARDS_PER_ROW = 2;
+
+const card = (a) => {
+  // A picture only where the publisher declared one. Around a third of the
+  // government and industry sources publish no og:image, so the card has to look
+  // deliberate without one rather than leaving a broken frame.
+  const art = a.image_url
+    ? \`<a href="\${esc(a.url)}" style="text-decoration:none">
+         <img src="\${esc(a.image_url)}" width="100%" alt=""
+              style="display:block;width:100%;max-width:100%;height:150px;
+                     object-fit:cover;border-radius:4px 4px 0 0;background:#e5e7eb"></a>\`
+    : \`<div style="height:4px;background:#14b8a6;border-radius:4px 4px 0 0"></div>\`;
+
+  return \`
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+           style="border:1px solid #e5e7eb;border-radius:5px;background:#fff">
+      <tr><td>\${art}</td></tr>
+      <tr><td style="padding:12px 14px 14px">
+        <a href="\${esc(a.url)}" style="font:600 14px/1.35 Arial,sans-serif;color:#0f766e;
+           text-decoration:none">\${esc(a.title)}</a>
+        <div style="font:11px/1.4 Arial,sans-serif;color:#9ca3af;margin:5px 0 6px">
+          \${esc(a.source_name)} · \${esc(itemDate(a))}
+        </div>
+        \${a.summary
+          ? \`<div style="font:12px/1.5 Arial,sans-serif;color:#374151">\${esc(a.summary)}</div>\`
+          : ''}
+      </td></tr>
+    </table>\`;
+};
+
+const grid = (items) => {
+  const rows = [];
+  for (let i = 0; i < items.length; i += CARDS_PER_ROW) {
+    const cells = items.slice(i, i + CARDS_PER_ROW);
+    // The final row is padded with empty cells so the last card keeps its width
+    // instead of stretching across the table.
+    while (cells.length < CARDS_PER_ROW) cells.push(null);
+    rows.push(\`<tr>\` + cells.map((a, n) => \`
+      <td valign="top" width="\${Math.floor(100 / CARDS_PER_ROW)}%"
+          style="padding:0 \${n === CARDS_PER_ROW - 1 ? '0' : '8px'} 16px \${n === 0 ? '0' : '8px'}">
+        \${a ? card(a) : ''}
+      </td>\`).join('') + \`</tr>\`);
+  }
+  return \`<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+                 style="width:100%;table-layout:fixed">\${rows.join('')}</table>\`;
+};
+
 const body = d.empty
   ? '<p style="color:#6b7280">No qualifying articles published on this day.</p>'
   : d.sections.map(sec => \`
-      <h2 style="font:600 15px/1.3 Arial,sans-serif;color:#111827;margin:28px 0 10px;
+      <h2 style="font:600 15px/1.3 Arial,sans-serif;color:#111827;margin:28px 0 12px;
                  padding-bottom:6px;border-bottom:2px solid #14b8a6">\${esc(sec.name)}</h2>
-      \` + sec.items.map(a => \`
-        <div style="margin:0 0 16px">
-          <a href="\${esc(a.url)}" style="font:600 14px/1.4 Arial,sans-serif;color:#0f766e;
-             text-decoration:none">\${esc(a.title)}</a>
-          <div style="font:11px/1.4 Arial,sans-serif;color:#9ca3af;margin:3px 0 4px">
-            \${esc(a.source_name)} · \${esc(itemDate(a))}
-          </div>
-          \${a.summary
-            ? \`<div style="font:13px/1.5 Arial,sans-serif;color:#374151">\${esc(a.summary)}</div>\`
-            : ''}
-        </div>\`).join('')
+      \` + grid(sec.items)
     ).join('');
 
 const html = \`<!doctype html><html><body style="margin:0;padding:0;background:#f3f4f6">
-<div style="max-width:680px;margin:0 auto;background:#fff;padding:28px 32px">
+<div style="max-width:860px;margin:0 auto;background:#fff;padding:28px 32px">
   <div style="font:11px/1 Arial,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:#9ca3af">
     BEXT Consultancy · Industry Daily
   </div>
@@ -1187,7 +1322,15 @@ VALUES ('daily_report', 'up', $1)`,
       'Daily 05:00 AEST': { main: [[{ node: 'Top articles, prior day', type: 'main', index: 0 }]] },
       'Top articles, prior day': { main: [[{ node: 'Hermes writes the brief', type: 'main', index: 0 }]] },
       'Hermes writes the brief': { main: [[{ node: 'Check deliverability', type: 'main', index: 0 }]] },
-      'Check deliverability': { main: [[{ node: 'Render HTML', type: 'main', index: 0 }]] },
+      // Artwork is looked up after the items are chosen, so only what reaches the
+      // sheet costs a fetch, and written back before rendering so a rerun is free.
+      'Check deliverability': { main: [[{ node: 'Fetch article images', type: 'main', index: 0 }]] },
+      'Fetch article images': {
+        main: [[
+          { node: 'Save article images', type: 'main', index: 0 },
+          { node: 'Render HTML', type: 'main', index: 0 },
+        ]],
+      },
       'Render HTML': { main: [[{ node: 'Save report', type: 'main', index: 0 }]] },
       'Save report': { main: [[{ node: 'Record items sent', type: 'main', index: 0 }]] },
       'Record items sent': { main: [[{ node: 'Send via SMTP', type: 'main', index: 0 }]] },
