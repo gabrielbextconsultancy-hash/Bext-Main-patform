@@ -37,6 +37,15 @@ const HERMES_SRC = fs
   .replace(/^module\.exports\s*=.*$/m, '');
 
 // The tested document writer, minus its export line, for embedding in a Code node.
+// The Teams news card and the fetch-list PDF, minus their export lines.
+const NEWS_CARD_SRC = fs
+  .readFileSync(path.join(__dirname, 'lib', 'news-card.js'), 'utf8')
+  .replace(/^module\.exports\s*=.*$/m, '');
+
+const FETCH_LIST_SRC = fs
+  .readFileSync(path.join(__dirname, 'lib', 'fetch-list.js'), 'utf8')
+  .replace(/^module\.exports\s*=.*$/m, '');
+
 const DOCX_SRC = fs
   .readFileSync(path.join(__dirname, 'lib', 'docx.js'), 'utf8')
   .replace(/^module\.exports\s*=.*$/m, '');
@@ -520,16 +529,38 @@ organisations and institutional portfolios — offices, retail and shopping cent
 hotels, healthcare and aged care, education campuses, warehouses and logistics.
 
 So the sharpest test is: could this change what they advise a building owner to do,
-what a project costs, or what the rules require? Anything touching commercial
-building performance, ratings, upgrade incentives or electrification is closest to
-their work. Wider energy market news — generation, transmission, storage, national
-policy — is worth knowing as industry context and belongs in the sheet, but it sits
-below the building-level material rather than above it.
+what a project costs, or what the rules require?
+
+PRIORITY. Rank on this ladder when deciding a score, not merely on whether the
+subject appears in the in-scope list below.
+
+  1. SOLAR FIRST. Solar and PV are the core of this business — commercial rooftop
+     and behind-the-meter systems, batteries and storage paired with them, feed-in
+     and export rules, connection and inverter standards, panel supply, pricing and
+     payback, installer accreditation, and the schemes that pay for any of it
+     (Solar Victoria, the Victorian Energy Upgrades solar measures, the federal
+     rebate). A solar story a commercial owner could act on starts at 70 and goes
+     up; nothing else outranks it at equal specificity.
+
+  2. Then building energy performance — NABERS, Commercial Building Disclosure,
+     the National Construction Code, GEMS, efficiency upgrades, electrification
+     away from gas, heat pumps.
+
+  3. Then the wider energy market — generation, transmission, network rules,
+     national policy. Genuine industry context, and it belongs in the sheet, but
+     it sits below the two tiers above rather than competing with them.
+
+Storage counts as tier 1 when it is paired with solar or behind the meter, and
+tier 3 when it is grid-scale generation news with no customer-side angle.
 
 IN SCOPE — what their clients pay them to know about:
+  - solar and PV above all: commercial and rooftop installations, behind-the-meter
+    generation, batteries paired with solar, feed-in tariffs and export limits,
+    grid connection and inverter standards, module supply and pricing, installed
+    cost and payback, accreditation, and the rebates and schemes that fund them
   - energy efficiency, building performance, NABERS, Commercial Building Disclosure,
     the National Construction Code, GEMS and energy rating
-  - solar, PV, batteries and storage, distributed and consumer energy resources
+  - distributed and consumer energy resources, virtual power plants, demand response
   - renewables generation, transmission, grid connection and market rule changes
   - Victorian schemes above all: Victorian Energy Upgrades, Solar Victoria,
     SEC Victoria, VicGrid, DEECA, Essential Services Commission
@@ -564,6 +595,12 @@ Being on-topic is not the same as being useful. Two traps in particular:
     nothing a consultant advises this year. Research earns 55 or more only when
     a practitioner could act on it now — a testing method they could use, a cost
     curve that changes a business case, a field trial with deployable results.
+
+    This does not contradict solar ranking first. The priority is for solar a
+    commercial owner could act on — a scheme, a price, a rule, a standard, a
+    supply or connection change. A perovskite record in a laboratory is a solar
+    story that changes nothing this year, and ranks accordingly. Ask what a client
+    would do differently on Monday, not what the article is about.
 
 A source being monitored does not make everything it publishes relevant. The
 government and parliamentary feeds carry the whole of government, and most of it
@@ -2816,6 +2853,217 @@ ON CONFLICT (message_id) DO NOTHING`,
   settings: { executionOrder: 'v1' },
 });
 
+const NEWS_CARD_CODE = `
+// --- card builder, generated from n8n/lib/news-card.js — do not edit here ---
+${NEWS_CARD_SRC}
+// --- end card builder ---
+
+// --- fetch list, generated from n8n/lib/fetch-list.js — do not edit here ---
+${FETCH_LIST_SRC}
+// --- end fetch list ---
+
+const rows = $input.all().map(i => i.json);
+if (!rows.length || !rows[0].report_date) {
+  return [{ json: { skip: true, detail: 'no sent report to accompany' } }];
+}
+
+const day = rows[0].report_date;
+const coverage = new Date(day).toLocaleDateString('en-AU',
+  { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Melbourne' });
+
+const FLOOR = Number($env.REPORT_MIN_RELEVANCE || 40);
+
+// What the client received, in the order they read it.
+const sent = rows.filter(r => r.in_report).sort((a, b) => (a.rank || 0) - (b.rank || 0));
+
+// A handful more that cleared the floor but did not make the sheet. The point of
+// the channel is to show slightly more than the email, not to repeat it — and not
+// to dump everything, which is what the PDF is for.
+const extra = rows
+  .filter(r => !r.in_report && r.relevance_score >= FLOOR)
+  .sort((a, b) => b.relevance_score - a.relevance_score)
+  .slice(0, 10);
+
+const card = buildNewsCard({
+  coverage,
+  sent: sent.slice(0, 14),
+  extra,
+  counts: {
+    fetched: rows.length,
+    sources_contributing: new Set(rows.map(r => r.source_name)).size,
+    sources_monitored: rows[0].sources_monitored,
+  },
+  reportUrl: 'https://bext.dev-environment.site/reports',
+});
+
+const listHtml = buildFetchList(rows, {
+  coverage, floor: FLOOR, sources_monitored: rows[0].sources_monitored,
+});
+
+return [{ json: {
+  skip: false,
+  report_date: day,
+  coverage,
+  card,
+  listHtml,
+  counts: { fetched: rows.length, sent: sent.length, extra: extra.length },
+} }];
+`;
+
+const NEWS_POST_CODE = `
+// Render the full list to PDF, file it in the channel's own folder, then post the
+// card with a button pointing at it.
+//
+// The card is posted even if the PDF fails. A day's news reaching the channel
+// without its appendix is a smaller loss than nothing reaching it at all, and the
+// two failures look identical from the outside unless said explicitly.
+const d = $input.first().json;
+if (d.skip) return [{ json: { ok: true, detail: 'skipped: ' + d.detail } }];
+
+const helpers = this.helpers;
+const notes = [];
+let pdfUrl = null;
+
+// The Daily report channel's folder in the team's document library. Discovered
+// from the site rather than from Teams, which needs a permission we do not hold.
+const DRIVE = '${process.env.TEAMS_DAILY_DRIVE_ID || ''}';
+const FOLDER = 'Daily report';
+
+const graphToken = async () => {
+  const r = await helpers.httpRequest({
+    method: 'POST',
+    url: 'https://login.microsoftonline.com/' + $env.MS_TENANT_ID + '/oauth2/v2.0/token',
+    body: {
+      client_id: $env.MS_CLIENT_ID, client_secret: $env.MS_CLIENT_SECRET,
+      scope: 'https://graph.microsoft.com/.default', grant_type: 'client_credentials',
+    },
+    json: true,
+  });
+  return r.access_token;
+};
+
+try {
+  if (!DRIVE) throw new Error('TEAMS_DAILY_DRIVE_ID not configured');
+  const pdf = await helpers.httpRequest({
+    method: 'POST', url: 'http://fetcher:8080/pdf', json: true,
+    body: { html: d.listHtml }, encoding: 'arraybuffer', timeout: 120000,
+  });
+  const token = await graphToken();
+  const name = 'Fetched ' + d.report_date + '.pdf';
+  const up = await helpers.httpRequest({
+    method: 'PUT',
+    url: 'https://graph.microsoft.com/v1.0/drives/' + DRIVE + '/root:/'
+       + encodeURI(FOLDER + '/' + name) + ':/content',
+    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/pdf' },
+    body: Buffer.from(pdf), json: true, timeout: 120000,
+  });
+  pdfUrl = up.webUrl || null;
+  notes.push('pdf ' + name);
+} catch (e) {
+  notes.push('pdf failed: ' + String(e.message || e).slice(0, 90));
+}
+
+if (pdfUrl) {
+  d.card.actions = [{ type: 'Action.OpenUrl', title: 'View all fetched (PDF)', url: pdfUrl }]
+    .concat(d.card.actions || []);
+}
+
+const hook = $env.TEAMS_DAILY_WEBHOOK_URL;
+if (!hook) return [{ json: { ok: false, detail: 'TEAMS_DAILY_WEBHOOK_URL not set; ' + notes.join('; ') } }];
+
+await helpers.httpRequest({
+  method: 'POST', url: hook, json: true, timeout: 60000,
+  body: { type: 'message', attachments: [
+    { contentType: 'application/vnd.microsoft.card.adaptive', content: d.card } ] },
+});
+
+notes.push(d.counts.sent + ' sent, ' + d.counts.extra + ' extra, ' + d.counts.fetched + ' fetched');
+return [{ json: { ok: true, detail: notes.join(' · ').slice(0, 400) } }];
+`;
+
+/**
+ * Tier: the Teams channel gets the day's news as a card, after the email goes.
+ *
+ * Separate from the daily report rather than appended to it. A failure posting a
+ * card must not fail the send that already succeeded, and the channel post is
+ * worth retrying on its own — the report is not.
+ *
+ * Fires at 05:20, twenty minutes behind the report, so the reports row it reads
+ * is committed and the article images are cached.
+ */
+const dailyNewsCardWorkflow = () => ({
+  name: 'BEXT — Daily News Card',
+  nodes: [
+    {
+      id: 'cron', name: 'Daily 05:20 AEST', type: 'n8n-nodes-base.scheduleTrigger',
+      typeVersion: 1.2, position: pos(-340, 0),
+      parameters: { rule: { interval: [{ field: 'cronExpression', expression: '20 5 * * *' }] } },
+    },
+    {
+      id: 'load', name: 'Load the day', type: 'n8n-nodes-base.postgres',
+      typeVersion: 2.5, position: pos(-120, 0),
+      credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+      parameters: {
+        operation: 'executeQuery',
+        // Everything fetched for the reported day, with what the client received
+        // marked. One query: the card needs the top of it, the PDF needs all of it.
+        query: `WITH day AS (
+  SELECT report_date FROM reports WHERE status = 'sent' ORDER BY report_date DESC LIMIT 1
+)
+SELECT (SELECT report_date::text FROM day)                        AS report_date,
+       a.title, a.url, s.name AS source_name, s.category,
+       coalesce(an.relevance_score, 0)                            AS relevance_score,
+       coalesce(an.summary, '')                                   AS summary,
+       coalesce(a.published_at, a.fetched_at)                      AS shown_at,
+       (a.published_at IS NOT NULL)                                AS date_is_exact,
+       (ri.article_id IS NOT NULL)                                 AS in_report,
+       ri.rank,
+       (SELECT count(*) FROM sources WHERE active)                 AS sources_monitored,
+       (SELECT html FROM reports r2, day WHERE r2.report_date = day.report_date) IS NOT NULL AS have_report
+  FROM articles a
+  JOIN sources s ON s.id = a.source_id
+  LEFT JOIN article_analysis an ON an.article_id = a.id
+  LEFT JOIN report_items ri ON ri.article_id = a.id
+  CROSS JOIN day
+ WHERE a.report_eligible
+   AND (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')::date
+       = day.report_date
+ ORDER BY ri.rank NULLS LAST, an.relevance_score DESC NULLS LAST`,
+        options: {},
+      },
+    },
+    {
+      id: 'render', name: 'Build card and list', type: 'n8n-nodes-base.code',
+      typeVersion: 2, position: pos(120, 0),
+      parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: NEWS_CARD_CODE },
+    },
+    {
+      id: 'post', name: 'Post to Teams', type: 'n8n-nodes-base.code',
+      typeVersion: 2, position: pos(360, 0),
+      parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: NEWS_POST_CODE },
+    },
+    {
+      id: 'record', name: 'Record result', type: 'n8n-nodes-base.postgres',
+      typeVersion: 2.5, position: pos(600, 0),
+      credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+      parameters: {
+        operation: 'executeQuery',
+        query: `INSERT INTO integration_health (service, status, detail)
+SELECT 'daily_news_card', status::health_status, detail
+FROM json_to_recordset($1::json) AS x(status text, detail text)`,
+        options: { queryReplacement: '={{ JSON.stringify([{ status: $json.ok ? "up" : "down", detail: $json.detail }]) }}' },
+      },
+    },
+  ],
+  connections: {
+    'Daily 05:20 AEST': { main: [[{ node: 'Load the day', type: 'main', index: 0 }]] },
+    'Load the day': { main: [[{ node: 'Build card and list', type: 'main', index: 0 }]] },
+    'Build card and list': { main: [[{ node: 'Post to Teams', type: 'main', index: 0 }]] },
+    'Post to Teams': { main: [[{ node: 'Record result', type: 'main', index: 0 }]] },
+  },
+  settings: { executionOrder: 'v1' },
+});
+
 (async () => {
   if (!PG_CRED) {
     console.error('Set N8N_PG_CREDENTIAL_ID in .env first.');
@@ -2854,5 +3102,16 @@ ON CONFLICT (message_id) DO NOTHING`,
     } else {
       await deploy(teamsInboundWorkflow(meetingId));
     }
+  }
+
+  // The channel card. Skipped without its webhook, for the same reason the
+  // newsletter workflow is: a workflow that fails every run trains people to
+  // ignore a failing workflow.
+  if (!process.env.TEAMS_DAILY_WEBHOOK_URL) {
+    console.error('TEAMS_DAILY_WEBHOOK_URL not set — skipping Daily News Card.');
+    console.error('  Create the Teams Workflows webhook on the Daily report channel, then:');
+    console.error('  node graph/create-channel-flow.js --url --id 77d08f87-08c9-836a-60ef-3e1aab126aaa');
+  } else {
+    await deploy(dailyNewsCardWorkflow());
   }
 })();
