@@ -37,6 +37,33 @@ const ENV = 'Default-9eb458d1-317d-4aae-a9a3-bb68e430d701';
 const OWNER = 'Admin.bext-automation@bextconsultancy.com.au';
 const FLOW_NAME = 'BEXT — Meeting Report';
 
+/**
+ * Which .env variable and export file belong to which flow.
+ *
+ * This script writes the trigger URL into a variable and the definition into a
+ * file, and both used to be fixed at the meeting flow's. Pointing it at another
+ * flow with --id therefore repointed TEAMS_MEETING_WEBHOOK_URL at that flow's
+ * channel and overwrote the meeting flow's export — silently, because the URL is
+ * never printed. Reading the Daily report flow's URL on 23 Aug 2026 did exactly
+ * that, and meeting announcements would have started appearing in the wrong
+ * channel with nothing to indicate why.
+ *
+ * A flow id now selects its own destination, and an unrecognised one refuses to
+ * write anywhere rather than defaulting to the meeting flow's slot.
+ */
+const FLOW_TARGETS = {
+  'd6efce28-c2c4-89a1-386d-3bd4f71c63a0': {
+    label: 'BEXT — Meeting Report',
+    envKey: 'TEAMS_MEETING_WEBHOOK_URL',
+    file: 'BEXT-Meeting-Report.json',
+  },
+  '77d08f87-08c9-836a-60ef-3e1aab126aaa': {
+    label: 'Send webhook alerts to Daily report',
+    envKey: 'TEAMS_DAILY_WEBHOOK_URL',
+    file: 'BEXT-Daily-Report-Card.json',
+  },
+};
+
 // Discovered from the tenant's existing SharePoint→Teams flow, which already posts
 // into this channel — so the connection is known good rather than assumed.
 const TEAMS_CONN = 'shared-teams-1381069787544875a2bbda2eda56a5f4';
@@ -44,9 +71,17 @@ const GROUP_ID = '36840697-dbe5-4294-994d-7a043eef51ca';        // team bext_tra
 const CHANNEL_ID = '19:R7FciH4QRVZU7_7EVUg3CH_zCmSIHOoVxrRAM_nFeBA1@thread.tacv2'; // Bext Transcripts
 
 const PS = 'https://api.flow.microsoft.com/providers/Microsoft.ProcessSimple';
-const ENV_KEY = 'TEAMS_MEETING_WEBHOOK_URL';
+// Resolved from the flow being read, not assumed.
+const TARGET = ID_OVERRIDE ? FLOW_TARGETS[ID_OVERRIDE] : FLOW_TARGETS['d6efce28-c2c4-89a1-386d-3bd4f71c63a0'];
+if (ID_OVERRIDE && !TARGET) {
+  console.error(`Flow ${ID_OVERRIDE} has no destination registered in FLOW_TARGETS.`);
+  console.error('Add one before running: writing its URL into another flow\'s variable would');
+  console.error('repoint that flow at the wrong channel, and the URL is never printed to catch it.');
+  process.exit(1);
+}
+const ENV_KEY = TARGET.envKey;
 const ENV_FILE = path.join(__dirname, '..', '.env');
-const FLOW_FILE = path.join(__dirname, '..', 'flows', 'BEXT-Meeting-Report.json');
+const FLOW_FILE = path.join(__dirname, '..', 'flows', TARGET.file);
 
 // az ships as az.cmd on Windows, which Node refuses to execFile since the
 // argument-injection hardening. cmd.exe with each argument quoted works on both.
