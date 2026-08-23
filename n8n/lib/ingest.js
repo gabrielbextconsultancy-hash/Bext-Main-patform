@@ -91,7 +91,32 @@ function absolute(href, base) {
 }
 
 // Paths that are navigation, not articles.
-const CHROME = /\/(tag|tags|category|categories|author|page|search|login|subscribe|contact|about|privacy|terms|sitemap|feed|rss|wp-|cdn-cgi)\b/i;
+/**
+ * Site furniture comes in two shapes, and treating them alike rejected real
+ * articles.
+ *
+ * A listing PREFIX — /tag/…, /category/… — makes everything beneath it a listing.
+ * A standalone PAGE — /about, /contact — is furniture only when it is the page
+ * itself. The old single pattern matched either anywhere in the path, so
+ * dcceew.gov.au/about/news/grants-support-first-nations-clean-energy-projects was
+ * discarded because "about" appeared in it. Every DCCEEW article lives under
+ * /about/news/, so the entire source had been silently dropping every story since
+ * it was added, while reporting a healthy fetch.
+ */
+const CHROME_PREFIX = /^(tag|tags|category|categories|author|page|search|feed|rss|wp-|cdn-cgi|amp)$/i;
+const CHROME_PAGE = /^(login|signin|subscribe|contact|about|privacy|terms|sitemap|disclaimer|copyright|accessibility)([-_].*)?$/i;
+
+/** True when the path is navigation rather than a story. */
+function isChrome(path) {
+  const segs = path.split('/').filter(Boolean);
+  if (!segs.length) return true;
+  // A listing prefix governs everything under it.
+  if (CHROME_PREFIX.test(segs[0])) return true;
+  // A standalone page is furniture only when nothing follows it — /about is the
+  // About page, /about/news/some-story is a story filed beneath it.
+  if (CHROME_PAGE.test(segs[segs.length - 1])) return true;
+  return false;
+}
 const ASSET = /\.(pdf|jpe?g|png|gif|svg|zip|docx?|xlsx?|pptx?|mp4|mp3)(\?|$)/i;
 
 /**
@@ -109,7 +134,7 @@ function scoreLink(url, text, origin) {
   } catch {
     return -1;
   }
-  if (CHROME.test(path) || ASSET.test(path)) return -1;
+  if (isChrome(path) || ASSET.test(path)) return -1;
   if (path === '/' || path.length < 12) return -1;
 
   if (/\/\d{4}\/\d{1,2}\//.test(path)) score += 4; // /2026/07/
@@ -125,6 +150,13 @@ function scoreLink(url, text, origin) {
 
   return score;
 }
+
+/**
+ * Anchor text that describes the act of clicking rather than the story behind it.
+ * Common on card layouts, where the headline is a heading element and the link
+ * is a button beneath it.
+ */
+const GENERIC = /^(find out more|read (more|on|the (full )?(story|article|report))|learn more|more( info(rmation)?| details)?|view( (more|all|article|details))?|see more|click here|continue reading|full (story|article|report)|download( the)?( report| pdf)?|open|details)\.?$/i;
 
 /**
  * Some sites render the bare URL as the anchor text (AIDC does this for every
@@ -152,7 +184,12 @@ function parseIndex(html, pageUrl, { minScore = 6, limit = 40 } = {}) {
     const url = absolute(m[1], pageUrl);
     let title = strip(m[2]);
     // Anchor text that is just the href carries no information — the slug does.
-    if (!title || /^https?:\/\//i.test(title) || title.length < 12) {
+    // Nor does a call to action: the Clean Energy Council links every story with
+    // "Find out more", which is thirteen characters, so it escaped the old
+    // length test, survived as the title, and then scored 2 against a floor of 6
+    // — three words, under fifteen characters. Every CEC article was discarded
+    // that way while the fetch reported success.
+    if (!title || /^https?:\/\//i.test(title) || title.length < 12 || GENERIC.test(title)) {
       title = titleFromSlug(url) ?? title;
     }
     if (!title) continue;
