@@ -125,9 +125,28 @@ flow          BEXT — Meeting Report   bbe06a8c-b747-851e-40e7-f1be6157edbc
 environment   Default-9eb458d1-317d-4aae-a9a3-bb68e430d701
 ```
 
-**No application permission exists for posting a channel message.** Only `Channel.Create`,
-`ChannelMessage.Read.All` and `Teamwork.Migrate.All`; `ChannelMessage.Send` is delegated-only. That
-is why the announcement goes through a Power Automate flow. Do not go looking for a permission to tick.
+**No application permission exists for posting a channel message.** Graph offers only
+`Channel.Create`, `ChannelMessage.Read.All` and `Teamwork.Migrate.All` as application permissions;
+`ChannelMessage.Send` is delegated-only. That is why the announcement goes through a Power Automate
+flow. Do not go looking for a permission to tick.
+
+**What this tenant has actually granted is narrower than that paragraph implies.** The ten roles on
+the token, read from the `roles` claim on 23 Aug 2026:
+
+```
+Calendars.ReadWrite          Mail.Read        OnlineMeetings.Read.All
+Files.ReadWrite.All          Mail.ReadWrite   OnlineMeetings.ReadWrite.All
+OnlineMeetingTranscript.Read.All              Sites.ReadWrite.All
+Mail.Send                    User.Read.All
+```
+
+`Channel.Create` is **not** among them, and neither is `Group.Read.All` — so the app cannot create a
+channel, and `GET /groups` returns `403 Authorization_RequestDenied`, which is why team discovery has
+to work from a known team id rather than by listing. Creating a channel is a manual step for the
+tenant admin, or a new consent.
+
+Read the roles from the token rather than trusting this file:
+`node graph/consent.js` — or decode the `roles` claim of any app-only token.
 
 **The application access policy must be `-Global`.** Granted per user it covers only that user, and
 every other host returns `403 — 3003: User does not have access to lookup meeting`, which reads
