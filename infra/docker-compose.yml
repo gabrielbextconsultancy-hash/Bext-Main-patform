@@ -165,6 +165,12 @@ services:
       # See docs/TEAMS-WEBHOOK-SETUP.md.
       TEAMS_MEETING_WEBHOOK_URL: ${TEAMS_MEETING_WEBHOOK_URL}
 
+      # The Daily report channel: its own webhook, and the drive holding its Files
+      # folder. A separate flow and a separate secret from the meeting one — they
+      # post to different channels and must never be interchanged.
+      TEAMS_DAILY_WEBHOOK_URL: ${TEAMS_DAILY_WEBHOOK_URL:-}
+      TEAMS_DAILY_DRIVE_ID: ${TEAMS_DAILY_DRIVE_ID:-}
+
       # Calendars the meeting workflow polls. Whoever hosts a meeting owns its
       # transcript, so this is not just the automation account.
       MEETING_HOSTS: ${MEETING_HOSTS}

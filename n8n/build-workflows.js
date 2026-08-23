@@ -2930,14 +2930,19 @@ const DRIVE = '${process.env.TEAMS_DAILY_DRIVE_ID || ''}';
 const FOLDER = 'Daily report';
 
 const graphToken = async () => {
+  // The token endpoint takes a form body, not JSON. Passing an object with
+  // json:true sends JSON and returns AADSTS900144 — "the request body must
+  // contain the following parameter" — which reads as a missing parameter rather
+  // than the wrong encoding. Same shape the meeting and health workflows use.
   const r = await helpers.httpRequest({
     method: 'POST',
     url: 'https://login.microsoftonline.com/' + $env.MS_TENANT_ID + '/oauth2/v2.0/token',
-    body: {
+    json: true, timeout: 30000,
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
       client_id: $env.MS_CLIENT_ID, client_secret: $env.MS_CLIENT_SECRET,
       scope: 'https://graph.microsoft.com/.default', grant_type: 'client_credentials',
-    },
-    json: true,
+    }).toString(),
   });
   return r.access_token;
 };
@@ -3007,10 +3012,15 @@ const dailyNewsCardWorkflow = () => ({
         operation: 'executeQuery',
         // Everything fetched for the reported day, with what the client received
         // marked. One query: the card needs the top of it, the PDF needs all of it.
+        // A report is dated the morning it is SENT and covers the day BEFORE, so
+        // matching articles against report_date finds none of the ones the client
+        // actually received. Bind to the same window the report itself used.
         query: `WITH day AS (
-  SELECT report_date FROM reports WHERE status = 'sent' ORDER BY report_date DESC LIMIT 1
+  SELECT report_date, report_date - 1 AS covers
+    FROM reports WHERE status = 'sent' ORDER BY report_date DESC LIMIT 1
 )
-SELECT (SELECT report_date::text FROM day)                        AS report_date,
+SELECT (SELECT report_date::text FROM day) AS report_date,
+       (SELECT covers::text FROM day)      AS covers,
        a.title, a.url, s.name AS source_name, s.category,
        coalesce(an.relevance_score, 0)                            AS relevance_score,
        coalesce(an.summary, '')                                   AS summary,
@@ -3027,7 +3037,7 @@ SELECT (SELECT report_date::text FROM day)                        AS report_date
   CROSS JOIN day
  WHERE a.report_eligible
    AND (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')::date
-       = day.report_date
+       = day.covers
  ORDER BY ri.rank NULLS LAST, an.relevance_score DESC NULLS LAST`,
         options: {},
       },

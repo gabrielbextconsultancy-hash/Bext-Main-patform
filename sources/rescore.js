@@ -89,14 +89,18 @@ const scoreBatch = async (rows) => {
   console.log(APPLY ? 'APPLYING new scores\n' : 'DRY RUN — nothing will be written\n');
 
   const floor = Number(process.env.REPORT_MIN_RELEVANCE || 40);
-  let moved = 0, inNow = 0, inBefore = 0, changes = [];
+  let moved = 0, inNow = 0, inBefore = 0, unmatched = 0, changes = [];
 
   for (let i = 0; i < rows.length; i += BATCH) {
     const slice = rows.slice(i, i + BATCH);
     const scored = await scoreBatch(slice);
     for (const r of slice) {
-      const got = scored.get(r.id);
-      if (!got) continue;
+      // articles.id is a bigint, and node-postgres returns bigint as a STRING.
+      // Keying the results by number while looking up by string missed every
+      // single row, and the run reported "0 of 373 changed" — which reads as
+      // "the prompt changed nothing" rather than "nothing was compared".
+      const got = scored.get(Number(r.id));
+      if (!got) { unmatched++; continue; }
       if (r.was >= floor) inBefore++;
       if (got.score >= floor) inNow++;
       if (got.score !== r.was) {
@@ -116,7 +120,15 @@ const scoreBatch = async (rows) => {
     process.stdout.write('.');
   }
 
-  console.log('\n\n  scores changed : ' + moved + ' of ' + rows.length);
+  console.log('\n');
+  if (unmatched === rows.length && rows.length) {
+    console.log('  NOTHING WAS SCORED — every article came back unmatched.');
+    console.log('  That is a harness fault, not a verdict that the prompt changed nothing.');
+    process.exitCode = 1;
+  } else if (unmatched) {
+    console.log('  unmatched      : ' + unmatched + ' (no score returned for these)');
+  }
+  console.log('  scores changed : ' + moved + ' of ' + rows.length);
   console.log('  above floor ' + floor + ' : ' + inBefore + ' before  ->  ' + inNow + ' after');
 
   const joined = changes.filter(c => c.now >= floor);
