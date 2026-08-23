@@ -1114,45 +1114,92 @@ const itemDate = (a) => {
 // a headline plus a source line.
 const CARDS_PER_ROW = 2;
 
-const card = (a) => {
-  // A picture only where the publisher declared one. Around a third of the
-  // government and industry sources publish no og:image, so the card has to look
-  // deliberate without one rather than leaving a broken frame.
-  const art = a.image_url
-    ? \`<a href="\${esc(a.url)}" style="text-decoration:none">
-         <img src="\${esc(a.image_url)}" width="100%" alt=""
-              style="display:block;width:100%;max-width:100%;height:150px;
-                     object-fit:cover;border-radius:4px 4px 0 0;background:#e5e7eb"></a>\`
-    : \`<div style="height:4px;background:#14b8a6;border-radius:4px 4px 0 0"></div>\`;
-
+// The category strip that stands in for a photograph.
+//
+// Most days the majority of items are regulators — GEMS, NABERS, the AER, the
+// Minister's office — and none of them publish an og:image. A card that simply
+// omits the picture ends up shorter than its neighbour, so rows do not line up
+// and the sheet reads as half-finished. A tinted panel carrying the publisher's
+// name fills the same space deliberately.
+const artPanel = (a) => {
+  const tone = { 'Australian News': '#0f766e', 'Industry Updates': '#1e40af',
+                 'International Industry Updates': '#7c3aed' }[a.category] || '#0f766e';
   return \`
-    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
-           style="border:1px solid #e5e7eb;border-radius:5px;background:#fff">
-      <tr><td>\${art}</td></tr>
-      <tr><td style="padding:12px 14px 14px">
-        <a href="\${esc(a.url)}" style="font:600 14px/1.35 Arial,sans-serif;color:#0f766e;
-           text-decoration:none">\${esc(a.title)}</a>
-        <div style="font:11px/1.4 Arial,sans-serif;color:#9ca3af;margin:5px 0 6px">
-          \${esc(a.source_name)} · \${esc(itemDate(a))}
-        </div>
-        \${a.summary
-          ? \`<div style="font:12px/1.5 Arial,sans-serif;color:#374151">\${esc(a.summary)}</div>\`
-          : ''}
-      </td></tr>
-    </table>\`;
+    <div style="height:132px;background:\${tone};border-radius:5px 5px 0 0;
+                mso-line-height-rule:exactly;line-height:132px;text-align:center">
+      <span style="font:600 12px Arial,sans-serif;letter-spacing:.08em;
+                   text-transform:uppercase;color:#ffffff;opacity:.92">\${esc(a.source_name)}</span>
+    </div>\`;
 };
+
+const art = (a, h) => (a.image_url
+  ? \`<a href="\${esc(a.url)}" style="text-decoration:none"><img src="\${esc(a.image_url)}"
+       width="100%" alt="" style="display:block;width:100%;max-width:100%;height:\${h}px;
+       object-fit:cover;border-radius:5px 5px 0 0;background:#e5e7eb"></a>\`
+  : artPanel(a));
+
+const meta = (a) => \`
+  <div style="font:11px/1.4 Arial,sans-serif;color:#9ca3af;margin:6px 0 7px">
+    \${esc(a.source_name)} · \${esc(itemDate(a))}
+  </div>\`;
+
+const headline = (a, size) => \`
+  <a href="\${esc(a.url)}" style="font:600 \${size}px/1.35 Arial,sans-serif;color:#0f766e;
+     text-decoration:none">\${esc(a.title)}</a>\`;
+
+const summary = (a, size) => (a.summary
+  ? \`<div style="font:\${size}px/1.55 Arial,sans-serif;color:#374151">\${esc(a.summary)}</div>\`
+  : '');
+
+const SHELL = 'border:1px solid #e5e7eb;border-radius:6px;background:#fff';
+
+/** Half-width card, used when two sit side by side. */
+const card = (a) => \`
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+         style="\${SHELL}">
+    <tr><td>\${art(a, 132)}</td></tr>
+    <tr><td style="padding:13px 15px 16px">
+      \${headline(a, 14)}\${meta(a)}\${summary(a, 12)}
+    </td></tr>
+  </table>\`;
+
+/**
+ * Full-width card: picture beside the text rather than above it.
+ *
+ * Used for a section holding a single item, and for the odd item at the end of a
+ * section. Previously those rendered as a half-width card with an empty cell
+ * next to them, which is what made the sheet look unfinished — a lone story with
+ * dead space beside it reads as a layout that failed, not a layout that chose.
+ */
+const wideCard = (a) => \`
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+         style="\${SHELL}">
+    <tr>
+      \${a.image_url ? \`<td valign="top" width="220" style="width:220px">
+        <a href="\${esc(a.url)}" style="text-decoration:none"><img src="\${esc(a.image_url)}"
+           width="220" alt="" style="display:block;width:220px;height:100%;min-height:150px;
+           object-fit:cover;border-radius:6px 0 0 6px;background:#e5e7eb"></a>
+      </td>\` : \`<td valign="top" width="6" style="width:6px;background:#0f766e;
+                  border-radius:6px 0 0 6px">&nbsp;</td>\`}
+      <td valign="top" style="padding:15px 18px 17px">
+        \${headline(a, 15)}\${meta(a)}\${summary(a, 12.5)}
+      </td>
+    </tr>
+  </table>\`;
 
 const grid = (items) => {
   const rows = [];
   for (let i = 0; i < items.length; i += CARDS_PER_ROW) {
-    const cells = items.slice(i, i + CARDS_PER_ROW);
-    // The final row is padded with empty cells so the last card keeps its width
-    // instead of stretching across the table.
-    while (cells.length < CARDS_PER_ROW) cells.push(null);
-    rows.push(\`<tr>\` + cells.map((a, n) => \`
-      <td valign="top" width="\${Math.floor(100 / CARDS_PER_ROW)}%"
-          style="padding:0 \${n === CARDS_PER_ROW - 1 ? '0' : '8px'} 16px \${n === 0 ? '0' : '8px'}">
-        \${a ? card(a) : ''}
+    const pair = items.slice(i, i + CARDS_PER_ROW);
+    if (pair.length === 1) {
+      // A lone card spans the table instead of leaving a hole beside it.
+      rows.push(\`<tr><td colspan="\${CARDS_PER_ROW}" style="padding:0 0 14px">
+        \${wideCard(pair[0])}</td></tr>\`);
+      continue;
+    }
+    rows.push(\`<tr>\` + pair.map((a, n) => \`
+      <td valign="top" width="50%" style="padding:0 \${n === 0 ? '7px' : '0'} 14px \${n === 0 ? '0' : '7px'}">
+        \${card(a)}
       </td>\`).join('') + \`</tr>\`);
   }
   return \`<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
@@ -1162,8 +1209,17 @@ const grid = (items) => {
 const body = d.empty
   ? '<p style="color:#6b7280">No qualifying articles published on this day.</p>'
   : d.sections.map(sec => \`
-      <h2 style="font:600 15px/1.3 Arial,sans-serif;color:#111827;margin:28px 0 12px;
-                 padding-bottom:6px;border-bottom:2px solid #14b8a6">\${esc(sec.name)}</h2>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"
+             style="margin:30px 0 14px">
+        <tr>
+          <td style="border-bottom:2px solid #14b8a6;padding-bottom:7px">
+            <span style="font:600 15px/1.3 Arial,sans-serif;color:#111827">\${esc(sec.name)}</span>
+          </td>
+          <td align="right" style="border-bottom:2px solid #14b8a6;padding-bottom:7px">
+            <span style="font:11px/1.3 Arial,sans-serif;color:#9ca3af">\${sec.items.length} item\${sec.items.length === 1 ? '' : 's'}</span>
+          </td>
+        </tr>
+      </table>
       \` + grid(sec.items)
     ).join('');
 
