@@ -817,6 +817,13 @@ ranked AS (
     AND (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')
           <  w.day_start + interval '1 day'
     AND an.relevance_score >= ${REPORT_MIN_RELEVANCE}
+    -- Archive material discovered in bulk is not news of the day. Scraped
+    -- listings rarely carry a date, so those articles fall back to fetched_at and
+    -- read as published today; that holds while a source trickles and breaks the
+    -- moment a parser fix unlocks a backlog. On 23 Aug 2026 one did, and forty
+    -- Clean Energy Council articles from as far back as 2022 became eligible for
+    -- the next morning's sheet. See migration 022.
+    AND a.report_eligible
 )
 SELECT id, url, title, image_url, image_state, shown_at, date_is_exact, source_name, category,
        summary, relevance_score,
