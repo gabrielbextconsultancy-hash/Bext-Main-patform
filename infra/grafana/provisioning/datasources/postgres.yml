@@ -1,0 +1,23 @@
+# The BEXT application database, read-only, for the self-healing dashboard.
+# Grafana reaches Postgres by service name on the internal network. The role is
+# grafana_ro (SELECT only — see db/migrations/025); its password comes from the
+# environment so it is never written into this committed file.
+apiVersion: 1
+
+datasources:
+  - name: Postgres
+    type: postgres
+    uid: bext-postgres
+    url: postgres:5432
+    user: grafana_ro
+    jsonData:
+      database: bext
+      sslmode: disable
+      # Read replicas do not exist here; this just tells Grafana not to attempt writes.
+      maxOpenConns: 4
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+      postgresVersion: 1600
+    secureJsonData:
+      password: $GRAFANA_DB_PASSWORD
+    editable: false

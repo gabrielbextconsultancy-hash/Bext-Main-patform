@@ -29,6 +29,11 @@ not client-facing like the dashboard on `dev-environment.site`.
 3. **Grafana** makes it legible. The "BEXT — Overview" dashboard leads with host
    **memory available %** — the metric that predicted every outage on this shared box.
 
+Two Grafana datasources, two dashboards beyond the ops overview:
+Prometheus feeds **BEXT — Overview**; a read-only Postgres role (`grafana_ro`,
+db/migrations/025) feeds **BEXT — Self-Healing** (heal success rate, MTTR, incidents by
+outcome) and the GitHub datasource feeds **BEXT — GitHub**.
+
 ## Two auth planes on Kuma (the thing people get wrong)
 
 - `KUMA_API_KEY` → read-only `/metrics` only. Prometheus uses it; it cannot create

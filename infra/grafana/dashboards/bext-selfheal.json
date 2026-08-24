@@ -1,0 +1,73 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "title": "BEXT — Self-Healing",
+  "uid": "bext-selfheal",
+  "tags": ["bext", "self-healing"],
+  "timezone": "Australia/Melbourne",
+  "schemaVersion": 39,
+  "version": 1,
+  "time": { "from": "now-7d", "to": "now" },
+  "refresh": "1m",
+  "panels": [
+    {
+      "type": "row", "title": "Health of the healer", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "type": "stat", "title": "Heal success rate",
+      "description": "healed / (healed + failed). The reference target was 87% for trivial CI fixes — ours covers retry and reactivate.",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 },
+      "datasource": { "type": "postgres", "uid": "bext-postgres" },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "yellow", "value": 60 }, { "color": "green", "value": 85 } ] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "" }, "colorMode": "background", "graphMode": "none" },
+      "targets": [ { "refId": "A", "datasource": { "type": "postgres", "uid": "bext-postgres" }, "format": "table", "rawSql": "SELECT round(100.0 * count(*) FILTER (WHERE outcome='healed') / NULLIF(count(*) FILTER (WHERE outcome IN ('healed','failed')),0), 1) AS heal_pct FROM incidents WHERE $__timeFilter(detected_at)" } ]
+    },
+    {
+      "type": "stat", "title": "MTTR (minutes)",
+      "description": "Mean time from detection to a validated heal.",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 1 },
+      "datasource": { "type": "postgres", "uid": "bext-postgres" },
+      "fieldConfig": { "defaults": { "unit": "m", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 30 }, { "color": "red", "value": 120 } ] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "" }, "colorMode": "background", "graphMode": "none" },
+      "targets": [ { "refId": "A", "datasource": { "type": "postgres", "uid": "bext-postgres" }, "format": "table", "rawSql": "SELECT round(avg(extract(epoch FROM (resolved_at - detected_at)))/60.0)::int AS mttr_min FROM incidents WHERE outcome='healed' AND resolved_at IS NOT NULL AND $__timeFilter(detected_at)" } ]
+    },
+    {
+      "type": "stat", "title": "Open (unresolved)",
+      "description": "Incidents with no resolution yet — attempted-but-not-validated, or escalated and waiting on a human.",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 1 },
+      "datasource": { "type": "postgres", "uid": "bext-postgres" },
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 } ] } } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "" }, "colorMode": "background", "graphMode": "none" },
+      "targets": [ { "refId": "A", "datasource": { "type": "postgres", "uid": "bext-postgres" }, "format": "table", "rawSql": "SELECT count(*) AS open FROM incidents WHERE resolved_at IS NULL AND workflow <> 'none'" } ]
+    },
+    {
+      "type": "stat", "title": "Auto-healed in range",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 },
+      "datasource": { "type": "postgres", "uid": "bext-postgres" },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"], "fields": "" }, "colorMode": "value", "graphMode": "area" },
+      "targets": [ { "refId": "A", "datasource": { "type": "postgres", "uid": "bext-postgres" }, "format": "table", "rawSql": "SELECT count(*) AS healed FROM incidents WHERE outcome='healed' AND $__timeFilter(detected_at)" } ]
+    },
+    {
+      "type": "row", "title": "Incidents", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 }
+    },
+    {
+      "type": "timeseries", "title": "Incidents per day, by outcome",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 7 },
+      "datasource": { "type": "postgres", "uid": "bext-postgres" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "bars", "stacking": { "mode": "normal" } } } },
+      "targets": [ { "refId": "A", "datasource": { "type": "postgres", "uid": "bext-postgres" }, "format": "time_series", "rawSql": "SELECT date_trunc('day', detected_at) AS time, outcome::text AS metric, count(*) AS value FROM incidents WHERE $__timeFilter(detected_at) AND workflow <> 'none' GROUP BY 1, 2 ORDER BY 1" } ]
+    },
+    {
+      "type": "barchart", "title": "Top failure classes (rule id)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 7 },
+      "datasource": { "type": "postgres", "uid": "bext-postgres" },
+      "targets": [ { "refId": "A", "datasource": { "type": "postgres", "uid": "bext-postgres" }, "format": "table", "rawSql": "SELECT coalesce(rule_id, 'unclassified') AS rule, count(*) AS incidents FROM incidents WHERE $__timeFilter(detected_at) AND workflow <> 'none' GROUP BY 1 ORDER BY incidents DESC LIMIT 12" } ]
+    },
+    {
+      "type": "table", "title": "Recent incidents",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 15 },
+      "datasource": { "type": "postgres", "uid": "bext-postgres" },
+      "targets": [ { "refId": "A", "datasource": { "type": "postgres", "uid": "bext-postgres" }, "format": "table", "rawSql": "SELECT detected_at AS \"time\", workflow, rule_id, action::text AS action, outcome::text AS outcome, detail FROM incidents WHERE $__timeFilter(detected_at) AND workflow <> 'none' ORDER BY detected_at DESC LIMIT 100" } ]
+    }
+  ]
+}

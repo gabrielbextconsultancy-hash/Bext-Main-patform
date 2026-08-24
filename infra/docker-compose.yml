@@ -480,6 +480,9 @@ services:
       GF_USERS_ALLOW_SIGN_UP: "false"
       GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_ANALYTICS_REPORTING_ENABLED: "false"
+      # Read-only DB password, referenced as $GRAFANA_DB_PASSWORD by the Postgres
+      # datasource provisioning. Never in the committed provisioning file.
+      GRAFANA_DB_PASSWORD: ${GRAFANA_DB_PASSWORD:-}
     volumes:
       - bext_grafana:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning:ro

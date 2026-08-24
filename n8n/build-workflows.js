@@ -2737,23 +2737,74 @@ const api = async (route, init) => {
   });
 };
 
-// Only failures. EXECUTIONS_DATA_SAVE_ON_ERROR is 'all', so this list is
-// complete for failures — and blind to a workflow that ran clean and produced
-// nothing. That blindness is why the heartbeat monitors exist; do not try to
-// infer an outage from an empty list here. Doing exactly that is R015, and the
-// R024 comment records it being walked into twice.
-const runs = await api('executions?status=error&limit=50&includeData=false');
-const cutoff = Date.now() - 60 * 60 * 1000;
+// workflow name -> id, so validation can look up a workflow's later runs.
+const wfList = await api('workflows?limit=100');
+const idByName = {};
+for (const w of (wfList.data || [])) idByName[w.name] = w.id;
 
 const out = [];
-// One action per pass. The healer nudges; it does not thrash. If two things
-// broke at once the second is picked up fifteen minutes later, by which point
-// the first has either recovered or escalated.
+
+// ── VALIDATION PASS — did last cycle's action actually work? ─────────────────
+// The prior cycle recorded its actions as 'attempted', never 'healed'. An action
+// is only healed if the thing it fixed recovered: for retry_execution and
+// reactivate_workflow that means the workflow produced a SUCCESSFUL run AFTER the
+// incident (EXECUTIONS_DATA_SAVE_ON_SUCCESS is 'all', so successes are visible).
+// Not yet recovered → wait, re-checked next cycle, up to a ceiling; past it, give
+// up and escalate. The healer validates its own work rather than trusting it —
+// which is the whole reason the two sandbox faults that shipped green were caught
+// only by a live run.
+const GIVE_UP_MIN = 120;
+// Every incident seen in the last 6 hours. seen is the dedup set for detection
+// below; pending is the subset still awaiting validation (attempted, and old
+// enough that a retried run has had time to happen).
+const recent = $input.all().map(i => i.json).filter(r => r && r.execution_id);
+const seen = new Set(recent.map(r => String(r.execution_id)));
+// Workflows already escalated in the window. A persistently broken workflow throws a
+// fresh execution id every cycle, which would escalate every cycle even though the
+// execution-level dedup holds. So a repeat failure of an already-flagged workflow is
+// still RECORDED (the dashboard should show the frequency) but not re-posted to Teams.
+const escalatedWorkflows = new Set(recent.filter(r => r.action === 'escalate').map(r => r.workflow));
+const pending = recent.filter(r => r.id && r.outcome === 'attempted'
+  && (Date.now() - new Date(r.detected_at).getTime()) / 60000 > 3);
+for (const p of pending) {
+  const ageMin = (Date.now() - new Date(p.detected_at).getTime()) / 60000;
+  const wfId = idByName[p.workflow];
+  let recovered = false;
+  if (wfId) {
+    const ok = await api('executions?workflowId=' + wfId + '&status=success&limit=1&includeData=false');
+    const newest = (ok.data || [])[0];
+    recovered = !!(newest && new Date(newest.startedAt).getTime() > new Date(p.detected_at).getTime());
+  }
+  if (recovered) {
+    out.push({ json: { id: p.id, validated: true, outcome: 'healed', workflow: p.workflow,
+      execution_id: p.execution_id, rule_id: p.rule_id, signature: p.signature, action: p.action,
+      hint: null, detail: (p.detail || '') + ' | validated: recovered' } });
+  } else if (ageMin > GIVE_UP_MIN) {
+    // The action did not hold. Flip to escalate so a human is told the fix failed.
+    out.push({ json: { id: p.id, validated: true, outcome: 'failed', workflow: p.workflow,
+      execution_id: p.execution_id, rule_id: p.rule_id, signature: p.signature, action: 'escalate',
+      hint: null, detail: (p.detail || '') + ' | validated: did NOT recover after ' + Math.round(ageMin) + ' min' } });
+  }
+  // else: still inside the grace window — leave it 'attempted', re-check next cycle.
+}
+
+// ── DETECTION + ACTION PASS ──────────────────────────────────────────────────
+// Only failures. EXECUTIONS_DATA_SAVE_ON_ERROR is 'all', so this list is complete
+// for failures — and blind to a workflow that ran clean and produced nothing.
+// That blindness is why the heartbeat monitors exist; do not infer an outage from
+// an empty list here. Doing exactly that is R015, walked into twice per R024.
+const runs = await api('executions?status=error&limit=50&includeData=false');
+const cutoff = Date.now() - 60 * 60 * 1000;
+// One action per pass. The healer nudges; it does not thrash.
 let acted = 0;
 
 for (const e of (runs.data || [])) {
   const at = new Date(e.stoppedAt || e.startedAt).getTime();
   if (at < cutoff) continue;
+  // Already recorded this execution in the last 6 hours — do not detect, act, or
+  // escalate it again. This is what stops the same failure being re-posted to Teams
+  // every 15 minutes.
+  if (seen.has(String(e.id))) continue;
 
   const workflowName = (e.workflowData && e.workflowData.name) || String(e.workflowId);
   const failure = {
@@ -2763,22 +2814,24 @@ for (const e of (runs.data || [])) {
   };
   const rule = classify(failure);
 
-  // Anything the script owns (containers, redeploys, tokens) is named here and
-  // handed over, not attempted. Recognising a failure and being allowed to fix
-  // it are different permissions.
+  // Anything the script owns (containers, redeploys, tokens) is named and handed
+  // over, not attempted. Recognising a failure and being allowed to fix it are
+  // different permissions.
   const runnable = { retry_execution: 1, reactivate_workflow: 1 };
   const action = rule && runnable[rule.action] ? rule.action : 'escalate';
 
   const row = {
-    workflow: workflowName,
-    execution_id: String(e.id),
+    id: null, validated: false,
+    workflow: workflowName, execution_id: String(e.id),
     rule_id: rule ? rule.id : null,
     signature: (failure.error || '').slice(0, 500),
-    action: action,
-    outcome: 'detected',
+    action: action, outcome: 'detected',
     detail: rule ? rule.title : 'unclassified — ring 3',
     hint: (rule && rule.hint) || null,
+    // Notify only the first time a workflow is escalated in the window.
+    notify: action !== 'escalate' || !escalatedWorkflows.has(workflowName),
   };
+  if (action === 'escalate') escalatedWorkflows.add(workflowName);
 
   if (action !== 'escalate' && acted < 1) {
     acted += 1;
@@ -2786,15 +2839,14 @@ for (const e of (runs.data || [])) {
     try {
       if (action === 'retry_execution') {
         await api('executions/' + e.id + '/retry', { method: 'POST' });
-        row.detail = 'retried execution ' + e.id;
+        row.detail = 'retried execution ' + e.id + ' — validating next cycle';
       } else {
         // Activating through the API does not register the trigger until n8n
-        // restarts — the workflow reads active while nothing fires. So this
-        // never claims success; the heartbeat is what proves it.
+        // restarts. So this never claims success — the validation pass is what
+        // promotes it to healed, by seeing the workflow actually run.
         await api('workflows/' + e.workflowId + '/activate', { method: 'POST' });
-        row.detail = 'reactivated ' + workflowName + ' — the heartbeat confirms it, not this call';
+        row.detail = 'reactivated ' + workflowName + ' — validating next cycle';
       }
-      row.outcome = 'healed';
     } catch (err) {
       row.outcome = 'failed';
       row.detail = String(err.message).slice(0, 400);
@@ -2808,18 +2860,23 @@ for (const e of (runs.data || [])) {
   out.push({ json: row });
 }
 
-return out.length ? out : [{ json: { workflow: 'none', execution_id: null, rule_id: null,
-  signature: null, action: 'escalate', outcome: 'detected', detail: 'nothing failed', hint: null } }];
+return out.length ? out : [{ json: { id: null, validated: false, workflow: 'none',
+  execution_id: null, rule_id: null, signature: null, action: 'escalate',
+  outcome: 'detected', detail: 'nothing failed', hint: null } }];
 `;
 
 const SELF_HEAL_ESCALATE_CODE = `
 const https = require('https');
 const { URL } = require('url');
 
-const rows = $input.all().map(i => i.json)
-  // 'detected' on an escalate action means nobody has been told yet. A row that
-  // healed, or that was suppressed by the one-action rule, is not news.
-  .filter(r => r.action === 'escalate' && r.outcome !== 'healed' && r.workflow !== 'none');
+// Reads the healer's own output rows (branched straight from the code node, NOT
+// from the Postgres node — that returns only counts, which is why the previous
+// version silently posted nothing). Two things are news to a human:
+//   - a freshly detected failure with no automatic action ('detected' + escalate)
+//   - a fix that was attempted and did NOT hold ('failed', flipped by validation)
+const rows = $input.all().map(i => i.json).filter(r =>
+  r && r.workflow !== 'none' && r.action === 'escalate' && r.notify !== false &&
+  (r.outcome === 'detected' || r.outcome === 'failed'));
 
 if (!rows.length) return [{ json: { posted: 0 } }];
 
@@ -2827,14 +2884,17 @@ const hook = $env.TEAMS_DAILY_WEBHOOK_URL;
 if (!hook) return [{ json: { posted: 0, note: 'no Teams webhook configured' } }];
 
 const lines = rows.map(r => {
-  const named = r.rule_id ? r.rule_id + ' — ' + r.detail : 'unclassified — a failure mode with no rule yet';
-  const fix = r.hint ? '\\n  Fix: ' + r.hint : '\\n  No known fix. This is ring 3: diagnose it, then add the rule.';
-  return '**' + r.workflow + '** (execution ' + r.execution_id + ')\\n  ' + named + fix
-    + '\\n  ' + String(r.signature || '').slice(0, 300);
+  const head = r.validated
+    ? 'a fix was attempted and did not hold'
+    : (r.rule_id ? r.rule_id + ' — ' + r.detail : 'unclassified — a failure mode with no rule yet');
+  const fix = r.hint ? '\\n  Fix: ' + r.hint
+    : (r.validated ? '' : '\\n  No known fix. Ring 3: diagnose it, then add the rule.');
+  return '**' + r.workflow + '** (execution ' + r.execution_id + ')\\n  ' + head + fix
+    + '\\n  ' + String(r.detail || r.signature || '').slice(0, 300);
 });
 
 const body = JSON.stringify({
-  title: 'Self-heal: ' + rows.length + ' failure' + (rows.length === 1 ? '' : 's') + ' need you',
+  title: 'Self-heal: ' + rows.length + ' need you',
   text: lines.join('\\n\\n'),
 });
 
@@ -2852,6 +2912,52 @@ await new Promise((resolve, reject) => {
 return [{ json: { posted: rows.length } }];
 `;
 
+// Loads every incident from the last 6 hours, for two jobs the code node does with
+// it: VALIDATE the ones still 'attempted', and DEDUPE — an execution already recorded
+// must not be re-detected and re-escalated every 15 minutes (the cry-wolf flood that
+// trains people to ignore the channel). The 6h window bounds the row count; a failure
+// older than that has long since been escalated or aged out. alwaysOutputData so a
+// quiet cycle still passes one item on and the code node runs — R015.
+const SELF_HEAL_LOAD_UNVALIDATED = `SELECT id, workflow, execution_id, rule_id, signature,
+       action::text AS action, outcome::text AS outcome, detail,
+       detected_at::text AS detected_at
+  FROM incidents
+ WHERE detected_at > now() - interval '6 hours'
+   AND workflow <> 'none'
+ ORDER BY detected_at DESC
+ LIMIT 500`;
+
+// One statement does both jobs: rows carrying an id are validation verdicts (UPDATE),
+// rows without one are freshly detected incidents (INSERT, deduped on execution_id).
+// The enum casts are not decoration — an uncast text into an enum column is R003, the
+// failure that made Graph Health report seven failures and zero successes.
+const SELF_HEAL_UPSERT = `WITH input AS (
+  SELECT * FROM json_to_recordset($1::json) AS x(
+    id bigint, workflow text, execution_id text, rule_id text,
+    signature text, action text, outcome text, detail text)
+),
+upd AS (
+  UPDATE incidents i
+     SET outcome = x.outcome::incident_outcome,
+         detail = x.detail,
+         resolved_at  = CASE WHEN x.outcome IN ('healed','failed') THEN now() ELSE i.resolved_at END,
+         escalated_at = CASE WHEN x.outcome = 'failed' THEN now() ELSE i.escalated_at END
+    FROM input x
+   WHERE x.id IS NOT NULL AND i.id = x.id
+  RETURNING i.id
+),
+ins AS (
+  INSERT INTO incidents (workflow, execution_id, rule_id, signature, action, outcome, detail)
+  SELECT x.workflow, nullif(x.execution_id,''), nullif(x.rule_id,''), x.signature,
+         x.action::heal_action, x.outcome::incident_outcome, x.detail
+    FROM input x
+   WHERE x.id IS NULL AND x.workflow <> 'none'
+     AND NOT EXISTS (SELECT 1 FROM incidents i
+                     WHERE x.execution_id IS NOT NULL AND i.execution_id = nullif(x.execution_id,''))
+  RETURNING id
+)
+SELECT (SELECT count(*) FROM upd) AS validated, (SELECT count(*) FROM ins) AS created`;
+
 function selfHealWorkflow() {
   return {
     name: 'BEXT — Self Heal',
@@ -2859,55 +2965,50 @@ function selfHealWorkflow() {
     nodes: [
       {
         id: 'trigger', name: 'Every 15 minutes', type: 'n8n-nodes-base.scheduleTrigger',
-        typeVersion: 1.2, position: pos(-400, 0), alwaysOutputData: true,
+        typeVersion: 1.2, position: pos(-560, 0), alwaysOutputData: true,
         parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 15 }] } },
       },
       {
-        id: 'heal', name: 'Classify and heal', type: 'n8n-nodes-base.code',
-        typeVersion: 2, position: pos(-180, 0),
+        id: 'pending', name: 'Load unvalidated', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(-360, 0),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        // Empty on a healthy cycle; alwaysOutputData so the code node still runs.
+        alwaysOutputData: true,
+        parameters: { operation: 'executeQuery', query: SELF_HEAL_LOAD_UNVALIDATED },
+      },
+      {
+        id: 'heal', name: 'Classify, heal and validate', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(-140, 0),
         parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: SELF_HEAL_CODE },
       },
       {
-        id: 'log', name: 'Log incidents', type: 'n8n-nodes-base.postgres',
-        typeVersion: 2.5, position: pos(60, 0),
+        id: 'record', name: 'Record incidents', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(120, 0),
         credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
-        // alwaysOutputData because the Teams node downstream must still run to
-        // report "nothing to say" — a node that emits nothing stops the workflow
-        // dead, which is R015 exactly.
         alwaysOutputData: true,
         parameters: {
-          operation: 'executeQuery',
-          // The enum casts are not decoration. json_to_recordset yields text and
-          // an uncast text into an enum column is R003 — the failure that made
-          // Graph Health report seven failures and zero successes, i.e. the alarm
-          // was the thing that was broken.
-          query: `INSERT INTO incidents (workflow, execution_id, rule_id, signature, action, outcome, detail)
-SELECT x.workflow, nullif(x.execution_id,'') , nullif(x.rule_id,''), x.signature,
-       x.action::heal_action, x.outcome::incident_outcome, x.detail
-  FROM json_to_recordset($1::json) AS x(workflow text, execution_id text, rule_id text,
-       signature text, action text, outcome text, detail text)
- WHERE x.workflow <> 'none'
-   AND NOT EXISTS (SELECT 1 FROM incidents i WHERE i.execution_id = x.execution_id)
-RETURNING id`,
+          operation: 'executeQuery', query: SELF_HEAL_UPSERT,
           options: { queryReplacement: '={{ JSON.stringify($input.all().map(i => i.json)) }}' },
         },
       },
       {
         id: 'escalate', name: 'Escalate to Teams', type: 'n8n-nodes-base.code',
-        typeVersion: 2, position: pos(300, 0),
-        // It always returns at least { posted: 0 }, but the flag is what R028
-        // reads — and a future edit that returns [] on a quiet cycle would mute
-        // this workflow's own heartbeat without anyone noticing.
+        typeVersion: 2, position: pos(120, 200),
         alwaysOutputData: true,
         parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: SELF_HEAL_ESCALATE_CODE },
       },
-      heartbeat('KUMA_PUSH_SELF_HEAL', 540, 0),
+      heartbeat('KUMA_PUSH_SELF_HEAL', 360, 0),
     ],
     connections: {
-      'Every 15 minutes': { main: [[{ node: 'Classify and heal', type: 'main', index: 0 }]] },
-      'Classify and heal': { main: [[{ node: 'Log incidents', type: 'main', index: 0 }]] },
-      'Log incidents': { main: [[{ node: 'Escalate to Teams', type: 'main', index: 0 }]] },
-      'Escalate to Teams': { main: [[{ node: 'Heartbeat', type: 'main', index: 0 }]] },
+      'Every 15 minutes': { main: [[{ node: 'Load unvalidated', type: 'main', index: 0 }]] },
+      'Load unvalidated': { main: [[{ node: 'Classify, heal and validate', type: 'main', index: 0 }]] },
+      // The code node's rows go to BOTH the recorder and the escalator. Escalate
+      // must read the rows themselves, not the recorder's row-count output.
+      'Classify, heal and validate': { main: [[
+        { node: 'Record incidents', type: 'main', index: 0 },
+        { node: 'Escalate to Teams', type: 'main', index: 0 },
+      ]] },
+      'Record incidents': { main: [[{ node: 'Heartbeat', type: 'main', index: 0 }]] },
     },
   };
 }

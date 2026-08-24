@@ -130,6 +130,32 @@ node n8n/self-heal.js --dry-run
 Without a Postgres tunnel it refuses to act at all — it will not take an action
 it cannot record.
 
+## Ring 2.5 — Validate (the healer checks its own work)
+
+An action recorded as done is not the same as an action that worked. Every remediation
+is written `attempted`, never `healed`. On the next cycle the healer re-reads its own
+open incidents and asks the live API whether the thing actually recovered — for the two
+workflow actions (retry, reactivate) that means the workflow produced a **successful run
+after** the incident. Recovered → `healed`. Still failing past a 2-hour ceiling →
+`failed`, and it escalates *that* to Teams: a fix that did not hold is news.
+
+This is the Cole Medin pattern (the agent validates its own output) and it is not
+decorative — the two sandbox faults that shipped green this build (`$env.N8N_URL`
+unset, then `fetch`/`http` unavailable) were caught **only** by watching a real run.
+A healer that trusts its own actions would have reported success while healing nothing.
+
+Two anti-flood guards live alongside it, because a monitor that cries wolf gets ignored:
+
+- **Execution dedup** — a failure already recorded in the last 6 hours is never
+  re-detected or re-escalated. Without this the same failure posts every 15 minutes.
+- **Per-workflow escalation** — a persistently broken workflow throws a fresh execution
+  id every cycle. The repeat is still *recorded* (the dashboard should show the
+  frequency) but not re-posted to Teams after the first time.
+
+The escalation itself was also fixed here: the Teams node now reads the healer's rows
+directly, not the Postgres node's row-count output — which is why escalations had been
+silently posting nothing.
+
 ## Ring 3 — Learn
 
 An unclassified failure posts to Teams with the signature and an empty diagnosis.
@@ -147,6 +173,14 @@ agent loop: auditable, diffable, and explainable to the client.
 Adding a rule **cannot**, by itself, widen what the healer may do. `AUTO_ACTIONS`
 is a separate list, and R025 fails the build if a rule names an action that is not
 on it.
+
+## Seeing it — the Grafana dashboard
+
+`BEXT — Self-Healing` (Grafana, reads the `incidents` table through a read-only Postgres
+role, `db/migrations/025`) shows the numbers the references insist you measure: heal
+success rate, MTTR from detection to validated heal, open/unresolved count, incidents per
+day by outcome, and the top failure classes by rule id. If the success rate sinks or the
+open count climbs, the healer is losing — visibly, instead of in a table nobody reads.
 
 ## Validation — `BEXT — Contract Test`
 
