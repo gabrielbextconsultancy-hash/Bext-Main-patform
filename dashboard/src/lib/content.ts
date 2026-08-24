@@ -20,7 +20,17 @@ import 'server-only';
  */
 
 const BASE = (process.env.N8N_URL || 'https://bext-n8n.srv1866850.hstgr.cloud').replace(/\/+$/, '') + '/webhook';
-const TOKEN = process.env.BEXT_WEBHOOK_TOKEN || '';
+
+// A header value must be Latin-1: a stray non-ASCII character (a leaked dotenv
+// banner, a smart quote, a newline) makes fetch throw "Cannot convert argument
+// to a ByteString" before the request is even sent. Trim, drop anything outside
+// printable ASCII, and warn once rather than let one bad character take the whole
+// write path down.
+const rawToken = process.env.BEXT_WEBHOOK_TOKEN || '';
+const TOKEN = rawToken.trim().replace(/[^\x21-\x7e]/g, '');
+if (rawToken && TOKEN !== rawToken.trim()) {
+  console.warn('BEXT_WEBHOOK_TOKEN contained non-ASCII characters; they were stripped for the header.');
+}
 
 export type ContentAction =
   | 'start_cycle'
