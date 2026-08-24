@@ -64,7 +64,7 @@
         "operation": "executeQuery",
         "query": "={{ $json.sql }}",
         "options": {
-          "queryReplacement": "={{ $json.params }}"
+          "queryReplacement": "={{ [$json.params] }}"
         }
       }
     }

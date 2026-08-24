@@ -83,7 +83,7 @@
         "operation": "executeQuery",
         "query": "UPDATE linkedin_drafts d SET\n  status = CASE WHEN v.published THEN 'published'::linkedin_draft_status\n                WHEN v.error IS NOT NULL THEN 'failed'::linkedin_draft_status\n                ELSE d.status END,\n  published_at = CASE WHEN v.published THEN now() ELSE d.published_at END,\n  external_id = coalesce(v.external_id, d.external_id),\n  error = v.error,\n  nudged_at = CASE WHEN v.mode = 'manual' THEN now() ELSE d.nudged_at END,\n  updated_at = now()\nFROM (SELECT * FROM json_to_recordset($1::json) AS x(\n  id bigint, mode text, published boolean, external_id text, post_url text, error text)) v\nWHERE d.id = v.id\nRETURNING d.id, d.status",
         "options": {
-          "queryReplacement": "={{ JSON.stringify($input.all().map(i => i.json)) }}"
+          "queryReplacement": "={{ [JSON.stringify($input.all().map(i => i.json))] }}"
         }
       }
     },

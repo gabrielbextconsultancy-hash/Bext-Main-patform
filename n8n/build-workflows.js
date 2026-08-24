@@ -3813,7 +3813,10 @@ const catalogue = articles.map(a =>
 ).join('\\n');
 
 const out = await geminiJSON(${JSON.stringify(TOPICS_PROMPT)} + '\\n\\nITEMS:\\n' + catalogue, helpers);
-const valid = new Set(articles.map(a => a.id));
+// Postgres returns bigint ids as strings; Gemini returns them as numbers.
+// Compare and store as strings on both sides so the guard does not drop every
+// real id as if it were hallucinated.
+const valid = new Set(articles.map(a => String(a.id)));
 const topics = (out.topics || []).slice(0, 3).map((t, i) => ({
   rank: t.rank || (i + 1),
   title: String(t.title || '').slice(0, 300),
@@ -3821,7 +3824,7 @@ const topics = (out.topics || []).slice(0, 3).map((t, i) => ({
   angle: String(t.angle || '').slice(0, 500),
   // Keep only ids the model was actually given, so a hallucinated id cannot
   // point the fact-checker at an article that was never in the window.
-  article_ids: (t.article_ids || []).filter(id => valid.has(id)),
+  article_ids: (t.article_ids || []).map(id => String(id)).filter(id => valid.has(id)),
   score: typeof t.score === 'number' ? Math.max(0, Math.min(100, t.score)) : null,
 })).filter(t => t.article_ids.length);
 
@@ -3892,7 +3895,7 @@ WHERE (extract(week from current_date)::int % 2) = 0
           // The claim is the lock: SKIP LOCKED means two triggers firing at once
           // cannot take the same cycle, so the webhook and the poll are safe to
           // race. Oldest queued cycle first.
-          query: `UPDATE content_cycles SET status = 'scanning', started_at = now()
+          query: `UPDATE content_cycles SET status = 'scanning'
 WHERE id = (
   SELECT id FROM content_cycles
   WHERE status = 'queued_topics'
@@ -3939,7 +3942,7 @@ JOIN sources s ON s.id = a.source_id
 JOIN article_analysis an ON an.article_id = a.id AND an.relevance_score >= 50
 ORDER BY an.relevance_score DESC, coalesce(a.published_at, a.fetched_at) DESC
 LIMIT 60`,
-          options: { queryReplacement: '={{ $json.id }}' },
+          options: { queryReplacement: '={{ [$json.id] }}' },
         },
       },
       {
@@ -3989,7 +3992,7 @@ UPDATE content_cycles SET
   topics_at = now()
 WHERE id = $2::bigint
 RETURNING id, status`,
-          options: { queryReplacement: '={{ $json.topics }},{{ $json.cycle_id }},{{ $json.status }},{{ $json.error || "" }}' },
+          options: { queryReplacement: '={{ [$json.topics, $json.cycle_id, $json.status, $json.error || ""] }}' },
         },
       },
       // Own heartbeat, fired off the poll rather than off a work node, so the
@@ -4165,7 +4168,7 @@ RETURNING id, human_perspective, selected_topic_id`,
 FROM content_cycles c
 JOIN content_topics t ON t.id = c.selected_topic_id
 WHERE c.id = $1`,
-          options: { queryReplacement: '={{ $json.id }}' },
+          options: { queryReplacement: '={{ [$json.id] }}' },
         },
       },
       {
@@ -4184,7 +4187,7 @@ FROM content_topics t
 JOIN articles a ON a.id = ANY(t.article_ids)
 LEFT JOIN article_analysis an ON an.article_id = a.id
 WHERE t.id = $1`,
-          options: { queryReplacement: '={{ $json.topic_id }}' },
+          options: { queryReplacement: '={{ [$json.topic_id] }}' },
         },
       },
       {
@@ -4247,7 +4250,7 @@ return out;`,
 UPDATE content_cycles SET status = 'drafts_ready', drafts_at = now()
 WHERE id = $2::bigint
 RETURNING id`,
-          options: { queryReplacement: '={{ $json.drafts }},{{ $json.cycle_id }},{{ $json.topic_id }}' },
+          options: { queryReplacement: '={{ [$json.drafts, $json.cycle_id, $json.topic_id] }}' },
         },
       },
       heartbeat('KUMA_PUSH_CONTENT_DRAFTS', -360, 200),
@@ -4387,7 +4390,7 @@ function contentActionsWorkflow() {
           operation: 'executeQuery',
           query: '={{ $json.sql }}',
           // Single json parameter, so no field with a comma splits the statement.
-          options: { queryReplacement: '={{ $json.params }}' },
+          options: { queryReplacement: '={{ [$json.params] }}' },
         },
       },
     ],
@@ -4505,7 +4508,7 @@ FROM (SELECT * FROM json_to_recordset($1::json) AS x(
   id bigint, mode text, published boolean, external_id text, post_url text, error text)) v
 WHERE d.id = v.id
 RETURNING d.id, d.status`,
-          options: { queryReplacement: '={{ JSON.stringify($input.all().map(i => i.json)) }}' },
+          options: { queryReplacement: '={{ [JSON.stringify($input.all().map(i => i.json))] }}' },
         },
       },
       {

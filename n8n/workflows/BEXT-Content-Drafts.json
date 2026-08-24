@@ -91,7 +91,7 @@
         "operation": "executeQuery",
         "query": "SELECT\n  c.id AS cycle_id, c.human_perspective,\n  t.id AS topic_id, t.title AS topic_title, t.angle AS topic_angle,\n  t.article_ids,\n  (SELECT to_json(v) FROM linkedin_voice v WHERE v.id = 1) AS voice,\n  (SELECT coalesce(json_agg(json_build_object('formula', d.formula, 'created_at', d.created_at)), '[]'::json)\n     FROM linkedin_drafts d WHERE d.created_at > now() - interval '21 days') AS recent\nFROM content_cycles c\nJOIN content_topics t ON t.id = c.selected_topic_id\nWHERE c.id = $1",
         "options": {
-          "queryReplacement": "={{ $json.id }}"
+          "queryReplacement": "={{ [$json.id] }}"
         }
       }
     },
@@ -115,7 +115,7 @@
         "operation": "executeQuery",
         "query": "SELECT a.id AS article_id, a.url, a.title, a.body, an.summary\nFROM content_topics t\nJOIN articles a ON a.id = ANY(t.article_ids)\nLEFT JOIN article_analysis an ON an.article_id = a.id\nWHERE t.id = $1",
         "options": {
-          "queryReplacement": "={{ $json.topic_id }}"
+          "queryReplacement": "={{ [$json.topic_id] }}"
         }
       }
     },
@@ -169,7 +169,7 @@
         "operation": "executeQuery",
         "query": "WITH d AS (\n  INSERT INTO linkedin_drafts\n    (cycle_id, topic_id, variant, recommended, formula, goal, hook, body, char_count,\n     hashtags, visual_concept, cta, destination_url, audit)\n  SELECT $2::bigint, $3::bigint, x.variant, x.recommended, x.formula, x.goal, x.hook, x.body,\n     x.char_count, x.hashtags, x.visual_concept, x.cta, x.destination_url, x.audit\n  FROM json_to_recordset($1::json) AS x(\n    variant text, recommended boolean, formula text, goal text, hook text, body text,\n    char_count int, hashtags text[], visual_concept text, cta text, destination_url text, audit jsonb)\n  RETURNING id, variant\n), claims AS (\n  INSERT INTO content_claims (draft_id, claim, article_id, source_url, source_quote, verdict)\n  SELECT d.id, c.claim, c.article_id, c.source_url, c.source_quote, c.verdict\n  FROM json_to_recordset($1::json) AS x(variant text, claims json)\n  JOIN d ON d.variant = x.variant\n  CROSS JOIN LATERAL json_to_recordset(x.claims) AS c(\n    claim text, article_id bigint, source_url text, source_quote text, verdict text)\n  RETURNING 1\n)\nUPDATE content_cycles SET status = 'drafts_ready', drafts_at = now()\nWHERE id = $2::bigint\nRETURNING id",
         "options": {
-          "queryReplacement": "={{ $json.drafts }},{{ $json.cycle_id }},{{ $json.topic_id }}"
+          "queryReplacement": "={{ [$json.drafts, $json.cycle_id, $json.topic_id] }}"
         }
       }
     },
