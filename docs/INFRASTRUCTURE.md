@@ -32,7 +32,8 @@ database. The fetcher on 8080 must be up or document rendering fails with a conn
 looks like a code bug.
 
 Public: dashboard `https://bext.dev-environment.site` · n8n `https://bext-n8n.srv1866850.hstgr.cloud`.
-Monitoring: `bext-kuma` on `${KUMA_SUBDOMAIN}.${DOMAIN_NAME}`. It publishes no ports — traefik routes it,
+Monitoring: `bext-kuma` on `https://bext-kuma.srv1866850.hstgr.cloud` (the hstgr.cloud wildcard, same zone as
+n8n — no DNS record needed; it is an ops tool, not client-facing like the dashboard). Publishes no ports — traefik routes it,
 same as n8n and the dashboard.
 
 **Three containers must never be restarted by the healer**, and `n8n/self-heal.js` refuses them:

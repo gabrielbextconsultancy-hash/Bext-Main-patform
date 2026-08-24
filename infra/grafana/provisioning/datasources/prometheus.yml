@@ -1,0 +1,12 @@
+# Grafana finds Prometheus automatically — no clicking through the UI.
+# Prometheus has no auth and is never exposed publicly; Grafana reaches it by
+# service name on the internal network.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false

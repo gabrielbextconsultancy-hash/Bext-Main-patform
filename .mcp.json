@@ -29,6 +29,11 @@
     "microsoft-learn": {
       "type": "http",
       "url": "https://learn.microsoft.com/api/mcp"
+    },
+    "codebase-memory": {
+      "command": "C:/Users/Gab/.claude/tools/codebase-memory-mcp/codebase-memory-mcp.exe",
+      "args": [],
+      "env": {}
     }
   }
 }

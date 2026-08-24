@@ -171,6 +171,10 @@ confirmed answering 200 on 24 Aug 2026. Point every monitor's notification at
 the **Teams "Daily report" webhook**, so an alarm lands where the daily card
 already lands rather than in a second place nobody watches.
 
+> Kuma itself is at **https://bext-kuma.srv1866850.hstgr.cloud** — same zone as n8n, no DNS
+> record needed (Hostinger wildcards `*.srv1866850.hstgr.cloud`). It is an ops tool, so it
+> lives beside n8n rather than on the client-facing `dev-environment.site`.
+
 ### Public — HTTPS (certificate expiry is automatic on these)
 
 | Monitor | URL | Every |

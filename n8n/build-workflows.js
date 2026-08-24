@@ -2720,12 +2720,21 @@ const base = 'http://localhost:5678';
 const key = $env.N8N_API_KEY;
 if (!key) throw new Error('N8N_API_KEY is not set in the container — see infra/docker-compose.yml');
 
+// The Code sandbox does not expose fetch, and the http builtin is not on the
+// allow-list (NODE_FUNCTION_ALLOW_BUILTIN is crypto,url,https,dns) — so a plain
+// HTTP client is out. n8n's own helper is the way to make an HTTP call from a
+// Code node, the same as every other workflow in this repo. It returns the
+// parsed body and throws on a non-2xx, so there is no .ok/.json() to handle.
+const helpers = this.helpers;
 const api = async (route, init) => {
-  const r = await fetch(base + '/api/v1/' + route, Object.assign({}, init, {
-    headers: Object.assign({ 'X-N8N-API-KEY': key, 'Content-Type': 'application/json' }, (init || {}).headers || {}),
-  }));
-  if (!r.ok) throw new Error('n8n API ' + r.status + ' on ' + route);
-  return r.status === 204 ? null : r.json();
+  init = init || {};
+  return helpers.httpRequest({
+    method: init.method || 'GET',
+    url: base + '/api/v1/' + route,
+    headers: Object.assign({ 'X-N8N-API-KEY': key, 'Content-Type': 'application/json' }, init.headers || {}),
+    body: init.body ? JSON.parse(init.body) : undefined,
+    json: true,
+  });
 };
 
 // Only failures. EXECUTIONS_DATA_SAVE_ON_ERROR is 'all', so this list is
@@ -2933,9 +2942,12 @@ const base = 'http://localhost:5678';
 const key = $env.N8N_API_KEY;
 if (!key) throw new Error('N8N_API_KEY is not set in the container');
 
-const list = await (await fetch(base + '/api/v1/workflows?limit=100', {
+// The sandbox exposes neither fetch nor the http builtin; use n8n's helper.
+const list = await this.helpers.httpRequest({
+  url: base + '/api/v1/workflows?limit=100',
   headers: { 'X-N8N-API-KEY': key },
-})).json();
+  json: true,
+});
 
 const failures = [];
 

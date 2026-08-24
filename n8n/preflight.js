@@ -469,6 +469,35 @@ check('R027', 'no Kuma push token reaches a committed file', () => {
     : { ok: true, detail: 'push tokens stay in .env' };
 });
 
+// ── R029 ─ the Kuma key and Grafana password never reach a committed file ───
+// Prometheus scrapes Kuma with the API key, but the key belongs in a mounted
+// password_file (written on deploy from .env), never in the committed
+// prometheus.yml. Same class as R027 — a metrics key is lower stakes than a push
+// token, but a Grafana admin password in git is not, so both are checked here.
+check('R029', 'no Kuma key or Grafana secret in committed infra files', () => {
+  const hits = [];
+  const scan = dir => {
+    const abs = path.join(ROOT, dir);
+    if (!fs.existsSync(abs)) return;
+    for (const e of fs.readdirSync(abs, { withFileTypes: true })) {
+      const rel = `${dir}/${e.name}`;
+      if (e.name === 'kuma_key') continue;             // gitignored, written on deploy
+      if (e.isDirectory()) { scan(rel); continue; }
+      if (!/\.(ya?ml|json|env|conf)$/.test(e.name)) continue;
+      const body = read(rel);
+      if (/uk[0-9]_[A-Za-z0-9_-]{10,}/.test(body)) hits.push(`${rel} (kuma key)`);
+      // a literal admin password on a GF_SECURITY_ADMIN_PASSWORD line
+      if (/GF_SECURITY_ADMIN_PASSWORD\s*[:=]\s*["']?\S/.test(body)
+          && !/\$\{GF_SECURITY_ADMIN_PASSWORD/.test(body)) hits.push(`${rel} (grafana pw)`);
+      // prometheus must reference a password_file, not an inline password
+      if (e.name === 'prometheus.yml' && /^\s*password:\s*\S/m.test(body)) hits.push(`${rel} (inline scrape password)`);
+    }
+  };
+  ['infra'].forEach(scan);
+  return hits.length ? { ok: false, detail: hits.join(', ') }
+                     : { ok: true, detail: 'kuma key in password_file, grafana pw from env' };
+});
+
 // ── R028 ─ the deadman must not be conditional ──────────────────────────────
 // Two ways a heartbeat quietly stops being a heartbeat, both of which leave the
 // workflow working and the monitoring dead:

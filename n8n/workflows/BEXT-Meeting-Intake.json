@@ -83,8 +83,7 @@
         "options": {
           "queryReplacement": "={{ $json.payload }}"
         }
-      },
-      "alwaysOutputData": true
+      }
     },
     {
       "id": "kuma",
@@ -92,7 +91,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        560,
+        80,
         0
       ],
       "onError": "continueRegularOutput",
@@ -136,6 +135,11 @@
             "node": "Transcribe and draft",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Heartbeat",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -145,17 +149,6 @@
         [
           {
             "node": "Record minutes",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Record minutes": {
-      "main": [
-        [
-          {
-            "node": "Heartbeat",
             "type": "main",
             "index": 0
           }

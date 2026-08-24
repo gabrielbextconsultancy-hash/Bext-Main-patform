@@ -413,6 +413,93 @@ services:
       - traefik.http.routers.bext-kuma.tls.certresolver=mytlschallenge
       - traefik.http.services.bext-kuma.loadbalancer.server.port=3001
 
+  # ── Prometheus ───────────────────────────────────────────────────────────
+  # Scrapes Kuma's /metrics and node-exporter. Internal only — NO traefik router
+  # and no published port. Prometheus ships with no authentication, so it must
+  # never be reachable from outside; Grafana reaches it by service name.
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: bext-prometheus
+    restart: always
+    user: "65534:65534"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # The Kuma API key, written on deploy from KUMA_API_KEY in .env. Kept out
+      # of the committed prometheus.yml (preflight R029).
+      - ./prometheus/kuma_key:/etc/prometheus/kuma_key:ro
+      - bext_prometheus:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      # 30 days is plenty for a monitoring signal and bounds disk on a shared box.
+      - --storage.tsdb.retention.time=30d
+      - --storage.tsdb.retention.size=2GB
+      - --web.enable-lifecycle
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    networks:
+      - bext_internal
+
+  # Host memory, CPU and disk — the aggregate, never per-container. Per-container
+  # metrics would need the host docker socket and would expose Premier Fitness's
+  # containers into BEXT's Grafana; that boundary is why there is no cAdvisor.
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: bext-node-exporter
+    restart: always
+    command:
+      - --path.rootfs=/host
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    volumes:
+      - /:/host:ro,rslave
+    deploy:
+      resources:
+        limits:
+          memory: 96m
+    networks:
+      - bext_internal
+
+  # ── Grafana ──────────────────────────────────────────────────────────────
+  # Behind traefik, on the hstgr.cloud host zone like n8n and Kuma. Its own login
+  # guards it; the datasource and the BEXT dashboard are provisioned from files,
+  # so a fresh volume comes up already wired.
+  grafana:
+    image: grafana/grafana:latest
+    container_name: bext-grafana
+    restart: always
+    environment:
+      GF_SERVER_ROOT_URL: https://${GRAFANA_SUBDOMAIN:-bext-grafana}.${DOMAIN_NAME}
+      # Set in .env before first deploy. Left blank, Grafana falls back to
+      # admin/admin and forces a change at first login — acceptable but weaker,
+      # so setting it is preferred.
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD:-}
+      # No public sign-up, no anonymous access. A dashboard behind a public URL
+      # is not an invitation.
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - bext_grafana:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    deploy:
+      resources:
+        limits:
+          memory: 384m
+    networks:
+      - bext_internal
+      - n8n_default
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=n8n_default
+      - traefik.http.routers.bext-grafana.rule=Host(`${GRAFANA_SUBDOMAIN:-bext-grafana}.${DOMAIN_NAME}`)
+      - traefik.http.routers.bext-grafana.entrypoints=web,websecure
+      - traefik.http.routers.bext-grafana.tls=true
+      - traefik.http.routers.bext-grafana.tls.certresolver=mytlschallenge
+      - traefik.http.services.bext-grafana.loadbalancer.server.port=3000
+
 networks:
   bext_internal:
     driver: bridge
@@ -426,3 +513,5 @@ volumes:
   bext_files:
   bext_ollama:
   bext_kuma:
+  bext_prometheus:
+  bext_grafana:

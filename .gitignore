@@ -31,3 +31,4 @@ env.local.json
 # Per-run pipeline output, not source: the extracted JSON and the built card.
 graph/card.json
 graph/extracted.json
+infra/prometheus/kuma_key

@@ -1,0 +1,64 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 0,
+  "title": "BEXT — Overview",
+  "uid": "bext-overview",
+  "tags": ["bext"],
+  "timezone": "Australia/Melbourne",
+  "schemaVersion": 39,
+  "version": 1,
+  "time": { "from": "now-24h", "to": "now" },
+  "refresh": "30s",
+  "panels": [
+    {
+      "type": "row", "title": "Uptime Kuma — the workflows and endpoints",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "type": "state-timeline", "title": "Monitor status (up / down)",
+      "description": "1 = up, 0 = down, 2 = pending. A push monitor going flat-0 is a workflow that stopped running.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 1 },
+      "fieldConfig": { "defaults": { "mappings": [
+        { "type": "value", "options": { "0": { "text": "down", "color": "red" }, "1": { "text": "up", "color": "green" }, "2": { "text": "pending", "color": "yellow" }, "3": { "text": "maint", "color": "blue" } } }
+      ], "color": { "mode": "thresholds" } } },
+      "targets": [ { "expr": "monitor_status", "legendFormat": "{{monitor_name}}", "refId": "A" } ]
+    },
+    {
+      "type": "timeseries", "title": "Response time (ms)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "ms" } },
+      "targets": [ { "expr": "monitor_response_time", "legendFormat": "{{monitor_name}}", "refId": "A" } ]
+    },
+    {
+      "type": "timeseries", "title": "TLS certificate — days remaining",
+      "description": "The daily report failed SPF for weeks while reporting up. Certs expire the same quiet way.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "d", "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "yellow", "value": 14 }, { "color": "green", "value": 30 } ] } } },
+      "targets": [ { "expr": "monitor_cert_days_remaining", "legendFormat": "{{monitor_name}}", "refId": "A" } ]
+    },
+    {
+      "type": "row", "title": "Host — the shared VPS (8 GB, two other clients)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 17 }
+    },
+    {
+      "type": "gauge", "title": "Memory available (%)",
+      "description": "The OOM predictor. Ollama once ate the RAM and took SSH and both n8n instances down. Below ~10% is where that starts.",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 18 },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "yellow", "value": 10 }, { "color": "green", "value": 25 } ] } } },
+      "targets": [ { "expr": "100 * node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes", "legendFormat": "avail %", "refId": "A" } ]
+    },
+    {
+      "type": "timeseries", "title": "CPU busy (%)",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 18 },
+      "fieldConfig": { "defaults": { "unit": "percent" } },
+      "targets": [ { "expr": "100 * (1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m])))", "legendFormat": "busy %", "refId": "A" } ]
+    },
+    {
+      "type": "gauge", "title": "Root disk used (%)",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 18 },
+      "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 75 }, { "color": "red", "value": 90 } ] } } },
+      "targets": [ { "expr": "100 * (1 - node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"})", "legendFormat": "used %", "refId": "A" } ]
+    }
+  ]
+}

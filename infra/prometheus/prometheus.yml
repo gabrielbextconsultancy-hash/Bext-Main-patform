@@ -1,0 +1,42 @@
+# Prometheus scrape config for the BEXT stack.
+#
+# Deliberately narrow. Two things are watched and nothing else:
+#
+#   uptime-kuma  — per-monitor status, response time and cert-days-remaining.
+#                  This is the same /metrics the Kuma API key unlocks; Prometheus
+#                  authenticates with that key via a password_file, so the secret
+#                  never appears in this committed file.
+#   node         — HOST memory, CPU and disk. This is the metric that predicted
+#                  every outage on this box: ollama once ate the RAM and took SSH
+#                  and both n8n instances down. Host aggregate only — NOT per
+#                  container, because per-container metrics would expose Premier
+#                  Fitness's containers into BEXT's Grafana. That boundary is why
+#                  there is no cAdvisor here.
+#
+# Retention is capped in the compose command, not here.
+
+global:
+  scrape_interval: 30s
+  scrape_timeout: 10s
+  external_labels:
+    stack: bext
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
+
+  - job_name: uptime-kuma
+    metrics_path: /metrics
+    scheme: http
+    # The Kuma API key, read from a file written on deploy from KUMA_API_KEY in
+    # .env. Never inline it here — preflight R029 asserts this file stays clean.
+    basic_auth:
+      username: prometheus
+      password_file: /etc/prometheus/kuma_key
+    static_configs:
+      - targets: ['uptime-kuma:3001']
+
+  - job_name: node
+    static_configs:
+      - targets: ['node-exporter:9100']

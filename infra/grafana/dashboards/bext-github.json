@@ -1,0 +1,98 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "title": "BEXT — GitHub",
+  "uid": "bext-github",
+  "tags": ["bext", "github"],
+  "timezone": "Australia/Melbourne",
+  "schemaVersion": 39,
+  "version": 1,
+  "time": { "from": "now-90d", "to": "now" },
+  "refresh": "",
+  "templating": {
+    "list": [
+      {
+        "name": "github_ds",
+        "label": "GitHub datasource",
+        "type": "datasource",
+        "query": "grafana-github-datasource",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "organization",
+        "label": "Owner",
+        "type": "textbox",
+        "query": "gabrielbextconsultancy-hash",
+        "current": { "text": "gabrielbextconsultancy-hash", "value": "gabrielbextconsultancy-hash" },
+        "hide": 0
+      },
+      {
+        "name": "repository",
+        "label": "Repository",
+        "type": "textbox",
+        "query": "Bext-Main-patform",
+        "current": { "text": "Bext-Main-patform", "value": "Bext-Main-patform" },
+        "hide": 0
+      },
+      {
+        "name": "branch",
+        "label": "Branch",
+        "type": "textbox",
+        "query": "main",
+        "current": { "text": "main", "value": "main" },
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row", "title": "Activity in range", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }
+    },
+    {
+      "type": "stat", "title": "Commits", "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 },
+      "datasource": { "type": "grafana-github-datasource", "uid": "${github_ds}" },
+      "options": { "reduceOptions": { "calcs": ["count"], "fields": "" }, "colorMode": "background", "graphMode": "none" },
+      "targets": [ { "refId": "A", "datasource": { "type": "grafana-github-datasource", "uid": "${github_ds}" }, "queryType": "Commits", "owner": "$organization", "repository": "$repository", "options": { "gitRef": "$branch" } } ]
+    },
+    {
+      "type": "stat", "title": "Pull requests (created)", "gridPos": { "h": 5, "w": 6, "x": 6, "y": 1 },
+      "datasource": { "type": "grafana-github-datasource", "uid": "${github_ds}" },
+      "options": { "reduceOptions": { "calcs": ["count"], "fields": "" }, "colorMode": "background", "graphMode": "none" },
+      "targets": [ { "refId": "A", "datasource": { "type": "grafana-github-datasource", "uid": "${github_ds}" }, "queryType": "Pull_Requests", "owner": "$organization", "repository": "$repository", "options": { "query": "", "timeField": 1 } } ]
+    },
+    {
+      "type": "stat", "title": "Issues (created)", "gridPos": { "h": 5, "w": 6, "x": 12, "y": 1 },
+      "datasource": { "type": "grafana-github-datasource", "uid": "${github_ds}" },
+      "options": { "reduceOptions": { "calcs": ["count"], "fields": "" }, "colorMode": "background", "graphMode": "none" },
+      "targets": [ { "refId": "A", "datasource": { "type": "grafana-github-datasource", "uid": "${github_ds}" }, "queryType": "Issues", "owner": "$organization", "repository": "$repository", "options": { "query": "" } } ]
+    },
+    {
+      "type": "stat", "title": "Releases (total)", "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 },
+      "datasource": { "type": "grafana-github-datasource", "uid": "${github_ds}" },
+      "options": { "reduceOptions": { "calcs": ["count"], "fields": "" }, "colorMode": "background", "graphMode": "none" },
+      "targets": [ { "refId": "A", "datasource": { "type": "grafana-github-datasource", "uid": "${github_ds}" }, "queryType": "Releases", "owner": "$organization", "repository": "$repository" } ]
+    },
+    {
+      "type": "row", "title": "Recent pull requests", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 }
+    },
+    {
+      "type": "table", "title": "Pull requests", "gridPos": { "h": 9, "w": 24, "x": 0, "y": 7 },
+      "datasource": { "type": "grafana-github-datasource", "uid": "${github_ds}" },
+      "targets": [ { "refId": "A", "datasource": { "type": "grafana-github-datasource", "uid": "${github_ds}" }, "queryType": "Pull_Requests", "owner": "$organization", "repository": "$repository", "options": { "query": "", "timeField": 1 } } ]
+    },
+    {
+      "type": "row", "title": "Recent commits", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 }
+    },
+    {
+      "type": "table", "title": "Commits", "gridPos": { "h": 9, "w": 16, "x": 0, "y": 17 },
+      "datasource": { "type": "grafana-github-datasource", "uid": "${github_ds}" },
+      "targets": [ { "refId": "A", "datasource": { "type": "grafana-github-datasource", "uid": "${github_ds}" }, "queryType": "Commits", "owner": "$organization", "repository": "$repository", "options": { "gitRef": "$branch" } } ]
+    },
+    {
+      "type": "table", "title": "Contributors", "gridPos": { "h": 9, "w": 8, "x": 16, "y": 17 },
+      "datasource": { "type": "grafana-github-datasource", "uid": "${github_ds}" },
+      "targets": [ { "refId": "A", "datasource": { "type": "grafana-github-datasource", "uid": "${github_ds}" }, "queryType": "Contributors", "owner": "$organization", "repository": "$repository", "options": { "query": "" } } ]
+    }
+  ]
+}
