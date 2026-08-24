@@ -17,7 +17,7 @@ export async function GET(req: Request) {
   const id = Number(new URL(req.url).searchParams.get('id'));
   if (!Number.isFinite(id)) return NextResponse.json({ error: 'bad id' }, { status: 400 });
 
-  const rows = await getReportArticles([id]);
+  const rows = await getReportArticles(id);
   if (rows === null) return NextResponse.json({ error: 'database unreachable' }, { status: 503 });
   return NextResponse.json({ articles: rows });
 }

@@ -620,11 +620,16 @@ export interface ReportArticleRow {
 }
 
 /**
- * The articles behind a set of reports, for the source-feed accordion. `used`
- * flags an article that has already produced a draft, so the feed does not
- * quietly recycle the same story.
+ * The articles behind one daily report, for the source-feed accordion. `used`
+ * flags an article that already ended up in a drafted topic, so the feed does
+ * not quietly recycle the same story.
+ *
+ * Takes a single report id, not an array: an `= ANY($1::int[])` array parameter
+ * returned zero rows through the standalone build's bundled pg (it works in psql,
+ * so the difference is the array-param encoding), and the accordion only ever
+ * needs one report at a time. A scalar `= $1` is unambiguous and correct.
  */
-export const getReportArticles = (reportIds: number[]) =>
+export const getReportArticles = (reportId: number) =>
   tryQuery<ReportArticleRow>(
     `SELECT ri.report_id, a.id AS article_id, ri.category, ri.rank,
             a.title, a.url, s.name AS source, an.relevance_score AS score,
@@ -639,7 +644,7 @@ export const getReportArticles = (reportIds: number[]) =>
        JOIN articles a  ON a.id = ri.article_id
        JOIN sources s   ON s.id = a.source_id
        LEFT JOIN article_analysis an ON an.article_id = a.id
-      WHERE ri.report_id = ANY($1::int[])
-      ORDER BY ri.report_id DESC, ri.category, ri.rank`,
-    [reportIds]
+      WHERE ri.report_id = $1
+      ORDER BY ri.category, ri.rank`,
+    [reportId]
   );
