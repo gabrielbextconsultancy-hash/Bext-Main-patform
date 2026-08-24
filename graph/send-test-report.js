@@ -54,6 +54,20 @@ const toText = (html, subject) => {
   return subject + '\n\n' + body;
 };
 
+/**
+ * Base64, wrapped at 76 characters.
+ *
+ * 8bit sends the body exactly as given, and rendered report HTML is essentially
+ * one enormous line — the card layout emits few newlines. Exim refused a 32,449
+ * character line ("message has lines too long for transport, limit 30000") and
+ * bounced the message to BOTH recipients after the relay had already accepted it,
+ * so the send looked successful and nothing arrived.
+ *
+ * RFC 5321 puts the real limit at 998 octets; this server is unusually generous
+ * and it still was not enough. Encoding removes the question entirely.
+ */
+const b64 = (s) => Buffer.from(s, 'utf8').toString('base64').replace(/(.{76})/g, '$1\r\n');
+
 const send = ({ from, to, subject, html, text }) => new Promise((resolve, reject) => {
   const boundary = 'bext-' + crypto.randomBytes(12).toString('hex');
   const rcpts = to.split(',').map(s => s.trim()).filter(Boolean);
@@ -72,15 +86,15 @@ const send = ({ from, to, subject, html, text }) => new Promise((resolve, reject
     '',
     '--' + boundary,
     'Content-Type: text/plain; charset=utf-8',
-    'Content-Transfer-Encoding: 8bit',
+    'Content-Transfer-Encoding: base64',
     '',
-    text,
+    b64(text),
     '',
     '--' + boundary,
     'Content-Type: text/html; charset=utf-8',
-    'Content-Transfer-Encoding: 8bit',
+    'Content-Transfer-Encoding: base64',
     '',
-    html,
+    b64(html),
     '',
     '--' + boundary + '--',
     '.',

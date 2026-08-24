@@ -25,7 +25,11 @@ const { Pool } = require('pg');
 
 const DAYS = Number(process.argv[2]) || 2;
 const APPLY = process.argv.includes('--apply');
-const BATCH = 12;                       // the deployed workflow's batch size
+// Six, not the workflow's twelve. A twelve-article batch behind a 6.6KB prompt
+// kept returning truncated JSON — "Unexpected end of JSON input" — on four
+// consecutive runs. The workflow gets away with twelve because it retries a whole
+// batch on the next 30-minute tick; a one-shot backfill has no second tick.
+const BATCH = 6;
 const MODEL = 'gemini-3.6-flash';
 const KEY = process.env.GEMINI_API_KEY;
 
@@ -37,6 +41,8 @@ const code = JSON.parse(fs.readFileSync(WF, 'utf8'))
 const m = code.match(/const PROMPT = ("[\s\S]*?");\n/);
 if (!m) { console.error('could not read PROMPT out of the deployed workflow'); process.exit(1); }
 const PROMPT = JSON.parse(m[1]);
+
+let failedBatches = 0;
 
 const scoreBatch = async (rows) => {
   const payload = rows.map(r => ({
@@ -62,8 +68,12 @@ const scoreBatch = async (rows) => {
       }
       return out;
     } catch (e) {
-      if (attempt === 4) { console.error('  batch failed: ' + String(e.message).slice(0, 90)); return new Map(); }
-      await new Promise(r => setTimeout(r, [2000, 8000, 20000][attempt - 1]));
+      if (attempt === 4) {
+        failedBatches++;
+        console.error('\n  batch failed after 4 tries: ' + String(e.message).slice(0, 80));
+        return new Map();
+      }
+      await new Promise(r => setTimeout(r, [3000, 10000, 25000][attempt - 1]));
     }
   }
   return new Map();
@@ -128,6 +138,7 @@ const scoreBatch = async (rows) => {
   } else if (unmatched) {
     console.log('  unmatched      : ' + unmatched + ' (no score returned for these)');
   }
+  if (failedBatches) console.log('  batches lost   : ' + failedBatches + ' (their articles keep their old scores)');
   console.log('  scores changed : ' + moved + ' of ' + rows.length);
   console.log('  above floor ' + floor + ' : ' + inBefore + ' before  ->  ' + inNow + ' after');
 

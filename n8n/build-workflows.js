@@ -60,7 +60,45 @@ const CARD_SRC = fs
   .readFileSync(path.join(__dirname, 'lib', 'meeting-card.js'), 'utf8')
   .replace(/^module\.exports\s*=.*$/m, '');
 
+// The heal rules, minus their export line. Shared verbatim with n8n/self-heal.js
+// so the workflow and the script recognise a failure the same way — preflight
+// R025/R026 assert the ids and actions stay in step.
+const HEAL_RULES_SRC = fs
+  .readFileSync(path.join(__dirname, 'lib', 'heal-rules.js'), 'utf8')
+  .replace(/^module\.exports\s*=.*$/m, '');
+
 const pos = (x, y) => [x, y];
+
+// ─── Heartbeat ───────────────────────────────────────────────────────────────
+//
+// The last node on a workflow's success path, and the only thing that can tell
+// the difference between "n8n is up" and "the 05:00 report actually went out".
+// Kuma alarms on the ping NOT arriving, so this node existing is the assertion.
+//
+// Three deliberate choices:
+//
+//   httpRequest, not a Code node — the Kuma URL is plain http on the internal
+//   docker network and the Code sandbox only allows crypto/url/https/dns. Using
+//   a real node avoids widening NODE_FUNCTION_ALLOW_BUILTIN for a heartbeat.
+//
+//   onError continue — a monitor that can fail its own workflow is worse than
+//   no monitor. If Kuma is down the workflow still finishes; the missing ping is
+//   itself the alarm.
+//
+//   the token comes from $env at runtime, never from this file. A push token in
+//   committed JSON lets anyone fake a healthy heartbeat, which reports all-clear
+//   during an outage. Preflight R027 asserts it.
+const heartbeat = (envKey, x, y) => ({
+  id: 'kuma', name: 'Heartbeat', type: 'n8n-nodes-base.httpRequest',
+  typeVersion: 4.2, position: pos(x, y),
+  onError: 'continueRegularOutput',
+  parameters: {
+    url: `={{ $env.KUMA_PUSH_BASE + "/" + $env.${envKey} }}`,
+    options: { timeout: 5000 },
+    sendQuery: true,
+    queryParameters: { parameters: [{ name: 'status', value: 'up' }, { name: 'msg', value: 'OK' }] },
+  },
+});
 
 // ─── Workflow 1: Source Ingest ───────────────────────────────────────────────
 
@@ -2937,6 +2975,11 @@ return [{ json: {
 `;
 
 const NEWS_POST_CODE = `
+// The Code sandbox withholds URLSearchParams as a global; it has to be
+// destructured from the url builtin or the form-encoded body throws
+// ReferenceError at runtime -- the same fault as R001.
+const { URLSearchParams } = require('url');
+
 // Render the full list to PDF, file it in the channel's own folder, then post the
 // card with a button pointing at it.
 //

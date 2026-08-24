@@ -197,7 +197,7 @@ services:
       # workflow runs hourly and the analysis workflow every 30 minutes.
       EXECUTIONS_DATA_PRUNE: "true"
       EXECUTIONS_DATA_MAX_AGE: 336
-      EXECUTIONS_DATA_SAVE_ON_SUCCESS: none
+      EXECUTIONS_DATA_SAVE_ON_SUCCESS: all
       EXECUTIONS_DATA_SAVE_ON_ERROR: all
     volumes:
       - bext_n8n:/home/node/.n8n
@@ -327,6 +327,49 @@ services:
     networks:
       - bext_internal
 
+  # Ring 0 of docs/SELF-HEALING.md — the thing that notices.
+  #
+  # Two kinds of monitor, and the second is the one that earns its keep:
+  #
+  #   HTTP    is n8n answering, is the dashboard up, is the fetcher on :8080
+  #           alive. Cheap, and catches roughly none of our real failures.
+  #   PUSH    each scheduled workflow pings a URL on success; Kuma alarms when
+  #           the ping does NOT arrive. This is the deadman, and it is the only
+  #           thing here that can see the failure we actually keep having —
+  #           every workflow reading ACTIVE while the scheduler is dead (R024),
+  #           or the 05:00 report simply not going out. "Up" and "working" are
+  #           different questions and only push answers the second one.
+  #
+  # It cannot tell you the host is gone, because it is on the host. Total-host
+  # loss is covered by Hostinger's own monitoring, not by this.
+  uptime-kuma:
+    image: louislam/uptime-kuma:1
+    container_name: bext-kuma
+    restart: always
+    volumes:
+      - bext_kuma:/app/data
+    # Publishes nothing — same as bext-n8n and bext-dashboard. traefik routes to
+    # it on the shared network.
+    networks:
+      - bext_internal
+      - n8n_default
+    # 8 GB host, two clients. Ollama already carries a 6g ceiling because
+    # memory pressure once took SSH and BOTH n8n instances down — the monitor
+    # must never be the thing that causes the outage it is watching for.
+    # Kuma idles near 120 MB; 256m is headroom without being a risk.
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=n8n_default
+      - traefik.http.routers.bext-kuma.rule=Host(`${KUMA_SUBDOMAIN}.${DOMAIN_NAME}`)
+      - traefik.http.routers.bext-kuma.entrypoints=web,websecure
+      - traefik.http.routers.bext-kuma.tls=true
+      - traefik.http.routers.bext-kuma.tls.certresolver=mytlschallenge
+      - traefik.http.services.bext-kuma.loadbalancer.server.port=3001
+
 networks:
   bext_internal:
     driver: bridge
@@ -339,3 +382,4 @@ volumes:
   bext_n8n:
   bext_files:
   bext_ollama:
+  bext_kuma:

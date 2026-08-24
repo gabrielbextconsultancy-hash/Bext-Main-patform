@@ -340,6 +340,135 @@ check('R023', 'exclusion window outlasts discovery, and sends are deduped', () =
   return { ok: true, detail: `exclusion ${exclusionDays}d ≥ discovery ${discoveryDays}d, sends deduped` };
 });
 
+// ── R024 ─ active is not the same as running ────────────────────────────────
+// Every workflow read ACTIVE while nothing had executed for fifteen hours. One
+// flapping IMAP trigger on BEXT — Newsletter Intake reactivated in a loop, and
+// each cycle logged "Deregistered all crons" without re-registering them — so
+// the scheduler was dead for the meeting pipeline, the daily report and the
+// ingest, all of which still reported themselves healthy.
+//
+// The readiness check passed too, because it asked "would this work?" rather
+// than "is it running?". This asks the second question: the newest execution
+// must be younger than one schedule interval plus a margin.
+check('R024', 'the scheduler is firing (by evidence, not by log)', () => {
+  // Deliberately NOT the execution list.
+  //
+  // EXECUTIONS_DATA_SAVE_ON_SUCCESS is `none` by default on this instance, so a
+  // healthy run leaves no record at all. An earlier version of this check read
+  // the execution list, saw a fifteen-hour gap, and reported an outage that had
+  // never happened — while every workflow was running perfectly. That is the same
+  // trap as R015, walked into twice.
+  //
+  // Ask the data the workflows write. Source Ingest runs hourly and inserts
+  // articles; if the newest row is recent, the scheduler is alive whatever the
+  // execution log says.
+  const host = process.env.VPS_HOST;
+  const keyPath = (process.env.VPS_SSH_KEY || '').replace(/^~/, process.env.HOME || process.env.USERPROFILE);
+  if (!host || !keyPath) return { ok: true, detail: 'skipped — no VPS credentials in env' };
+
+  const sql = "SELECT round(extract(epoch from (now()-max(fetched_at)))/60)::int FROM articles;";
+  let out;
+  try {
+    out = execFileSync('ssh', ['-i', keyPath, '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=15',
+      `root@${host}`,
+      `cd /docker/bext && docker compose exec -T postgres psql -U bext -d bext -tAc ${JSON.stringify(sql)}`],
+      { encoding: 'utf8', timeout: 45000 });
+  } catch (e) {
+    return { ok: false, detail: 'could not reach the database: ' + String(e.message).slice(0, 80) };
+  }
+
+  const mins = parseInt(String(out).trim().split('\n').filter(Boolean).pop(), 10);
+  if (!Number.isFinite(mins)) return { ok: false, detail: 'no articles at all' };
+  // Source Ingest is hourly; 150 minutes tolerates one missed run without
+  // tolerating a genuinely stopped scheduler.
+  return mins <= 150
+    ? { ok: true, detail: `newest article ${mins} min ago — ingest is running` }
+    : { ok: false, detail: `newest article ${mins} min ago — the scheduler has stalled` };
+});
+
+// ── R025 ─ the healer may not quietly grow new powers ───────────────────────
+// n8n/lib/heal-rules.js is meant to be appended to often — that is the whole
+// point of ring 3. The danger is that appending a rule is also how someone
+// accidentally grants the healer an action nobody reviewed, or points a restart
+// at the wrong container. So three things are asserted together: every action
+// named by a rule exists, every auto action has an implementation, and the
+// restart allowlist still excludes the containers that must never be restarted.
+check('R025', 'the heal allowlist matches what self-heal.js implements', () => {
+  const { RULES, AUTO_ACTIONS } = require('./lib/heal-rules.js');
+  const src = read('n8n/self-heal.js');
+
+  // Whatever ACTIONS actually defines, read from the source rather than trusted.
+  const implemented = new Set([...src.matchAll(/^\s{2}async (\w+)\(inc\)/gm)].map(m => m[1]));
+  const missing = [...AUTO_ACTIONS].filter(a => !implemented.has(a));
+  if (missing.length) return { ok: false, detail: 'no implementation for ' + missing.join(', ') };
+
+  const ungoverned = RULES.filter(r => r.action !== 'escalate' && !AUTO_ACTIONS.has(r.action));
+  if (ungoverned.length) {
+    return { ok: false, detail: ungoverned.map(r => r.id).join(', ') + ' name an action that is not on the allowlist' };
+  }
+
+  // The three exclusions and why, in one place, so a future edit that "tidies"
+  // them has to argue with this check first. Restarting n8n kills the healer
+  // mid-run; restarting postgres destroys the incident log that says why.
+  const banned = ['bext-n8n', 'bext-postgres', 'bext-ollama'];
+  const listed = (src.match(/const RESTARTABLE = new Set\(\[([^\]]*)\]/) || [])[1] || '';
+  const leaked = banned.filter(b => listed.includes(b));
+  if (leaked.length) return { ok: false, detail: leaked.join(', ') + ' must never be on the restart allowlist' };
+
+  // Both gates, not one. The prefix test alone passes bext-n8n.
+  if (!/\^bext-\[a-z0-9-\]\+\$/.test(src) || !src.includes('RESTARTABLE.has(name)')) {
+    return { ok: false, detail: 'the container guard lost its prefix test or its allowlist test' };
+  }
+
+  const auto = RULES.filter(r => AUTO_ACTIONS.has(r.action)).length;
+  return { ok: true, detail: `${RULES.length} rules, ${auto} auto, ${implemented.size} actions implemented` };
+});
+
+// ── R026 ─ one failure, one id, three files ─────────────────────────────────
+// A heal rule, its preflight check and its REGRESSIONS.md section are the same
+// fact seen three ways. They drift the moment one is renamed, and a healer that
+// posts "R017" for a section that no longer exists is worse than one that says
+// nothing. Rules numbered R1xx are the healer's own operational classes and have
+// no regression entry by design; only the R0xx ids are cross-checked.
+check('R026', 'every heal rule that cites a regression cites a real one', () => {
+  const { RULES } = require('./lib/heal-rules.js');
+  const regressions = read('docs/REGRESSIONS.md');
+  // R002b and R005b exist — the suffix marks a variant of the same failure, and
+  // dropping it silently points the healer at a section that is not there.
+  const cited = RULES.map(r => r.id).filter(id => /^R0\d\d[a-z]?$/.test(id));
+  const orphans = cited.filter(id => !new RegExp(`^## ${id}\\b`, 'm').test(regressions));
+  return orphans.length
+    ? { ok: false, detail: orphans.join(', ') + ' have no section in docs/REGRESSIONS.md' }
+    : { ok: true, detail: `${cited.length} rules cite a documented regression` };
+});
+
+// ── R027 ─ a push token is a secret that lies ───────────────────────────────
+// Worse than an ordinary leaked secret. Anyone holding a Kuma push URL can send
+// a heartbeat, and a faked heartbeat makes the deadman report all-clear during
+// an outage — it does not merely fail open, it actively covers the failure up.
+// Same class as R011, kept separate because the consequence is different.
+check('R027', 'no Kuma push token reaches a committed file', () => {
+  const suspects = ['n8n/workflows', 'flows', 'infra', 'docs'];
+  const hits = [];
+  const walk = dir => {
+    const abs = path.join(ROOT, dir);
+    if (!fs.existsSync(abs)) return;
+    for (const e of fs.readdirSync(abs, { withFileTypes: true })) {
+      const rel = `${dir}/${e.name}`;
+      if (e.isDirectory()) { walk(rel); continue; }
+      if (!/\.(json|ya?ml|md|js)$/.test(e.name)) continue;
+      // A push URL carries a token in the path: /api/push/<token>. The env
+      // reference ${KUMA_PUSH_*} is what SHOULD be there, so it is not a hit.
+      const body = read(rel);
+      if (/\/api\/push\/(?!\$)[A-Za-z0-9]{6,}/.test(body)) hits.push(rel);
+    }
+  };
+  suspects.forEach(walk);
+  return hits.length
+    ? { ok: false, detail: 'push token in ' + hits.join(', ') }
+    : { ok: true, detail: 'push tokens stay in .env' };
+});
+
 check('R012', 'required env is set locally', () => {
   const need = ['MS_TENANT_ID', 'MS_CLIENT_ID', 'MS_CLIENT_SECRET', 'MS_SENDER_UPN',
                 'MEETING_HOSTS', 'TEAMS_MEETING_WEBHOOK_URL', 'N8N_WEBHOOK_CREDENTIAL_ID'];
