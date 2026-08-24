@@ -26,6 +26,7 @@
       }
     },
     {
+      "alwaysOutputData": true,
       "id": "load",
       "name": "Load unanalysed",
       "type": "n8n-nodes-base.postgres",
@@ -82,6 +83,37 @@
         "options": {
           "queryReplacement": "={{ $json.payload }}"
         }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "kuma",
+      "name": "Heartbeat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        620,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "url": "={{ $env.KUMA_PUSH_BASE + \"/\" + $env.KUMA_PUSH_ARTICLE_ANALYSIS }}",
+        "options": {
+          "timeout": 5000
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "status",
+              "value": "up"
+            },
+            {
+              "name": "msg",
+              "value": "OK"
+            }
+          ]
+        }
       }
     }
   ],
@@ -113,6 +145,17 @@
         [
           {
             "node": "Save analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save analysis": {
+      "main": [
+        [
+          {
+            "node": "Heartbeat",
             "type": "main",
             "index": 0
           }

@@ -61,7 +61,8 @@
         "options": {
           "queryReplacement": "={{ JSON.stringify([{ status: $json.ok ? \"up\" : \"down\", detail: $json.detail }]) }}"
         }
-      }
+      },
+      "alwaysOutputData": true
     },
     {
       "id": "gate",
@@ -119,6 +120,36 @@
         "text": "={{ \"The daily Graph check failed.\\n\\n\" + $(\"Check Graph\").first().json.detail + \"\\n\\nMeeting minutes and document filing stay stopped until this is fixed.\\nTroubleshooting: graph/app-registration.md\" }}",
         "options": {}
       }
+    },
+    {
+      "id": "kuma",
+      "name": "Heartbeat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        400,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "url": "={{ $env.KUMA_PUSH_BASE + \"/\" + $env.KUMA_PUSH_GRAPH_HEALTH }}",
+        "options": {
+          "timeout": 5000
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "status",
+              "value": "up"
+            },
+            {
+              "name": "msg",
+              "value": "OK"
+            }
+          ]
+        }
+      }
     }
   ],
   "connections": {
@@ -149,6 +180,11 @@
         [
           {
             "node": "Only when broken",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Heartbeat",
             "type": "main",
             "index": 0
           }

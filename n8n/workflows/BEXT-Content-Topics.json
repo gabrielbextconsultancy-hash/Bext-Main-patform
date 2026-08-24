@@ -1,0 +1,319 @@
+{
+  "name": "BEXT — Content Topics",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Australia/Melbourne"
+  },
+  "nodes": [
+    {
+      "id": "fortnightly",
+      "name": "Fortnightly",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -620,
+        -140
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "10 6 * * 1"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "open",
+      "name": "Open a cycle",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -400,
+        -140
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "0SoqGGqUOqbwYTmJ",
+          "name": "BEXT Postgres"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO content_cycles (window_start, window_end, trigger, status)\nSELECT (current_date - interval '14 days')::date, current_date, 'schedule', 'queued_topics'\nWHERE (extract(week from current_date)::int % 2) = 0\n  AND NOT EXISTS (\n    SELECT 1 FROM content_cycles\n    WHERE trigger = 'schedule' AND created_at > now() - interval '10 days')",
+        "options": {}
+      }
+    },
+    {
+      "id": "hook",
+      "name": "Cycle request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -620,
+        40
+      ],
+      "webhookId": "a4d2f8c1-6b3e-4a90-9c22-7f10e5b8d234",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "content-topics",
+        "authentication": "headerAuth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "LRKNYr1yNB1VI1y4",
+          "name": "BEXT Webhook Auth"
+        }
+      }
+    },
+    {
+      "id": "poll",
+      "name": "Every 3 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -620,
+        200
+      ],
+      "alwaysOutputData": true,
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "claim",
+      "name": "Claim a cycle",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -360,
+        40
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "0SoqGGqUOqbwYTmJ",
+          "name": "BEXT Postgres"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE content_cycles SET status = 'scanning', started_at = now()\nWHERE id = (\n  SELECT id FROM content_cycles\n  WHERE status = 'queued_topics'\n  ORDER BY created_at\n  FOR UPDATE SKIP LOCKED\n  LIMIT 1)\nRETURNING id, window_start, window_end",
+        "options": {}
+      }
+    },
+    {
+      "id": "load",
+      "name": "Load the window",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -120,
+        40
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "0SoqGGqUOqbwYTmJ",
+          "name": "BEXT Postgres"
+        }
+      },
+      "alwaysOutputData": true,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH c AS (\n  SELECT id, window_start, window_end FROM content_cycles WHERE id = $1\n)\nSELECT c.id AS __cycle_id, a.id, a.title, a.url, a.published_at,\n       s.name AS source_name, an.summary, an.relevance_score, an.topics\nFROM c\nJOIN articles a ON a.report_eligible\n AND coalesce(a.published_at, a.fetched_at) >= c.window_start\n AND coalesce(a.published_at, a.fetched_at) < c.window_end + 1\nJOIN sources s ON s.id = a.source_id\nJOIN article_analysis an ON an.article_id = a.id AND an.relevance_score >= 50\nORDER BY an.relevance_score DESC, coalesce(a.published_at, a.fetched_at) DESC\nLIMIT 60",
+        "options": {
+          "queryReplacement": "={{ $json.id }}"
+        }
+      }
+    },
+    {
+      "id": "shape",
+      "name": "Carry the cycle",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        100,
+        40
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "const claim = $('Claim a cycle').first().json;\nif (!claim || !claim.id) return [];\nconst rows = $input.all().map(i => i.json).filter(r => r && r.id);\nif (!rows.length) return [{ json: { __cycle: { id: claim.id } } }];\nconst out = rows.map(r => { const c = Object.assign({}, r); delete c.__cycle_id; return { json: c }; });\nout[0].json.__cycle = { id: claim.id };\nreturn out;"
+      }
+    },
+    {
+      "id": "rank",
+      "name": "Rank three topics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        40
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\nconst helpers = this.helpers;\n\nconst GEMINI_MODEL = 'gemini-3.6-flash';\nconst GEMINI_KEY = $env.GEMINI_API_KEY;\nconst geminiJSON = async (prompt, helpers) => {\n  const TRANSIENT = /ECONNRESET|ETIMEDOUT|ECONNREFUSED|EAI_AGAIN|socket hang up|network|aborted/i;\n  let res, lastErr;\n  for (let attempt = 1; attempt <= 4; attempt++) {\n    try {\n      res = await helpers.httpRequest({\n        method: 'POST',\n        url: 'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent?key=' + GEMINI_KEY,\n        json: true, timeout: 180000,\n        body: {\n          contents: [{ parts: [{ text: prompt }] }],\n          generationConfig: { temperature: 0.4, responseMimeType: 'application/json' },\n        },\n      });\n      break;\n    } catch (e) {\n      lastErr = e;\n      const st = e && (e.statusCode || (e.response && e.response.statusCode));\n      const retryable = st === 429 || (st >= 500 && st < 600)\n        || (!st && TRANSIENT.test(String((e && (e.message || e.code)) || '')));\n      if (attempt === 4 || !retryable) throw e;\n      await new Promise(r => setTimeout(r, [2000, 8000, 20000][attempt - 1]));\n    }\n  }\n  if (!res) throw lastErr;\n  const raw = (res && res.candidates && res.candidates[0] && res.candidates[0].content\n    && res.candidates[0].content.parts && res.candidates[0].content.parts[0]\n    && res.candidates[0].content.parts[0].text) || '{}';\n  try { return JSON.parse(raw); }\n  catch (e) { throw new Error('Gemini returned unparseable JSON: ' + String(raw).slice(0, 200)); }\n};\n\n// The claimed cycle rides through on the first item; the articles are the rest.\nconst all = $input.all().map(i => i.json);\nconst cycle = all[0] && all[0].__cycle ? all[0].__cycle : (all[0] || {});\nconst articles = all.filter(a => a && a.id).map(a => ({\n  id: a.id, title: a.title, url: a.url, source: a.source_name,\n  score: a.relevance_score, summary: a.summary,\n  topics: a.topics, published_at: a.published_at,\n}));\n\nif (!articles.length) {\n  // Nothing in the window. Not an error, a quiet fortnight, but the cycle cannot\n  // produce topics, so it is marked and the human is spared an empty page.\n  return [{ json: { cycle_id: cycle.id, empty: true, topics: '[]', topic_count: 0,\n                    status: 'failed', error: 'No eligible articles in the 14-day window.' } }];\n}\n\nconst catalogue = articles.map(a =>\n  '[' + a.id + '] (' + (a.source || 'source') + ', score ' + (a.score == null ? '?' : a.score) + ') '\n  + (a.title || '') + ' :: ' + String(a.summary || '').slice(0, 300)\n).join('\\n');\n\nconst out = await geminiJSON(\"You are BEXT Consultancy planning LinkedIn content. Below are the news items this pipeline scored as relevant to an Australian commercial-buildings energy and sustainability consultancy over the past fortnight, each with its source and relevance score.\\n\\nPropose exactly THREE topic options for a single LinkedIn post, ranked, best first. Each option must:\\n  - draw on one or more of the items below, by their id\\n  - say, in a sentence, why it is worth BEXT being seen to have a view on it\\n  - name the angle BEXT would take, distinct from what the articles merely report\\n  - never rely on a fact that is not in the supplied items\\n\\nRank by what a commercial building owner could act on: solar and PV first, then building performance and compliance, then the wider energy market.\\n\\nReturn JSON only: { \\\"topics\\\": [ { \\\"rank\\\": 1, \\\"title\\\": \\\"...\\\", \\\"rationale\\\": \\\"...\\\", \\\"angle\\\": \\\"...\\\", \\\"article_ids\\\": [12, 44], \\\"score\\\": 82 }, ... ] }.\" + '\\n\\nITEMS:\\n' + catalogue, helpers);\nconst valid = new Set(articles.map(a => a.id));\nconst topics = (out.topics || []).slice(0, 3).map((t, i) => ({\n  rank: t.rank || (i + 1),\n  title: String(t.title || '').slice(0, 300),\n  rationale: String(t.rationale || '').slice(0, 1000),\n  angle: String(t.angle || '').slice(0, 500),\n  // Keep only ids the model was actually given, so a hallucinated id cannot\n  // point the fact-checker at an article that was never in the window.\n  article_ids: (t.article_ids || []).filter(id => valid.has(id)),\n  score: typeof t.score === 'number' ? Math.max(0, Math.min(100, t.score)) : null,\n})).filter(t => t.article_ids.length);\n\nif (!topics.length) {\n  return [{ json: { cycle_id: cycle.id, empty: true, topics: '[]', topic_count: 0,\n                    status: 'failed', error: 'The model proposed no topic grounded in the supplied sources.' } }];\n}\nreturn [{ json: { cycle_id: cycle.id, topics: JSON.stringify(topics), topic_count: topics.length, status: 'topics_ready' } }];\n"
+      }
+    },
+    {
+      "id": "save",
+      "name": "Save topics",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        560,
+        40
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "0SoqGGqUOqbwYTmJ",
+          "name": "BEXT Postgres"
+        }
+      },
+      "alwaysOutputData": true,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH ins AS (\n  INSERT INTO content_topics (cycle_id, rank, title, rationale, angle, article_ids, score)\n  SELECT $2::bigint, t.rank, t.title, t.rationale, t.angle, t.article_ids, t.score\n  FROM json_to_recordset($1::json) AS t(\n    rank smallint, title text, rationale text, angle text, article_ids bigint[], score int)\n  RETURNING 1\n)\nUPDATE content_cycles SET\n  status = $3::content_cycle_status,\n  error = nullif($4, ''),\n  topics_at = now()\nWHERE id = $2::bigint\nRETURNING id, status",
+        "options": {
+          "queryReplacement": "={{ $json.topics }},{{ $json.cycle_id }},{{ $json.status }},{{ $json.error || \"\" }}"
+        }
+      }
+    },
+    {
+      "id": "kuma",
+      "name": "Heartbeat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -360,
+        220
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "url": "={{ $env.KUMA_PUSH_BASE + \"/\" + $env.KUMA_PUSH_CONTENT_TOPICS }}",
+        "options": {
+          "timeout": 5000
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "status",
+              "value": "up"
+            },
+            {
+              "name": "msg",
+              "value": "OK"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Fortnightly": {
+      "main": [
+        [
+          {
+            "node": "Open a cycle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Open a cycle": {
+      "main": [
+        [
+          {
+            "node": "Claim a cycle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cycle request": {
+      "main": [
+        [
+          {
+            "node": "Claim a cycle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Every 3 minutes": {
+      "main": [
+        [
+          {
+            "node": "Claim a cycle",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Heartbeat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim a cycle": {
+      "main": [
+        [
+          {
+            "node": "Load the window",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load the window": {
+      "main": [
+        [
+          {
+            "node": "Carry the cycle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Carry the cycle": {
+      "main": [
+        [
+          {
+            "node": "Rank three topics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rank three topics": {
+      "main": [
+        [
+          {
+            "node": "Save topics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

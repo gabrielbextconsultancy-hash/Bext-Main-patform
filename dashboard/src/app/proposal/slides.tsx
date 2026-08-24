@@ -408,6 +408,151 @@ export const SLIDES: Slide[] = [
 
   // 12 ────────────────────────────────────────────────────────────────
   {
+    section: 'Content',
+    kicker: 'Review area 6 · LinkedIn blog generation',
+    title: 'A fortnight of industry news, turned into one post',
+    lede:
+      'The daily report already reads 68 sources and ranks what matters. That judgement ' +
+      'currently ends with the email. This is where it goes next.',
+    body: (
+      <Cols n={2}>
+        <Box title="What each fortnight produces" accent="b">
+          <ul className="list-disc space-y-1 pl-4">
+            <li>A scroll of every viable source from the previous 14 days</li>
+            <li>Three ranked topic options, each with its supporting sources</li>
+            <li>Two LinkedIn-ready drafts, one of them recommended</li>
+            <li>A visual concept, a restrained call to action, a destination</li>
+            <li>A fact-check record naming the source of every material claim</li>
+            <li>A publication-ready final copy</li>
+            <li>A performance entry once it has been published</li>
+          </ul>
+        </Box>
+        <Box title="What it asks of you" accent="c">
+          Five to ten minutes a fortnight, at a single point of entry: pick the topic, add the
+          human perspective, make minor edits, approve, publish.
+          <p className="mt-2">
+            Everything else — reading the fortnight, ranking the options, drafting, checking the
+            claims — happens before you open the page. The system never publishes on its own.
+          </p>
+        </Box>
+      </Cols>
+    ),
+  },
+
+  // 13 ────────────────────────────────────────────────────────────────
+  {
+    section: 'Content',
+    kicker: 'The flow',
+    title: 'Eight steps, three of them yours',
+    lede: 'Machine work is front-loaded so the human work is a decision, not a task.',
+    body: (
+      <div className="space-y-4">
+        <Flow>
+          <Step label="1 · scan" text="14 days of ranked sources, already fetched and scored" who="sys" />
+          <Step label="2 · rank" text="Three topic options, each carrying its evidence" who="ai" />
+          <Step label="3 · select" text="You pick one and say what BEXT thinks" who="you" />
+          <Step label="4 · draft" text="Two variants, one recommended, with a visual concept" who="ai" />
+        </Flow>
+        <Flow>
+          <Step label="5 · verify" text="Every material claim matched back to a source" who="ai" />
+          <Step label="6 · approve" text="Minor edits, then a publication-ready copy" who="you" />
+          <Step label="7 · publish" text="You post it. Nothing posts itself" who="you" />
+          <Step label="8 · record" text="The performance entry, against the register" who="sys" />
+        </Flow>
+        <Cols n={3}>
+          <Box title="Where the material comes from" accent="a">
+            The same pipeline as the daily report. No second collection, no new sources to
+            maintain, and anything already in the sheet is already eligible here.
+          </Box>
+          <Box title="Why two drafts, not five" accent="b">
+            The brief asks for a choice with a recommendation. Five variants is a shortlist to work
+            through, and working through it is the cost the fortnightly budget cannot carry.
+          </Box>
+          <Box title="Why the fact-check step exists" accent="c">
+            A model asked about a rebate will produce a figure whether or not one was in the source,
+            and it looks equally confident either way. Every claim is traced back or flagged.
+          </Box>
+        </Cols>
+      </div>
+    ),
+  },
+
+  // 14 ────────────────────────────────────────────────────────────────
+  {
+    section: 'Content',
+    kicker: 'The dashboard',
+    title: 'One page, four states',
+    lede: 'Content Generation sits in the platform sidebar, next to the daily report it reads.',
+    body: (
+      <Table
+        head={['Screen', 'What you see', 'What you do']}
+        rows={[
+          [
+            'Daily news',
+            'Every daily report, newest first, each opening to the articles and links it carried',
+            <>Read, then <Tag key="1" tone="b">Repurpose this report</Tag></>,
+          ],
+          [
+            'Topic options',
+            'Three ranked cards: the angle, why it earns BEXT’s name, and the sources behind it',
+            'Pick one. Add your perspective in a paragraph',
+          ],
+          [
+            'Drafts',
+            'Two variants side by side, one marked recommended. Hook, body, visual concept, CTA, destination, character count',
+            'Edit inline. Approve one',
+          ],
+          [
+            'Fact check',
+            'Each material claim, the article it came from, and the sentence that carries it. Anything unmatched is marked',
+            'Resolve or remove what is unmatched',
+          ],
+          [
+            'Register',
+            'What was published, when, and how it performed',
+            'Enter the numbers once, after the fact',
+          ],
+        ]}
+      />
+    ),
+  },
+
+  // 15 ────────────────────────────────────────────────────────────────
+  {
+    section: 'Content',
+    kicker: 'Governance',
+    title: 'Automated up to the point of judgement',
+    body: (
+      <Cols n={2}>
+        <Box title="Runs on a schedule" accent="a">
+          <ul className="list-disc space-y-1 pl-4">
+            <li>The fortnightly scan opens a cycle without being asked</li>
+            <li>Topic ranking and drafting run as soon as there is work</li>
+            <li>The claim check runs on every draft, every time</li>
+            <li>A missed run raises an alert, the same as every other workflow here</li>
+          </ul>
+          <p className="mt-2">
+            You can also start a cycle by hand from any daily report, without waiting for the
+            fortnight.
+          </p>
+        </Box>
+        <Box title="Waits for a person" accent="c">
+          <ul className="list-disc space-y-1 pl-4">
+            <li>Which topic, and what BEXT thinks about it</li>
+            <li>Which variant, and any edits to it</li>
+            <li>Whether it is published at all</li>
+          </ul>
+          <p className="mt-2">
+            Publishing is manual by design for launch. Automatic posting is a later switch, and it
+            changes nothing upstream of the approval.
+          </p>
+        </Box>
+      </Cols>
+    ),
+  },
+
+  // 16 ────────────────────────────────────────────────────────────────
+  {
     section: 'Environment',
     kicker: 'Review area 9 · what is running today',
     title: 'Development environment, and what BEXT will own',
@@ -474,7 +619,7 @@ export const SLIDES: Slide[] = [
     ),
   },
 
-  // 12 ────────────────────────────────────────────────────────────────
+  // 17 ────────────────────────────────────────────────────────────────
   {
     section: 'Dependencies',
     kicker: 'Deliverable 4',
@@ -498,7 +643,7 @@ export const SLIDES: Slide[] = [
     ),
   },
 
-  // 13 ────────────────────────────────────────────────────────────────
+  // 18 ────────────────────────────────────────────────────────────────
   {
     section: 'Delivery',
     kicker: 'Dependencies · please read',
@@ -573,7 +718,7 @@ export const SLIDES: Slide[] = [
     ),
   },
 
-  // 14 ────────────────────────────────────────────────────────────────
+  // 19 ────────────────────────────────────────────────────────────────
   {
     section: 'Delivery',
     kicker: 'Delivery',
@@ -615,7 +760,7 @@ export const SLIDES: Slide[] = [
     ),
   },
 
-  // 14 ────────────────────────────────────────────────────────────────
+  // 20 ────────────────────────────────────────────────────────────────
   {
     section: 'Close',
     kicker: 'Honest assessment',
@@ -643,7 +788,7 @@ export const SLIDES: Slide[] = [
     ),
   },
 
-  // 15 ────────────────────────────────────────────────────────────────
+  // 21 ────────────────────────────────────────────────────────────────
   {
     section: 'Close',
     kicker: 'In one line',

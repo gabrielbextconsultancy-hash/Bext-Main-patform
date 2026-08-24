@@ -12,6 +12,7 @@ the reason is given, because the reason is what stops it being "fixed" back to b
 host          187.127.213.243   (srv1866850)
 compose        /docker/bext     project name: bext
 containers     bext-n8n · bext-postgres · bext-qdrant · bext-fetcher · bext-dashboard
+               bext-scrapling · bext-api · bext-ollama · bext-kuma
 ssh            ssh -i ~/.ssh/pf-nfac-hostinger root@187.127.213.243
 ```
 
@@ -31,6 +32,17 @@ database. The fetcher on 8080 must be up or document rendering fails with a conn
 looks like a code bug.
 
 Public: dashboard `https://bext.dev-environment.site` · n8n `https://bext-n8n.srv1866850.hstgr.cloud`.
+Monitoring: `bext-kuma` on `${KUMA_SUBDOMAIN}.${DOMAIN_NAME}`. It publishes no ports — traefik routes it,
+same as n8n and the dashboard.
+
+**Three containers must never be restarted by the healer**, and `n8n/self-heal.js` refuses them:
+`bext-n8n` (restarting it kills the healer mid-run), `bext-postgres` (it holds the incident log that
+says why), `bext-ollama` (slow to warm, so a restart looks like a fix and is a quiet outage).
+Preflight R025 fails the build if any of them reaches the allowlist. See `docs/SELF-HEALING.md`.
+
+Memory is the constraint that bites here: 8 GB, two clients. Ollama already carries a 6g ceiling
+because memory pressure once took SSH and BOTH n8n instances down. Kuma is capped at 256m for the
+same reason — the monitor must never cause the outage it is watching for.
 The dashboard reads Postgres directly from server components, so **new data appears without a deploy**.
 
 ---

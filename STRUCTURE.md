@@ -17,6 +17,8 @@ The repo is the source of truth — never the n8n UI.
 | `docs/` | Deliverable drafts, runbook (`05-runbook.md`), `SETUP-CHECKLIST.md` (manual human steps) |
 | `deliverables/` | Client-facing PDFs |
 | `api/`, `fetcher/`, `infra/` | Support code and infra config |
+| `n8n/preflight.js` | Every failure already paid for, as an assertion. Run before assuming anything works |
+| `n8n/self-heal.js` + `n8n/lib/heal-rules.js` | The healer, and the rules it recognises. **Read `docs/SELF-HEALING.md` before changing what it may do** |
 
 ## Engagements + dates
 
@@ -24,12 +26,14 @@ The repo is the source of truth — never the n8n UI.
 |---|---|---|---|---|
 | A — Industry Daily Report | 11 Aug ✓ | — | 18 Aug | Pipeline live: `BEXT — Source Ingest` / `Article Analysis` / `Daily Report` (05:00 AEST) |
 | B — Business Structure Efficiency | 11 Aug ✓ (proposal live) | 25 Aug | 8 Sep | Assessment drafted; zero integration code yet |
+| C — LinkedIn Blog Generation | — | — | — | Fortnightly: news feed → 3 ranked topics → 2 drafts → human approval → post. Engine built: `BEXT — Content Topics` / `Content Drafts` / `LinkedIn Publish`, craft lib in `n8n/lib/linkedin/`. Dashboard `/content` pending. Brief PDF (18 Aug) not yet ingested |
 
 Status data lives in the DB (`milestones`, `deliverables`); the dashboard renders it. Don't hardcode status in the UI.
 
 ## Hosting
 
 - Hostinger VPS `srv1866850`, docker project **`bext`** at `/docker/bext` (n8n 2.32.6 Community, Postgres 16, Qdrant, traefik + Let's Encrypt).
+- Monitoring: `bext-kuma` (Uptime Kuma) in the same project. HTTP monitors plus one **push** monitor per scheduled workflow — the push ones are what catch a workflow that is active and not running (R024).
 - Public: dashboard `https://bext.dev-environment.site` (proposal deck at `/proposal`, no auth, noindex); n8n `https://bext-n8n.srv1866850.hstgr.cloud`.
 - Postgres + Qdrant bind loopback only. `N8N_ENCRYPTION_KEY` in `.env` is irreplaceable — keep backed up.
 - **Never touch docker project `n8n` (Premier Fitness)** on the same VPS.

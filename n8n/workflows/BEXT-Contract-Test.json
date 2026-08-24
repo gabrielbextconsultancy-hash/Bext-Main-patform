@@ -1,0 +1,133 @@
+{
+  "name": "BEXT — Contract Test",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Australia/Melbourne"
+  },
+  "nodes": [
+    {
+      "id": "trigger",
+      "name": "Daily 02:00 AEST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -400,
+        0
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 2 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "assert",
+      "name": "Assert contracts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -180,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// This node names URLSearchParams and URL as data — they are the two symbols it\n// hunts for in everyone else's code. R001 cannot tell a mention from a use, and\n// that is the right bias for a check whose job is catching this class: better it\n// insists here, where the require costs nothing, than let a real one through.\nconst { URLSearchParams, URL } = require('url');\n\nconst base = $env.N8N_URL.replace(/\\/+$/, '');\nconst key = $env.N8N_API_KEY;\nif (!key) throw new Error('N8N_API_KEY is not set in the container');\n\nconst list = await (await fetch(base + '/api/v1/workflows?limit=100', {\n  headers: { 'X-N8N-API-KEY': key },\n})).json();\n\nconst failures = [];\n\n// 1 — the config the container actually has, not the config we believe it has.\nconst REQUIRED = ['MEETING_HOSTS', 'GEMINI_API_KEY', 'TEAMS_DAILY_WEBHOOK_URL',\n                  'KUMA_PUSH_BASE', 'N8N_API_KEY'];\nfor (const k of REQUIRED) {\n  if (!$env[k]) failures.push('env ' + k + ' is empty INSIDE the container (R014)');\n}\n\n// 2 — every Code node still parses in this sandbox, on this n8n version.\n// new Function throws on a syntax error without running a line of it.\nfor (const w of (list.data || [])) {\n  if (w.name === 'BEXT — Contract Test') continue;\n  for (const n of (w.nodes || [])) {\n    const code = n.parameters && n.parameters.jsCode;\n    if (!code) continue;\n    try {\n      new Function('return (async () => {' + code + '})');\n    } catch (err) {\n      failures.push(w.name + ' / ' + n.name + ' does not parse: ' + err.message);\n    }\n    // 3 — the two symbols the sandbox withholds. Using either without\n    // destructuring it from 'url' is R001/R002b, and it only shows at runtime.\n    for (const sym of ['URLSearchParams', 'URL']) {\n      const used = new RegExp('\\\\bnew ' + sym + '\\\\b|\\\\b' + sym + '\\\\s*\\\\(').test(code);\n      const bound = new RegExp('\\\\{[^}]*\\\\b' + sym + '\\\\b[^}]*\\\\}\\\\s*=\\\\s*require\\\\(.url.\\\\)').test(code);\n      if (used && !bound) failures.push(w.name + ' / ' + n.name + ' uses ' + sym + ' unbound (R001/R002b)');\n    }\n  }\n}\n\n// 4 — every scheduled workflow still carries its heartbeat. Losing one is\n// silent: the workflow keeps working and the deadman stops being a deadman.\nfor (const w of (list.data || [])) {\n  const scheduled = (w.nodes || []).some(n => n.type === 'n8n-nodes-base.scheduleTrigger');\n  if (!scheduled) continue;\n  const beats = (w.nodes || []).some(n => n.name === 'Heartbeat');\n  if (!beats) failures.push(w.name + ' is scheduled but has no Heartbeat node');\n}\n\nreturn [{ json: {\n  ok: failures.length === 0,\n  checked: (list.data || []).length,\n  failures: failures,\n  detail: failures.length ? failures.join(' | ').slice(0, 900) : 'all contracts hold',\n} }];\n"
+      }
+    },
+    {
+      "id": "record",
+      "name": "Record result",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        60,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "0SoqGGqUOqbwYTmJ",
+          "name": "BEXT Postgres"
+        }
+      },
+      "alwaysOutputData": true,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO integration_health (service, status, detail)\nVALUES ('contract-test', ($1::text)::health_status, $2::text)",
+        "options": {
+          "queryReplacement": "={{ $json.ok ? \"up\" : \"down\" }},={{ $json.detail }}"
+        }
+      }
+    },
+    {
+      "id": "kuma",
+      "name": "Heartbeat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        300,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "url": "={{ $env.KUMA_PUSH_BASE + \"/\" + $env.KUMA_PUSH_CONTRACT_TEST }}",
+        "options": {
+          "timeout": 5000
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "status",
+              "value": "up"
+            },
+            {
+              "name": "msg",
+              "value": "OK"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily 02:00 AEST": {
+      "main": [
+        [
+          {
+            "node": "Assert contracts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assert contracts": {
+      "main": [
+        [
+          {
+            "node": "Record result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record result": {
+      "main": [
+        [
+          {
+            "node": "Heartbeat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

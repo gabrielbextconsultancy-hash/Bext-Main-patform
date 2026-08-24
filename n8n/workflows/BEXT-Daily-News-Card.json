@@ -93,6 +93,37 @@
         "options": {
           "queryReplacement": "={{ JSON.stringify([{ status: $json.ok ? \"up\" : \"down\", detail: $json.detail }]) }}"
         }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "kuma",
+      "name": "Heartbeat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        840,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "url": "={{ $env.KUMA_PUSH_BASE + \"/\" + $env.KUMA_PUSH_DAILY_NEWS_CARD }}",
+        "options": {
+          "timeout": 5000
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "status",
+              "value": "up"
+            },
+            {
+              "name": "msg",
+              "value": "OK"
+            }
+          ]
+        }
       }
     }
   ],
@@ -135,6 +166,17 @@
         [
           {
             "node": "Record result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record result": {
+      "main": [
+        [
+          {
+            "node": "Heartbeat",
             "type": "main",
             "index": 0
           }

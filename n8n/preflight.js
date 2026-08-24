@@ -469,6 +469,49 @@ check('R027', 'no Kuma push token reaches a committed file', () => {
     : { ok: true, detail: 'push tokens stay in .env' };
 });
 
+// ── R028 ─ the deadman must not be conditional ──────────────────────────────
+// Two ways a heartbeat quietly stops being a heartbeat, both of which leave the
+// workflow working and the monitoring dead:
+//
+//   it is missing — a new scheduled workflow shipped without one. Fatal at build
+//   time in withHeartbeat(), asserted here too because the exported JSON is what
+//   actually deploys.
+//
+//   it hangs off a branch. Graph Health ends `Record health` -> IF -> `Alert by
+//   email`; anchoring on the terminal node would ping ONLY when Graph is broken.
+//   A deadman wired behind an IF is inverted, not merely weaker.
+check('R028', 'every scheduled workflow has an unconditional heartbeat', () => {
+  const problems = [];
+  for (const f of fs.readdirSync(path.join(ROOT, 'n8n/workflows'))) {
+    if (!f.endsWith('.json')) continue;
+    const wf = JSON.parse(read(`n8n/workflows/${f}`));
+    if (!(wf.nodes || []).some(n => n.type === 'n8n-nodes-base.scheduleTrigger')) continue;
+
+    const beat = (wf.nodes || []).find(n => n.name === 'Heartbeat');
+    if (!beat) { problems.push(`${f} is scheduled with no Heartbeat`); continue; }
+
+    // A monitor that can fail the workflow it monitors is worse than none.
+    if (beat.onError !== 'continueRegularOutput') {
+      problems.push(`${f}:Heartbeat can fail its own workflow`);
+    }
+
+    const anchor = Object.keys(wf.connections || {})
+      .find(src => (wf.connections[src].main || []).flat().some(c => c && c.node === 'Heartbeat'));
+    if (!anchor) { problems.push(`${f}:Heartbeat is not connected to anything`); continue; }
+
+    const anchorNode = (wf.nodes || []).find(n => n.name === anchor);
+    if (anchorNode && /^n8n-nodes-base\.(if|switch|filter)$/.test(anchorNode.type)) {
+      problems.push(`${f}:Heartbeat hangs off ${anchor}, a branch — it would only fire on one outcome`);
+    }
+    // Reaching an empty result set must not silence it (R015 again).
+    if (anchorNode && !anchorNode.alwaysOutputData) {
+      problems.push(`${f}:${anchor} can emit nothing, which mutes the heartbeat on a quiet cycle`);
+    }
+  }
+  return problems.length ? { ok: false, detail: problems.join('; ') }
+                         : { ok: true, detail: 'every schedule has a deadman that always fires' };
+});
+
 check('R012', 'required env is set locally', () => {
   const need = ['MS_TENANT_ID', 'MS_CLIENT_ID', 'MS_CLIENT_SECRET', 'MS_SENDER_UPN',
                 'MEETING_HOSTS', 'TEAMS_MEETING_WEBHOOK_URL', 'N8N_WEBHOOK_CREDENTIAL_ID'];

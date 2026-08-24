@@ -14,6 +14,21 @@ node n8n/preflight.js --json   # for an agent
 
 Exit 0 clean, 1 on any regression. Read-only — safe to run any time.
 
+Since 24 Aug the rule has a third limb. A diagnosed failure now gets:
+
+  1. a section here,
+  2. a check in `n8n/preflight.js`,
+  3. a rule in `n8n/lib/heal-rules.js` — the same failure as a runtime matcher,
+     so the healer recognises at 03:00 what you recognise instantly.
+
+Use the SAME id in all three. Preflight R026 fails the build if a heal rule cites
+a section that is not here — it caught exactly that on its first run.
+
+Adding a rule does not grant the healer a new power: `AUTO_ACTIONS` is a separate
+list and R025 fails the build if a rule names an action that is not on it. A rule
+whose fix is a code change gets `action: 'escalate'` and a `hint`, which is what
+the Teams post quotes. See `docs/SELF-HEALING.md`.
+
 ---
 
 ## R001 — `URLSearchParams is not defined`

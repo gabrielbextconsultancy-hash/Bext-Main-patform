@@ -443,3 +443,197 @@ export const getMeetingReadiness = async () => {
   );
   return rows?.[0] ?? null;
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Engagement C — content generation for LinkedIn
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type CycleStatus =
+  | 'queued_topics' | 'scanning' | 'topics_ready'
+  | 'queued_drafts' | 'drafting' | 'drafts_ready'
+  | 'approved' | 'published' | 'failed' | 'abandoned';
+
+export interface CycleRow {
+  id: number;
+  window_start: string;
+  window_end: string;
+  trigger: 'schedule' | 'manual';
+  status: CycleStatus;
+  selected_topic_id: number | null;
+  human_perspective: string | null;
+  error: string | null;
+  created_at: string;
+  topic_count: number;
+  draft_count: number;
+}
+
+/** Every cycle, newest first — the hub's activity list. */
+export const getCycles = () =>
+  tryQuery<CycleRow>(
+    `SELECT c.id, c.window_start::text, c.window_end::text, c.trigger, c.status::text,
+            c.selected_topic_id, c.human_perspective, c.error, c.created_at::text,
+            (SELECT count(*)::int FROM content_topics t WHERE t.cycle_id = c.id)  AS topic_count,
+            (SELECT count(*)::int FROM linkedin_drafts d WHERE d.cycle_id = c.id) AS draft_count
+       FROM content_cycles c
+      ORDER BY c.created_at DESC
+      LIMIT 60`
+  );
+
+export const getCycle = async (id: number) => {
+  const rows = await tryQuery<CycleRow>(
+    `SELECT c.id, c.window_start::text, c.window_end::text, c.trigger, c.status::text,
+            c.selected_topic_id, c.human_perspective, c.error, c.created_at::text,
+            (SELECT count(*)::int FROM content_topics t WHERE t.cycle_id = c.id)  AS topic_count,
+            (SELECT count(*)::int FROM linkedin_drafts d WHERE d.cycle_id = c.id) AS draft_count
+       FROM content_cycles c WHERE c.id = $1`,
+    [id]
+  );
+  return rows?.[0] ?? null;
+};
+
+export interface TopicRow {
+  id: number;
+  cycle_id: number;
+  rank: number;
+  title: string;
+  rationale: string;
+  angle: string | null;
+  article_ids: number[];
+  score: number | null;
+  sources: { id: number; title: string; url: string; source: string }[];
+}
+
+/** A cycle's three ranked topics, each with its supporting sources resolved. */
+export const getCycleTopics = (cycleId: number) =>
+  tryQuery<TopicRow>(
+    `SELECT t.id, t.cycle_id, t.rank, t.title, t.rationale, t.angle, t.article_ids, t.score,
+            coalesce(
+              (SELECT json_agg(json_build_object('id', a.id, 'title', a.title, 'url', a.url, 'source', s.name)
+                               ORDER BY a.id)
+                 FROM articles a JOIN sources s ON s.id = a.source_id
+                WHERE a.id = ANY(t.article_ids)),
+              '[]'::json) AS sources
+       FROM content_topics t
+      WHERE t.cycle_id = $1
+      ORDER BY t.rank`,
+    [cycleId]
+  );
+
+export interface DraftRow {
+  id: number;
+  cycle_id: number;
+  variant: 'A' | 'B';
+  recommended: boolean;
+  formula: string;
+  goal: string;
+  hook: string;
+  body: string;
+  char_count: number;
+  hashtags: string[];
+  visual_concept: string | null;
+  cta: string | null;
+  destination_url: string | null;
+  audit: { blockers?: { rule: string; detail: string }[]; warnings?: { rule: string; detail: string }[] };
+  status: 'draft' | 'approved' | 'published' | 'rejected' | 'failed';
+  final_copy: string | null;
+  post_at: string | null;
+  post_url: string | null;
+  published_at: string | null;
+  error: string | null;
+  claims: { id: number; claim: string; verdict: string; source_url: string | null; source_quote: string | null }[];
+}
+
+/** A cycle's drafts, recommended first, each with its fact-check claims. */
+export const getCycleDrafts = (cycleId: number) =>
+  tryQuery<DraftRow>(
+    `SELECT d.id, d.cycle_id, d.variant, d.recommended, d.formula, d.goal, d.hook, d.body,
+            d.char_count, d.hashtags, d.visual_concept, d.cta, d.destination_url, d.audit,
+            d.status::text, d.final_copy, d.post_at::text, d.post_url, d.published_at::text, d.error,
+            coalesce(
+              (SELECT json_agg(json_build_object('id', cc.id, 'claim', cc.claim, 'verdict', cc.verdict,
+                                                 'source_url', cc.source_url, 'source_quote', cc.source_quote)
+                               ORDER BY cc.id)
+                 FROM content_claims cc WHERE cc.draft_id = d.id),
+              '[]'::json) AS claims
+       FROM linkedin_drafts d
+      WHERE d.cycle_id = $1
+      ORDER BY d.recommended DESC, d.variant`,
+    [cycleId]
+  );
+
+export interface PublishedRow {
+  id: number;
+  cycle_id: number;
+  variant: string;
+  status: string;
+  post_at: string | null;
+  published_at: string | null;
+  post_url: string | null;
+  topic_title: string | null;
+  observations: number;
+}
+
+/** Approved and published posts — the schedule and history view. */
+export const getPublishedPosts = () =>
+  tryQuery<PublishedRow>(
+    `SELECT d.id, d.cycle_id, d.variant, d.status::text, d.post_at::text, d.published_at::text, d.post_url,
+            t.title AS topic_title,
+            (SELECT count(*)::int FROM linkedin_performance p WHERE p.draft_id = d.id) AS observations
+       FROM linkedin_drafts d
+       LEFT JOIN content_topics t ON t.id = d.topic_id
+      WHERE d.status IN ('approved', 'published')
+      ORDER BY coalesce(d.published_at, d.post_at) DESC NULLS LAST
+      LIMIT 60`
+  );
+
+export interface VoiceRow {
+  author: string;
+  audience: string;
+  fingerprint: string;
+  pillars: string[];
+  banned_terms: string[];
+  always_rules: string[];
+  never_rules: string[];
+  cta_style: string | null;
+  post_windows: { day: number; from: string; to: string }[];
+}
+
+export const getVoice = async () => {
+  const rows = await tryQuery<VoiceRow>(
+    `SELECT author, audience, fingerprint, pillars, banned_terms, always_rules,
+            never_rules, cta_style, post_windows
+       FROM linkedin_voice WHERE id = 1`
+  );
+  return rows?.[0] ?? null;
+};
+
+export interface ReportArticleRow {
+  report_id: number;
+  article_id: number;
+  category: string;
+  rank: number;
+  title: string;
+  url: string;
+  source: string;
+  score: number | null;
+  used: boolean;
+}
+
+/**
+ * The articles behind a set of reports, for the source-feed accordion. `used`
+ * flags an article that has already produced a draft, so the feed does not
+ * quietly recycle the same story.
+ */
+export const getReportArticles = (reportIds: number[]) =>
+  tryQuery<ReportArticleRow>(
+    `SELECT ri.report_id, a.id AS article_id, ri.category, ri.rank,
+            a.title, a.url, s.name AS source, an.relevance_score AS score,
+            EXISTS (SELECT 1 FROM linkedin_drafts d WHERE a.id = ANY(d.article_ids)) AS used
+       FROM report_items ri
+       JOIN articles a  ON a.id = ri.article_id
+       JOIN sources s   ON s.id = a.source_id
+       LEFT JOIN article_analysis an ON an.article_id = a.id
+      WHERE ri.report_id = ANY($1::int[])
+      ORDER BY ri.report_id DESC, ri.category, ri.rank`,
+    [reportIds]
+  );

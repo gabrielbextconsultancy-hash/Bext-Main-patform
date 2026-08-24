@@ -171,6 +171,44 @@ services:
       TEAMS_DAILY_WEBHOOK_URL: ${TEAMS_DAILY_WEBHOOK_URL:-}
       TEAMS_DAILY_DRIVE_ID: ${TEAMS_DAILY_DRIVE_ID:-}
 
+      # ── self-healing (docs/SELF-HEALING.md) ──────────────────────────────
+      # BEXT — Self Heal and BEXT — Contract Test call the n8n API from inside
+      # n8n: read failed executions, retry one, reactivate a workflow.
+      #
+      # Worth being clear about what this grants. Any Code node can now read the
+      # key and drive the whole n8n API. That is a real widening, accepted for
+      # two reasons: a Code node already holds GEMINI_API_KEY and both Teams
+      # webhooks, so the sandbox was never a trust boundary against our own
+      # workflows; and the alternative — mounting the docker socket so the
+      # container could heal itself properly — is root on a host shared with
+      # Premier Fitness. This key reaches our n8n and stops there.
+      N8N_API_KEY: ${N8N_API_KEY:-}
+
+      # Uptime Kuma heartbeats. The internal name, not the public host: routing a
+      # heartbeat out through traefik and back means TLS renewal can silently
+      # take the deadman down, and a deadman that stops for its own reasons is
+      # worse than none.
+      KUMA_PUSH_BASE: ${KUMA_PUSH_BASE:-http://uptime-kuma:3001/api/push}
+      KUMA_PUSH_SOURCE_INGEST: ${KUMA_PUSH_SOURCE_INGEST:-}
+      KUMA_PUSH_ARTICLE_ANALYSIS: ${KUMA_PUSH_ARTICLE_ANALYSIS:-}
+      KUMA_PUSH_DAILY_REPORT: ${KUMA_PUSH_DAILY_REPORT:-}
+      KUMA_PUSH_DAILY_NEWS_CARD: ${KUMA_PUSH_DAILY_NEWS_CARD:-}
+      KUMA_PUSH_GRAPH_HEALTH: ${KUMA_PUSH_GRAPH_HEALTH:-}
+      KUMA_PUSH_MEETING_INTAKE: ${KUMA_PUSH_MEETING_INTAKE:-}
+      KUMA_PUSH_SELF_HEAL: ${KUMA_PUSH_SELF_HEAL:-}
+      KUMA_PUSH_CONTRACT_TEST: ${KUMA_PUSH_CONTRACT_TEST:-}
+      KUMA_PUSH_CONTENT_TOPICS: ${KUMA_PUSH_CONTENT_TOPICS:-}
+      KUMA_PUSH_CONTENT_DRAFTS: ${KUMA_PUSH_CONTENT_DRAFTS:-}
+      KUMA_PUSH_LINKEDIN_PUBLISH: ${KUMA_PUSH_LINKEDIN_PUBLISH:-}
+      # Content generation → LinkedIn. Unset defaults to manual publishing (the
+      # cron nudges Teams, a human posts). publora/linkedin turn on auto-posting.
+      LINKEDIN_PUBLISH_MODE: ${LINKEDIN_PUBLISH_MODE:-manual}
+      PUBLORA_API_KEY: ${PUBLORA_API_KEY:-}
+      LINKEDIN_PLATFORM_ID: ${LINKEDIN_PLATFORM_ID:-}
+      LINKEDIN_API_TOKEN: ${LINKEDIN_API_TOKEN:-}
+      LINKEDIN_AUTHOR_URN: ${LINKEDIN_AUTHOR_URN:-}
+      LINKEDIN_API_VERSION: ${LINKEDIN_API_VERSION:-202401}
+
       # Calendars the meeting workflow polls. Whoever hosts a meeting owns its
       # transcript, so this is not just the automation account.
       MEETING_HOSTS: ${MEETING_HOSTS}
@@ -247,6 +285,11 @@ services:
       ADMIN_PASS: ${ADMIN_PASS}
       SESSION_SECRET: ${SESSION_SECRET}
       N8N_URL: https://${N8N_SUBDOMAIN}.${DOMAIN_NAME}
+      # The dashboard's write path: it POSTs human actions (start a cycle, approve
+      # a draft) to the n8n Content Actions webhook with this shared secret as the
+      # X-BEXT-Token header. Reads still go direct to Postgres above; only writes
+      # go through n8n, which owns every mutation.
+      BEXT_WEBHOOK_TOKEN: ${BEXT_WEBHOOK_TOKEN}
       QDRANT_URL: http://qdrant:6333
       # Connection-health probes only — Gemini reachability and GitHub repo/CI
       # status shown on /health. Analysis itself runs in the n8n container.

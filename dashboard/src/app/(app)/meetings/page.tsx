@@ -4,7 +4,26 @@ import {
   type MeetingRow,
 } from '@/lib/queries';
 import { Card, DatabaseDown, Empty } from '@/components/ui';
-import { MeetingsTable, STAGES } from '@/components/MeetingsTable';
+import { MeetingsTable, type MeetingWithStages } from '@/components/MeetingsTable';
+
+/**
+ * The six stages a meeting passes through, in order. Each reads a column the
+ * workflow writes, so the strip reflects what actually happened rather than what
+ * the workflow reported about itself.
+ *
+ * Evaluated here, on the server, and passed down as plain booleans. The functions
+ * never cross into the client bundle — sharing them did, and Turbopack resolved
+ * the shared symbol to a client reference, so the page 500'd with "STAGES is on
+ * the client". Data crosses the boundary; behaviour does not.
+ */
+const stagesOf = (m: MeetingRow) => [
+  { key: 'transcript', label: 'Transcript', ok: !!(m.transcript_path || m.transcript_url) },
+  { key: 'extract', label: 'Extraction', ok: m.has_extract },
+  { key: 'minutes', label: 'Minutes', ok: !!(m.minutes_path || m.minutes_url) },
+  { key: 'filing', label: 'Filing', ok: !!m.folder_url },
+  { key: 'draft', label: 'Draft email', ok: !!m.draft_message_id },
+  { key: 'card', label: 'Channel card', ok: !!m.posted_at },
+];
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -14,7 +33,8 @@ export default async function MeetingsPage() {
 
   if (!meetings) return <DatabaseDown />;
 
-  const latest = meetings[0] ?? null;
+  const withStages: MeetingWithStages[] = meetings.map((m) => ({ ...m, stages: stagesOf(m) }));
+  const latest = withStages[0] ?? null;
   const healthy = readiness ? readiness.failed === 0 && readiness.drafted > 0 : false;
 
   return (
@@ -34,8 +54,8 @@ export default async function MeetingsPage() {
         {latest ? (
           <>
             <div className="flex flex-wrap items-center gap-2">
-              {STAGES.map((s, i) => {
-                const ok = s.of(latest);
+              {latest.stages.map((s, i) => {
+                const ok = s.ok;
                 return (
                   <div key={s.key} className="flex items-center gap-2">
                     <div
@@ -50,7 +70,7 @@ export default async function MeetingsPage() {
                       </span>
                       <span className="block text-xs font-medium">{s.label}</span>
                     </div>
-                    {i < STAGES.length - 1 && <span className="text-ink-600">→</span>}
+                    {i < latest.stages.length - 1 && <span className="text-ink-600">→</span>}
                   </div>
                 );
               })}
@@ -94,7 +114,7 @@ export default async function MeetingsPage() {
       </Card>
 
       <Card title="Meetings" subtitle="Search, filter and sort. Documents open in SharePoint.">
-        {meetings.length === 0 ? <Empty>Nothing yet.</Empty> : <MeetingsTable rows={meetings} />}
+        {meetings.length === 0 ? <Empty>Nothing yet.</Empty> : <MeetingsTable rows={withStages} />}
       </Card>
     </div>
   );

@@ -67,6 +67,38 @@ const HEAL_RULES_SRC = fs
   .readFileSync(path.join(__dirname, 'lib', 'heal-rules.js'), 'utf8')
   .replace(/^module\.exports\s*=.*$/m, '');
 
+// The LinkedIn craft library, each file inlined into the content Code nodes.
+// Order matters: scrub requires voice and audit requires heuristics, so a
+// required module has to appear above the one that needs it.
+//
+// Two modules are read by others through a namespace (scrub uses VOICE.*, audit
+// uses H.*). Those keep their binding: `module.exports = {` becomes `var VOICE = {`
+// / `var H = {` rather than being stripped, so the reference still resolves once
+// the require line is gone. The leaf modules (formulas, scrub, audit, factcheck,
+// publish) are called by their bare exported names and simply lose their exports.
+//
+// n8n/lib/linkedin/test.js exercises all of these as ordinary modules — the same
+// code, run two ways, so a change that breaks one breaks the test first.
+const LI_READ = src => fs.readFileSync(path.join(__dirname, 'lib', 'linkedin', src), 'utf8')
+  .replace(/^var \w+ = require\([^)]*\);$/gm, '');   // requires resolved by inlining, in order
+const LI_HEURISTICS_SRC = LI_READ('heuristics.js').replace(/^module\.exports\s*=\s*\{/m, 'var H = {');
+const LI_VOICE_SRC      = LI_READ('voice.js').replace(/^module\.exports\s*=\s*\{/m, 'var VOICE = {');
+const LI_FORMULAS_SRC   = LI_READ('formulas.js').replace(/^module\.exports\s*=.*$/m, '');
+const LI_SCRUB_SRC      = LI_READ('scrub.js').replace(/^module\.exports\s*=.*$/m, '');
+const LI_AUDIT_SRC      = LI_READ('audit.js').replace(/^module\.exports\s*=.*$/m, '');
+const LI_FACTCHECK_SRC  = LI_READ('factcheck.js').replace(/^module\.exports\s*=.*$/m, '');
+const LI_PUBLISH_SRC    = LI_READ('publish.js').replace(/^module\.exports\s*=.*$/m, '');
+
+// Everything the drafting and publishing nodes need, inlined once in dependency
+// order. A Code node prepends this and then calls the functions directly (scrub,
+// audit, reconcile, pick, formulaPromptBlock, voicePromptBlock, plan).
+const LI_LIB = [
+  '// --- LinkedIn craft library, generated from n8n/lib/linkedin/*.js — do not edit here ---',
+  LI_HEURISTICS_SRC, LI_VOICE_SRC, LI_FORMULAS_SRC,
+  LI_SCRUB_SRC, LI_AUDIT_SRC, LI_FACTCHECK_SRC, LI_PUBLISH_SRC,
+  '// --- end LinkedIn craft library ---',
+].join('\n');
+
 const pos = (x, y) => [x, y];
 
 // ─── Heartbeat ───────────────────────────────────────────────────────────────
@@ -382,6 +414,10 @@ function sourceIngestWorkflow() {
         parameters: { rule: { interval: [{ field: 'hours', hoursInterval: 1 }] } },
       },
       {
+        // R015: a SELECT that matches nothing emits nothing, and the Code node
+        // downstream of nothing never runs — the workflow stops dead on a quiet
+        // cycle and reports success. It must keep talking even when empty.
+        alwaysOutputData: true,
         id: 'load', name: 'Load active sources', type: 'n8n-nodes-base.postgres',
         typeVersion: 2.5, position: pos(-100, 0),
         credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
@@ -678,6 +714,10 @@ function articleAnalysisWorkflow() {
         parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 30 }] } },
       },
       {
+        // R015: a SELECT that matches nothing emits nothing, and the Code node
+        // downstream of nothing never runs — the workflow stops dead on a quiet
+        // cycle and reports success. It must keep talking even when empty.
+        alwaysOutputData: true,
         id: 'load', name: 'Load unanalysed', type: 'n8n-nodes-base.postgres',
         typeVersion: 2.5, position: pos(-100, 0),
         credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
@@ -2650,9 +2690,400 @@ function teamsInboundWorkflow(meetingIntakeId) {
   };
 }
 
+// ─── Workflow 8: Self Heal ───────────────────────────────────────────────────
+//
+// Rings 1 and 2 of docs/SELF-HEALING.md, in the half that n8n can do to itself.
+//
+// What it may do here: classify a failed execution, log it, retry it, reactivate
+// a workflow, and post the rest to Teams with the diagnosis already written.
+//
+// What it deliberately cannot do here: restart a container, push workflow JSON
+// from the repo, or touch the host. Those need child_process and docker, and the
+// only way to give a Code node docker is to mount /var/run/docker.sock into
+// bext-n8n — which is root on a host that also runs Premier Fitness. Refused.
+// n8n/self-heal.js does those, under an operator's SSH key, with an explicit
+// container allowlist. Same rules file, same incident table, same ids.
+
+const SELF_HEAL_CODE = `
+// The sandbox withholds URL and URLSearchParams as globals (R001, R002b).
+const { URL, URLSearchParams } = require('url');
+
+// --- shared rules ---
+${HEAL_RULES_SRC}
+// --- end shared rules ---
+
+const base = $env.N8N_URL.replace(/\\/+$/, '');
+const key = $env.N8N_API_KEY;
+if (!key) throw new Error('N8N_API_KEY is not set in the container — see infra/docker-compose.yml');
+
+const api = async (route, init) => {
+  const r = await fetch(base + '/api/v1/' + route, Object.assign({}, init, {
+    headers: Object.assign({ 'X-N8N-API-KEY': key, 'Content-Type': 'application/json' }, (init || {}).headers || {}),
+  }));
+  if (!r.ok) throw new Error('n8n API ' + r.status + ' on ' + route);
+  return r.status === 204 ? null : r.json();
+};
+
+// Only failures. EXECUTIONS_DATA_SAVE_ON_ERROR is 'all', so this list is
+// complete for failures — and blind to a workflow that ran clean and produced
+// nothing. That blindness is why the heartbeat monitors exist; do not try to
+// infer an outage from an empty list here. Doing exactly that is R015, and the
+// R024 comment records it being walked into twice.
+const runs = await api('executions?status=error&limit=50&includeData=false');
+const cutoff = Date.now() - 60 * 60 * 1000;
+
+const out = [];
+// One action per pass. The healer nudges; it does not thrash. If two things
+// broke at once the second is picked up fifteen minutes later, by which point
+// the first has either recovered or escalated.
+let acted = 0;
+
+for (const e of (runs.data || [])) {
+  const at = new Date(e.stoppedAt || e.startedAt).getTime();
+  if (at < cutoff) continue;
+
+  const workflowName = (e.workflowData && e.workflowData.name) || String(e.workflowId);
+  const failure = {
+    error: [e.error, e.message].filter(Boolean).join(' '),
+    lastNodeExecuted: e.lastNodeExecuted,
+    workflowName: workflowName,
+  };
+  const rule = classify(failure);
+
+  // Anything the script owns (containers, redeploys, tokens) is named here and
+  // handed over, not attempted. Recognising a failure and being allowed to fix
+  // it are different permissions.
+  const runnable = { retry_execution: 1, reactivate_workflow: 1 };
+  const action = rule && runnable[rule.action] ? rule.action : 'escalate';
+
+  const row = {
+    workflow: workflowName,
+    execution_id: String(e.id),
+    rule_id: rule ? rule.id : null,
+    signature: (failure.error || '').slice(0, 500),
+    action: action,
+    outcome: 'detected',
+    detail: rule ? rule.title : 'unclassified — ring 3',
+    hint: (rule && rule.hint) || null,
+  };
+
+  if (action !== 'escalate' && acted < 1) {
+    acted += 1;
+    row.outcome = 'attempted';
+    try {
+      if (action === 'retry_execution') {
+        await api('executions/' + e.id + '/retry', { method: 'POST' });
+        row.detail = 'retried execution ' + e.id;
+      } else {
+        // Activating through the API does not register the trigger until n8n
+        // restarts — the workflow reads active while nothing fires. So this
+        // never claims success; the heartbeat is what proves it.
+        await api('workflows/' + e.workflowId + '/activate', { method: 'POST' });
+        row.detail = 'reactivated ' + workflowName + ' — the heartbeat confirms it, not this call';
+      }
+      row.outcome = 'healed';
+    } catch (err) {
+      row.outcome = 'failed';
+      row.detail = String(err.message).slice(0, 400);
+      row.action = 'escalate';
+    }
+  } else if (action !== 'escalate') {
+    row.outcome = 'suppressed';
+    row.detail = 'one action per pass; next cycle';
+  }
+
+  out.push({ json: row });
+}
+
+return out.length ? out : [{ json: { workflow: 'none', execution_id: null, rule_id: null,
+  signature: null, action: 'escalate', outcome: 'detected', detail: 'nothing failed', hint: null } }];
+`;
+
+const SELF_HEAL_ESCALATE_CODE = `
+const https = require('https');
+const { URL } = require('url');
+
+const rows = $input.all().map(i => i.json)
+  // 'detected' on an escalate action means nobody has been told yet. A row that
+  // healed, or that was suppressed by the one-action rule, is not news.
+  .filter(r => r.action === 'escalate' && r.outcome !== 'healed' && r.workflow !== 'none');
+
+if (!rows.length) return [{ json: { posted: 0 } }];
+
+const hook = $env.TEAMS_DAILY_WEBHOOK_URL;
+if (!hook) return [{ json: { posted: 0, note: 'no Teams webhook configured' } }];
+
+const lines = rows.map(r => {
+  const named = r.rule_id ? r.rule_id + ' — ' + r.detail : 'unclassified — a failure mode with no rule yet';
+  const fix = r.hint ? '\\n  Fix: ' + r.hint : '\\n  No known fix. This is ring 3: diagnose it, then add the rule.';
+  return '**' + r.workflow + '** (execution ' + r.execution_id + ')\\n  ' + named + fix
+    + '\\n  ' + String(r.signature || '').slice(0, 300);
+});
+
+const body = JSON.stringify({
+  title: 'Self-heal: ' + rows.length + ' failure' + (rows.length === 1 ? '' : 's') + ' need you',
+  text: lines.join('\\n\\n'),
+});
+
+await new Promise((resolve, reject) => {
+  const u = new URL(hook);
+  const req = https.request({
+    hostname: u.hostname, path: u.pathname + u.search, method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+  }, res => { res.resume(); res.on('end', resolve); });
+  req.on('error', reject);
+  req.write(body);
+  req.end();
+});
+
+return [{ json: { posted: rows.length } }];
+`;
+
+function selfHealWorkflow() {
+  return {
+    name: 'BEXT — Self Heal',
+    settings: { executionOrder: 'v1', timezone: 'Australia/Melbourne' },
+    nodes: [
+      {
+        id: 'trigger', name: 'Every 15 minutes', type: 'n8n-nodes-base.scheduleTrigger',
+        typeVersion: 1.2, position: pos(-400, 0), alwaysOutputData: true,
+        parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 15 }] } },
+      },
+      {
+        id: 'heal', name: 'Classify and heal', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(-180, 0),
+        parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: SELF_HEAL_CODE },
+      },
+      {
+        id: 'log', name: 'Log incidents', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(60, 0),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        // alwaysOutputData because the Teams node downstream must still run to
+        // report "nothing to say" — a node that emits nothing stops the workflow
+        // dead, which is R015 exactly.
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          // The enum casts are not decoration. json_to_recordset yields text and
+          // an uncast text into an enum column is R003 — the failure that made
+          // Graph Health report seven failures and zero successes, i.e. the alarm
+          // was the thing that was broken.
+          query: `INSERT INTO incidents (workflow, execution_id, rule_id, signature, action, outcome, detail)
+SELECT x.workflow, nullif(x.execution_id,'') , nullif(x.rule_id,''), x.signature,
+       x.action::heal_action, x.outcome::incident_outcome, x.detail
+  FROM json_to_recordset($1::json) AS x(workflow text, execution_id text, rule_id text,
+       signature text, action text, outcome text, detail text)
+ WHERE x.workflow <> 'none'
+   AND NOT EXISTS (SELECT 1 FROM incidents i WHERE i.execution_id = x.execution_id)
+RETURNING id`,
+          options: { queryReplacement: '={{ JSON.stringify($input.all().map(i => i.json)) }}' },
+        },
+      },
+      {
+        id: 'escalate', name: 'Escalate to Teams', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(300, 0),
+        // It always returns at least { posted: 0 }, but the flag is what R028
+        // reads — and a future edit that returns [] on a quiet cycle would mute
+        // this workflow's own heartbeat without anyone noticing.
+        alwaysOutputData: true,
+        parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: SELF_HEAL_ESCALATE_CODE },
+      },
+      heartbeat('KUMA_PUSH_SELF_HEAL', 540, 0),
+    ],
+    connections: {
+      'Every 15 minutes': { main: [[{ node: 'Classify and heal', type: 'main', index: 0 }]] },
+      'Classify and heal': { main: [[{ node: 'Log incidents', type: 'main', index: 0 }]] },
+      'Log incidents': { main: [[{ node: 'Escalate to Teams', type: 'main', index: 0 }]] },
+      'Escalate to Teams': { main: [[{ node: 'Heartbeat', type: 'main', index: 0 }]] },
+    },
+  };
+}
+
+// ─── Workflow 9: Contract Test ───────────────────────────────────────────────
+//
+// Catches at 02:00 what would otherwise be found at 05:00 by a client.
+//
+// n8n/preflight.js already asserts everything readable from the repo. This
+// asserts the things only the running container can see, which is precisely
+// where our worst failures have lived:
+//
+//   R014 — config that existed in .env, in the repo compose, everywhere except
+//          the running container. MEETING_HOSTS was empty inside n8n for days.
+//   R022 — a require() the sandbox blocks. Fine locally, dead at runtime.
+//   R001 — a Code node that parses on a laptop and throws in the sandbox.
+//
+// It reads and reports. It changes nothing.
+
+const CONTRACT_TEST_CODE = `
+// This node names URLSearchParams and URL as data — they are the two symbols it
+// hunts for in everyone else's code. R001 cannot tell a mention from a use, and
+// that is the right bias for a check whose job is catching this class: better it
+// insists here, where the require costs nothing, than let a real one through.
+const { URLSearchParams, URL } = require('url');
+
+const base = $env.N8N_URL.replace(/\\/+$/, '');
+const key = $env.N8N_API_KEY;
+if (!key) throw new Error('N8N_API_KEY is not set in the container');
+
+const list = await (await fetch(base + '/api/v1/workflows?limit=100', {
+  headers: { 'X-N8N-API-KEY': key },
+})).json();
+
+const failures = [];
+
+// 1 — the config the container actually has, not the config we believe it has.
+const REQUIRED = ['MEETING_HOSTS', 'GEMINI_API_KEY', 'TEAMS_DAILY_WEBHOOK_URL',
+                  'KUMA_PUSH_BASE', 'N8N_API_KEY'];
+for (const k of REQUIRED) {
+  if (!$env[k]) failures.push('env ' + k + ' is empty INSIDE the container (R014)');
+}
+
+// 2 — every Code node still parses in this sandbox, on this n8n version.
+// new Function throws on a syntax error without running a line of it.
+for (const w of (list.data || [])) {
+  if (w.name === 'BEXT — Contract Test') continue;
+  for (const n of (w.nodes || [])) {
+    const code = n.parameters && n.parameters.jsCode;
+    if (!code) continue;
+    try {
+      new Function('return (async () => {' + code + '})');
+    } catch (err) {
+      failures.push(w.name + ' / ' + n.name + ' does not parse: ' + err.message);
+    }
+    // 3 — the two symbols the sandbox withholds. Using either without
+    // destructuring it from 'url' is R001/R002b, and it only shows at runtime.
+    for (const sym of ['URLSearchParams', 'URL']) {
+      const used = new RegExp('\\\\bnew ' + sym + '\\\\b|\\\\b' + sym + '\\\\s*\\\\(').test(code);
+      const bound = new RegExp('\\\\{[^}]*\\\\b' + sym + '\\\\b[^}]*\\\\}\\\\s*=\\\\s*require\\\\(.url.\\\\)').test(code);
+      if (used && !bound) failures.push(w.name + ' / ' + n.name + ' uses ' + sym + ' unbound (R001/R002b)');
+    }
+  }
+}
+
+// 4 — every scheduled workflow still carries its heartbeat. Losing one is
+// silent: the workflow keeps working and the deadman stops being a deadman.
+for (const w of (list.data || [])) {
+  const scheduled = (w.nodes || []).some(n => n.type === 'n8n-nodes-base.scheduleTrigger');
+  if (!scheduled) continue;
+  const beats = (w.nodes || []).some(n => n.name === 'Heartbeat');
+  if (!beats) failures.push(w.name + ' is scheduled but has no Heartbeat node');
+}
+
+return [{ json: {
+  ok: failures.length === 0,
+  checked: (list.data || []).length,
+  failures: failures,
+  detail: failures.length ? failures.join(' | ').slice(0, 900) : 'all contracts hold',
+} }];
+`;
+
+function contractTestWorkflow() {
+  return {
+    name: 'BEXT — Contract Test',
+    settings: { executionOrder: 'v1', timezone: 'Australia/Melbourne' },
+    nodes: [
+      {
+        id: 'trigger', name: 'Daily 02:00 AEST', type: 'n8n-nodes-base.scheduleTrigger',
+        typeVersion: 1.2, position: pos(-400, 0),
+        // Three hours before the report, so a failure here is still fixable
+        // before the client sees anything.
+        parameters: { rule: { interval: [{ field: 'cronExpression', expression: '0 2 * * *' }] } },
+      },
+      {
+        id: 'assert', name: 'Assert contracts', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(-180, 0),
+        parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: CONTRACT_TEST_CODE },
+      },
+      {
+        id: 'record', name: 'Record result', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(60, 0),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          // ::health_status, for the same reason as everywhere else: R003.
+          query: `INSERT INTO integration_health (service, status, detail)
+VALUES ('contract-test', ($1::text)::health_status, $2::text)`,
+          options: {
+            queryReplacement: '={{ $json.ok ? "up" : "down" }},={{ $json.detail }}',
+          },
+        },
+      },
+      // Only reached when the assertions ran. A contract test that pings even
+      // when it failed to run would be a monitor reporting on itself, which is
+      // the failure Graph Health had: the alarm was the broken thing.
+      heartbeat('KUMA_PUSH_CONTRACT_TEST', 300, 0),
+    ],
+    connections: {
+      'Daily 02:00 AEST': { main: [[{ node: 'Assert contracts', type: 'main', index: 0 }]] },
+      'Assert contracts': { main: [[{ node: 'Record result', type: 'main', index: 0 }]] },
+      'Record result': { main: [[{ node: 'Heartbeat', type: 'main', index: 0 }]] },
+    },
+  };
+}
+
 // ─── Deploy ──────────────────────────────────────────────────────────────────
 
-async function deploy(wf) {
+// Where each scheduled workflow's heartbeat hangs, and why that node.
+//
+// The anchor must be the last node that runs on EVERY cycle, not the last node
+// that runs on a good cycle. Get this wrong in the obvious direction — hang it
+// off the end of a conditional branch — and the deadman only pings when that
+// branch fires, so a quiet day reads as an outage and within a week nobody
+// believes the monitor. Alarm fatigue is the failure mode docs/REGRESSIONS.md
+// keeps warning about: "a workflow that is expected to be red trains everyone
+// to ignore red".
+//
+// Graph Health is the sharp case. Its chain ends `Record health` -> `Only when
+// broken` (an IF) -> `Alert by email`. Anchoring on the terminal node would ping
+// only when Graph is BROKEN — the monitor exactly inverted. It anchors on
+// `Record health`, which runs either way.
+const HEARTBEATS = {
+  'BEXT — Source Ingest':    { anchor: 'Record fetch attempts', env: 'KUMA_PUSH_SOURCE_INGEST' },
+  'BEXT — Article Analysis': { anchor: 'Save analysis',         env: 'KUMA_PUSH_ARTICLE_ANALYSIS' },
+  'BEXT — Daily Report':     { anchor: 'Record result',         env: 'KUMA_PUSH_DAILY_REPORT' },
+  'BEXT — Daily News Card':  { anchor: 'Record result',         env: 'KUMA_PUSH_DAILY_NEWS_CARD' },
+  'BEXT — Graph Health':     { anchor: 'Record health',         env: 'KUMA_PUSH_GRAPH_HEALTH' },
+  'BEXT — Meeting Intake':   { anchor: 'Record minutes',        env: 'KUMA_PUSH_MEETING_INTAKE' },
+  // Self Heal, Contract Test and the three content workflows wire their own
+  // heartbeat, because they poll on a short interval and do work only
+  // occasionally. Anchoring the ping on a work node would leave the monitor
+  // silent through every idle poll and read every quiet stretch as an outage —
+  // R024 inverted. They ping off the trigger instead, so the deadman proves the
+  // poller is alive; whether a queued cycle is stuck is Contract Test's job.
+};
+
+function withHeartbeat(wf) {
+  const scheduled = (wf.nodes || []).some(n => n.type === 'n8n-nodes-base.scheduleTrigger');
+  if (!scheduled) return wf;
+  if ((wf.nodes || []).some(n => n.name === 'Heartbeat')) return wf;
+
+  const spec = HEARTBEATS[wf.name];
+  // Deliberately fatal. A new scheduled workflow that ships without a deadman is
+  // invisible in exactly the way the 05:00 report was invisible, and the way to
+  // stop that recurring is to make it impossible to build, not to remember.
+  if (!spec) throw new Error(`${wf.name} is scheduled but has no HEARTBEATS entry — add one, or it ships unmonitored`);
+
+  const anchor = (wf.nodes || []).find(n => n.name === spec.anchor);
+  if (!anchor) throw new Error(`${wf.name}: heartbeat anchor "${spec.anchor}" is not a node in this workflow`);
+
+  // A Postgres insert that wrote nothing emits nothing, and a node downstream of
+  // nothing never runs — R015. The anchor has to keep talking even on an empty
+  // cycle or the deadman is a liar.
+  anchor.alwaysOutputData = true;
+
+  const [ax, ay] = anchor.position || [0, 0];
+  wf.nodes.push(heartbeat(spec.env, ax + 240, ay));
+  const existing = (wf.connections[spec.anchor] && wf.connections[spec.anchor].main) || [];
+  const first = existing[0] || [];
+  wf.connections[spec.anchor] = {
+    main: [[...first, { node: 'Heartbeat', type: 'main', index: 0 }], ...existing.slice(1)],
+  };
+  return wf;
+}
+
+async function deploy(input) {
+  const wf = withHeartbeat(input);
   const dir = path.join(__dirname, 'workflows');
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, wf.name.replace(/[^\w]+/g, '-').replace(/^-|-$/g, '') + '.json');
@@ -3143,6 +3574,849 @@ FROM json_to_recordset($1::json) AS x(status text, detail text)`,
   settings: { executionOrder: 'v1' },
 });
 
+// ─── Content generation ──────────────────────────────────────────────────────
+//
+// Three workflows turn the daily news feed into one LinkedIn post a fortnight,
+// with a human in the middle. The shape of the cycle and the reason for every
+// table are in db/migrations/025_content_generation.sql; the short version:
+//
+//   Content Topics  scans 14 days, ranks three topic options            (machine)
+//   [ a human picks one and adds the BEXT perspective, in the dashboard ]
+//   Content Drafts  writes two variants, scrubs, audits, fact-checks     (machine)
+//   [ a human edits and approves one, in the dashboard ]
+//   LinkedIn Publish  posts it, or (manual mode) nudges the human to      (machine)
+//
+// The dashboard never calls Gemini. It writes a content_cycles row and pings a
+// webhook; all the model work lives here, so it inherits the same retry,
+// heartbeat and self-heal behaviour as every other BEXT pipeline. Each workflow
+// also carries a slow poll as a backstop, so a missed webhook delays a cycle by
+// a couple of minutes rather than stranding it.
+
+// The prompts are plain strings, JSON.stringify'd into the node, so no template
+// literal quoting has to survive the inlining.
+const TOPICS_PROMPT =
+  'You are BEXT Consultancy planning LinkedIn content. Below are the news items '
+  + 'this pipeline scored as relevant to an Australian commercial-buildings energy '
+  + 'and sustainability consultancy over the past fortnight, each with its source '
+  + 'and relevance score.\n\n'
+  + 'Propose exactly THREE topic options for a single LinkedIn post, ranked, best '
+  + 'first. Each option must:\n'
+  + '  - draw on one or more of the items below, by their id\n'
+  + '  - say, in a sentence, why it is worth BEXT being seen to have a view on it\n'
+  + '  - name the angle BEXT would take, distinct from what the articles merely report\n'
+  + '  - never rely on a fact that is not in the supplied items\n\n'
+  + 'Rank by what a commercial building owner could act on: solar and PV first, then '
+  + 'building performance and compliance, then the wider energy market.\n\n'
+  + 'Return JSON only: { "topics": [ { "rank": 1, "title": "...", "rationale": "...", '
+  + '"angle": "...", "article_ids": [12, 44], "score": 82 }, ... ] }.';
+
+const DRAFTS_PROMPT_HEAD =
+  'You are writing a single LinkedIn post for BEXT Consultancy. The selected topic, '
+  + 'the human perspective to honour, the source material, and the voice and formula '
+  + 'to use are all below. Write ONE post.\n\n'
+  + 'Hard requirements:\n'
+  + '  - The first 210 characters must stand alone as a hook, before the "... see more" fold.\n'
+  + '  - 900 to 1300 characters total. Double line breaks between ideas, not single.\n'
+  + '  - Every material fact must come from the source material. Do not invent a figure, '
+  + 'a date, a rebate amount or an eligibility rule.\n'
+  + '  - No external link in the body. Name the destination separately.\n'
+  + '  - Obey the voice rules exactly, including the banned words.\n\n'
+  + 'Return JSON only: { "hook": "...", "body": "full post text including the hook", '
+  + '"hashtags": ["solar"], "visual_concept": "what image runs with it", '
+  + '"cta": "the restrained call to action", "destination_url": "https://... or null", '
+  + '"claims": ["each material factual sentence, verbatim from the body"] }.';
+
+// The Gemini call, retry ladder and JSON parse, shared verbatim by both content
+// workflows. Same transient handling as the article scorer and the meeting
+// extractor: Gemini drops connections often enough that one attempt loses a run.
+const GEMINI_CALL = `
+const GEMINI_MODEL = 'gemini-3.6-flash';
+const GEMINI_KEY = $env.GEMINI_API_KEY;
+const geminiJSON = async (prompt, helpers) => {
+  const TRANSIENT = /ECONNRESET|ETIMEDOUT|ECONNREFUSED|EAI_AGAIN|socket hang up|network|aborted/i;
+  let res, lastErr;
+  for (let attempt = 1; attempt <= 4; attempt++) {
+    try {
+      res = await helpers.httpRequest({
+        method: 'POST',
+        url: 'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent?key=' + GEMINI_KEY,
+        json: true, timeout: 180000,
+        body: {
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.4, responseMimeType: 'application/json' },
+        },
+      });
+      break;
+    } catch (e) {
+      lastErr = e;
+      const st = e && (e.statusCode || (e.response && e.response.statusCode));
+      const retryable = st === 429 || (st >= 500 && st < 600)
+        || (!st && TRANSIENT.test(String((e && (e.message || e.code)) || '')));
+      if (attempt === 4 || !retryable) throw e;
+      await new Promise(r => setTimeout(r, [2000, 8000, 20000][attempt - 1]));
+    }
+  }
+  if (!res) throw lastErr;
+  const raw = (res && res.candidates && res.candidates[0] && res.candidates[0].content
+    && res.candidates[0].content.parts && res.candidates[0].content.parts[0]
+    && res.candidates[0].content.parts[0].text) || '{}';
+  try { return JSON.parse(raw); }
+  catch (e) { throw new Error('Gemini returned unparseable JSON: ' + String(raw).slice(0, 200)); }
+};
+`;
+
+// ── Workflow: Content Topics ─────────────────────────────────────────────────
+
+const TOPICS_CODE = `
+const helpers = this.helpers;
+${GEMINI_CALL}
+// The claimed cycle rides through on the first item; the articles are the rest.
+const all = $input.all().map(i => i.json);
+const cycle = all[0] && all[0].__cycle ? all[0].__cycle : (all[0] || {});
+const articles = all.filter(a => a && a.id).map(a => ({
+  id: a.id, title: a.title, url: a.url, source: a.source_name,
+  score: a.relevance_score, summary: a.summary,
+  topics: a.topics, published_at: a.published_at,
+}));
+
+if (!articles.length) {
+  // Nothing in the window. Not an error, a quiet fortnight, but the cycle cannot
+  // produce topics, so it is marked and the human is spared an empty page.
+  return [{ json: { cycle_id: cycle.id, empty: true, topics: '[]', topic_count: 0,
+                    status: 'failed', error: 'No eligible articles in the 14-day window.' } }];
+}
+
+const catalogue = articles.map(a =>
+  '[' + a.id + '] (' + (a.source || 'source') + ', score ' + (a.score == null ? '?' : a.score) + ') '
+  + (a.title || '') + ' :: ' + String(a.summary || '').slice(0, 300)
+).join('\\n');
+
+const out = await geminiJSON(${JSON.stringify(TOPICS_PROMPT)} + '\\n\\nITEMS:\\n' + catalogue, helpers);
+const valid = new Set(articles.map(a => a.id));
+const topics = (out.topics || []).slice(0, 3).map((t, i) => ({
+  rank: t.rank || (i + 1),
+  title: String(t.title || '').slice(0, 300),
+  rationale: String(t.rationale || '').slice(0, 1000),
+  angle: String(t.angle || '').slice(0, 500),
+  // Keep only ids the model was actually given, so a hallucinated id cannot
+  // point the fact-checker at an article that was never in the window.
+  article_ids: (t.article_ids || []).filter(id => valid.has(id)),
+  score: typeof t.score === 'number' ? Math.max(0, Math.min(100, t.score)) : null,
+})).filter(t => t.article_ids.length);
+
+if (!topics.length) {
+  return [{ json: { cycle_id: cycle.id, empty: true, topics: '[]', topic_count: 0,
+                    status: 'failed', error: 'The model proposed no topic grounded in the supplied sources.' } }];
+}
+return [{ json: { cycle_id: cycle.id, topics: JSON.stringify(topics), topic_count: topics.length, status: 'topics_ready' } }];
+`;
+
+function contentTopicsWorkflow() {
+  return {
+    name: 'BEXT — Content Topics',
+    settings: { executionOrder: 'v1', timezone: 'Australia/Melbourne' },
+    nodes: [
+      {
+        // Opens a cycle on its own every second Monday, so the fortnightly rhythm
+        // does not depend on anyone remembering to press the button.
+        id: 'fortnightly', name: 'Fortnightly', type: 'n8n-nodes-base.scheduleTrigger',
+        typeVersion: 1.2, position: pos(-620, -140),
+        // 06:10 on Mondays; the SQL only opens a cycle on even ISO weeks, so it
+        // fires fortnightly without n8n needing a two-week cron it does not have.
+        parameters: { rule: { interval: [{ field: 'cronExpression', expression: '10 6 * * 1' }] } },
+      },
+      {
+        id: 'open', name: 'Open a cycle', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(-400, -140),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        parameters: {
+          operation: 'executeQuery',
+          // Even ISO weeks only, so a weekly trigger yields a fortnightly cycle.
+          // Idempotent on the fortnight: a re-fire cannot open a second scheduled
+          // cycle within ten days of the last one.
+          query: `INSERT INTO content_cycles (window_start, window_end, trigger, status)
+SELECT (current_date - interval '14 days')::date, current_date, 'schedule', 'queued_topics'
+WHERE (extract(week from current_date)::int % 2) = 0
+  AND NOT EXISTS (
+    SELECT 1 FROM content_cycles
+    WHERE trigger = 'schedule' AND created_at > now() - interval '10 days')`,
+          options: {},
+        },
+      },
+      {
+        // The dashboard pings here after inserting a manual cycle, to skip the poll.
+        id: 'hook', name: 'Cycle request', type: 'n8n-nodes-base.webhook',
+        typeVersion: 2, position: pos(-620, 40),
+        webhookId: 'a4d2f8c1-6b3e-4a90-9c22-7f10e5b8d234',
+        parameters: {
+          httpMethod: 'POST', path: 'content-topics',
+          authentication: WEBHOOK_CRED ? 'headerAuth' : 'none',
+          responseMode: 'onReceived', options: {},
+        },
+        credentials: WEBHOOK_CRED
+          ? { httpHeaderAuth: { id: WEBHOOK_CRED, name: 'BEXT Webhook Auth' } }
+          : undefined,
+      },
+      {
+        id: 'poll', name: 'Every 3 minutes', type: 'n8n-nodes-base.scheduleTrigger',
+        typeVersion: 1.2, position: pos(-620, 200), alwaysOutputData: true,
+        parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 3 }] } },
+      },
+      {
+        id: 'claim', name: 'Claim a cycle', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(-360, 40),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        parameters: {
+          operation: 'executeQuery',
+          // The claim is the lock: SKIP LOCKED means two triggers firing at once
+          // cannot take the same cycle, so the webhook and the poll are safe to
+          // race. Oldest queued cycle first.
+          query: `UPDATE content_cycles SET status = 'scanning', started_at = now()
+WHERE id = (
+  SELECT id FROM content_cycles
+  WHERE status = 'queued_topics'
+  ORDER BY created_at
+  FOR UPDATE SKIP LOCKED
+  LIMIT 1)
+RETURNING id, window_start, window_end`,
+          options: {},
+        },
+      },
+      {
+        id: 'load', name: 'Load the window', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(-120, 40),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        // Keep emitting even on a quiet fortnight (zero eligible articles), so the
+        // cycle reaches the ranker and is marked failed rather than stranded in
+        // 'scanning'. The cycle id is recovered from the claim node, not from
+        // these rows, precisely because the rows can be empty. R015.
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          // The claimed cycle id threads through queryReplacement. Articles the
+          // daily sheet judged current (report_eligible) and relevant (score
+          // floor), newest first, capped so the prompt stays within budget.
+          query: `WITH c AS (
+  SELECT id, window_start, window_end FROM content_cycles WHERE id = $1
+)
+SELECT c.id AS __cycle_id, a.id, a.title, a.url, a.published_at,
+       s.name AS source_name, an.summary, an.relevance_score, an.topics
+FROM c
+JOIN articles a ON a.report_eligible
+ AND coalesce(a.published_at, a.fetched_at) >= c.window_start
+ AND coalesce(a.published_at, a.fetched_at) < c.window_end + 1
+JOIN sources s ON s.id = a.source_id
+JOIN article_analysis an ON an.article_id = a.id AND an.relevance_score >= 50
+ORDER BY an.relevance_score DESC, coalesce(a.published_at, a.fetched_at) DESC
+LIMIT 60`,
+          options: { queryReplacement: '={{ $json.id }}' },
+        },
+      },
+      {
+        id: 'shape', name: 'Carry the cycle', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(100, 40),
+        parameters: {
+          mode: 'runOnceForAllItems', language: 'javaScript',
+          // The cycle id comes from the claim node, not from the article rows,
+          // because a quiet fortnight returns zero articles and would otherwise
+          // lose it. A claim that took nothing stops the run; a claim with no
+          // articles still emits one marker so the ranker can fail the cycle.
+          jsCode: `const claim = $('Claim a cycle').first().json;
+if (!claim || !claim.id) return [];
+const rows = $input.all().map(i => i.json).filter(r => r && r.id);
+if (!rows.length) return [{ json: { __cycle: { id: claim.id } } }];
+const out = rows.map(r => { const c = Object.assign({}, r); delete c.__cycle_id; return { json: c }; });
+out[0].json.__cycle = { id: claim.id };
+return out;`,
+        },
+      },
+      {
+        id: 'rank', name: 'Rank three topics', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(320, 40),
+        parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: TOPICS_CODE },
+      },
+      {
+        id: 'save', name: 'Save topics', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(560, 40),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          // Insert the topics and move the cycle in one statement, so a crash
+          // between the two cannot leave a cycle marked ready with no topics under
+          // it. On the empty/failed path the topics array is [] and the CASE moves
+          // the cycle to failed with the reason instead.
+          query: `WITH ins AS (
+  INSERT INTO content_topics (cycle_id, rank, title, rationale, angle, article_ids, score)
+  SELECT $2::bigint, t.rank, t.title, t.rationale, t.angle, t.article_ids, t.score
+  FROM json_to_recordset($1::json) AS t(
+    rank smallint, title text, rationale text, angle text, article_ids bigint[], score int)
+  RETURNING 1
+)
+UPDATE content_cycles SET
+  status = $3::content_cycle_status,
+  error = nullif($4, ''),
+  topics_at = now()
+WHERE id = $2::bigint
+RETURNING id, status`,
+          options: { queryReplacement: '={{ $json.topics }},{{ $json.cycle_id }},{{ $json.status }},{{ $json.error || "" }}' },
+        },
+      },
+      // Own heartbeat, fired off the poll rather than off a work node, so the
+      // monitor pings every three minutes whether or not there was a cycle to
+      // process. Its presence also makes withHeartbeat leave this workflow alone.
+      heartbeat('KUMA_PUSH_CONTENT_TOPICS', -360, 220),
+    ],
+    connections: {
+      'Fortnightly': { main: [[{ node: 'Open a cycle', type: 'main', index: 0 }]] },
+      'Open a cycle': { main: [[{ node: 'Claim a cycle', type: 'main', index: 0 }]] },
+      'Cycle request': { main: [[{ node: 'Claim a cycle', type: 'main', index: 0 }]] },
+      'Every 3 minutes': { main: [[{ node: 'Claim a cycle', type: 'main', index: 0 }, { node: 'Heartbeat', type: 'main', index: 0 }]] },
+      'Claim a cycle': { main: [[{ node: 'Load the window', type: 'main', index: 0 }]] },
+      'Load the window': { main: [[{ node: 'Carry the cycle', type: 'main', index: 0 }]] },
+      'Carry the cycle': { main: [[{ node: 'Rank three topics', type: 'main', index: 0 }]] },
+      'Rank three topics': { main: [[{ node: 'Save topics', type: 'main', index: 0 }]] },
+    },
+  };
+}
+
+// ── Workflow: Content Drafts ─────────────────────────────────────────────────
+
+const DRAFTS_CODE = `
+const helpers = this.helpers;
+${GEMINI_CALL}
+${LI_LIB}
+
+const all = $input.all().map(i => i.json);
+const ctx = all[0] || {};
+const cycle = ctx.__cycle || {};
+const topic = ctx.__topic || {};
+const voiceRow = ctx.__voice || {};
+const recent = ctx.__recent || [];
+const sources = all.filter(a => a && a.article_id).map(a => ({
+  article_id: a.article_id, url: a.url, title: a.title, summary: a.summary, body: a.body,
+}));
+
+const voice = merge(voiceRow);
+// Two variants: the recommended one earns comments (the reaction that compounds
+// into reach), the alternative earns saves. Distinct formulas, chosen away from
+// anything used recently.
+const picks = pick(2, recent, voice.pillars, topic.pillar || null);
+const wantGoals = ['comments', 'saves'];
+const chosen = wantGoals.map((g, i) => picks[i] || picks[0]).slice(0, 2);
+
+const sourceBlock = sources.map(s =>
+  '[' + s.article_id + '] ' + (s.title || '') + '\\n' + String(s.summary || s.body || '').slice(0, 800)
+).join('\\n\\n');
+
+const drafts = [];
+for (let i = 0; i < 2; i++) {
+  const variant = i === 0 ? 'A' : 'B';
+  const choice = chosen[i];
+  const prompt = ${JSON.stringify(DRAFTS_PROMPT_HEAD)}
+    + '\\n\\n' + voicePromptBlock(voice)
+    + '\\n\\n' + formulaPromptBlock(choice)
+    + '\\n\\nTOPIC: ' + (topic.title || '') + '\\nANGLE: ' + (topic.angle || '')
+    + '\\n\\nHUMAN PERSPECTIVE TO HONOUR (do not contradict, build around it):\\n'
+    + (cycle.human_perspective || '(none supplied)')
+    + '\\n\\nSOURCE MATERIAL:\\n' + sourceBlock;
+
+  let out;
+  try { out = await geminiJSON(prompt, helpers); }
+  catch (e) {
+    // One variant failing must not sink the other. Record the failure as an empty
+    // draft carrying the error, so the reviewer sees "B did not generate" rather
+    // than a silently missing card.
+    drafts.push({ variant: variant, formula: choice.formula, goal: choice.goal,
+      hook: '', body: '', char_count: 0, hashtags: [], visual_concept: null, cta: null,
+      destination_url: null, audit: { blockers: [{ rule: 'generation failed', detail: String(e.message || e) }], warnings: [] },
+      recommended: false, claims: [] });
+    continue;
+  }
+
+  // Scrub deterministically, then audit the scrubbed text. The model's own hook
+  // is discarded in favour of the one computed from the final body, so the two
+  // cannot disagree about what the post opens with.
+  const scrubbed = scrub(String(out.body || ''));
+  const body = scrubbed.text;
+  const hook = hookOf(body);
+  const hashtags = (out.hashtags || []).map(h => String(h).replace(/^#/, '').trim()).filter(Boolean).slice(0, 2);
+  const a = audit({ body: body, hook: hook, hashtags: hashtags, destination_url: out.destination_url });
+  // The scrubber's own placeholder flags join the audit warnings, so an unfilled
+  // [Your Company] shows up in the same panel as everything else.
+  (scrubbed.flags || []).forEach(f => a.warnings.push({ rule: f.rule, detail: f.text }));
+
+  drafts.push({
+    variant: variant, formula: choice.formula, goal: choice.goal,
+    hook: hook, body: body, char_count: charCount(body), hashtags: hashtags,
+    visual_concept: out.visual_concept || null, cta: out.cta || null,
+    destination_url: out.destination_url || null,
+    audit: { blockers: a.blockers, warnings: a.warnings, ok: a.ok },
+    recommended: false,
+    // The model's claim list, reconciled against the real sources. This is the
+    // fact-check record: every material claim matched back or flagged.
+    claims: reconcile((out.claims && out.claims.length ? out.claims : extractClaims(body)).map(c => ({ claim: c })), sources),
+  });
+}
+
+// The recommended variant is the one with fewer blockers, ties broken toward the
+// comments-goal draft (A). "Recommended" has to mean something, so it is the
+// cleaner draft, not just the first.
+const score = d => (d.audit.blockers || []).length;
+if (drafts.length === 2 && score(drafts[1]) < score(drafts[0])) drafts[1].recommended = true;
+else if (drafts.length) drafts[0].recommended = true;
+
+return [{ json: { cycle_id: cycle.id, topic_id: topic.id || null,
+  drafts: JSON.stringify(drafts), draft_count: drafts.length } }];
+`;
+
+function contentDraftsWorkflow() {
+  return {
+    name: 'BEXT — Content Drafts',
+    settings: { executionOrder: 'v1', timezone: 'Australia/Melbourne' },
+    nodes: [
+      {
+        id: 'hook', name: 'Draft request', type: 'n8n-nodes-base.webhook',
+        typeVersion: 2, position: pos(-620, 0),
+        webhookId: 'c7e1a9b4-2f8d-4c63-9a10-5b7e2d0f6c81',
+        parameters: {
+          httpMethod: 'POST', path: 'content-drafts',
+          authentication: WEBHOOK_CRED ? 'headerAuth' : 'none',
+          responseMode: 'onReceived', options: {},
+        },
+        credentials: WEBHOOK_CRED
+          ? { httpHeaderAuth: { id: WEBHOOK_CRED, name: 'BEXT Webhook Auth' } }
+          : undefined,
+      },
+      {
+        id: 'poll', name: 'Every 3 minutes', type: 'n8n-nodes-base.scheduleTrigger',
+        typeVersion: 1.2, position: pos(-620, 180), alwaysOutputData: true,
+        parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 3 }] } },
+      },
+      {
+        id: 'claim', name: 'Claim a selection', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(-360, 0),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        parameters: {
+          operation: 'executeQuery',
+          // A cycle is queued_drafts only once a human has selected a topic, so
+          // this can never draft for a topic nobody chose.
+          query: `UPDATE content_cycles SET status = 'drafting'
+WHERE id = (
+  SELECT id FROM content_cycles
+  WHERE status = 'queued_drafts' AND selected_topic_id IS NOT NULL
+  ORDER BY selected_at
+  FOR UPDATE SKIP LOCKED
+  LIMIT 1)
+RETURNING id, human_perspective, selected_topic_id`,
+          options: {},
+        },
+      },
+      {
+        id: 'context', name: 'Load topic and voice', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(-120, 0),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        // Keep the chain alive if the join finds nothing (a dangling selected
+        // topic): the assembler guards the empty case and the cycle is left for
+        // Contract Test rather than silently stalling the run. R015.
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          // One row carrying everything the drafter needs that is not an article:
+          // the cycle, the selected topic, the voice profile, and the formulas
+          // used in the last fortnight so the picker can avoid repeating a shape.
+          query: `SELECT
+  c.id AS cycle_id, c.human_perspective,
+  t.id AS topic_id, t.title AS topic_title, t.angle AS topic_angle,
+  t.article_ids,
+  (SELECT to_json(v) FROM linkedin_voice v WHERE v.id = 1) AS voice,
+  (SELECT coalesce(json_agg(json_build_object('formula', d.formula, 'created_at', d.created_at)), '[]'::json)
+     FROM linkedin_drafts d WHERE d.created_at > now() - interval '21 days') AS recent
+FROM content_cycles c
+JOIN content_topics t ON t.id = c.selected_topic_id
+WHERE c.id = $1`,
+          options: { queryReplacement: '={{ $json.id }}' },
+        },
+      },
+      {
+        id: 'sources', name: 'Load the sources', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(120, 0),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        // Emit even with no matching articles, so the assembler still runs and
+        // reads the context row off its own node. R015.
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          // The topic's supporting articles, full text where we have it, so the
+          // fact-checker matches claims against real source sentences.
+          query: `SELECT a.id AS article_id, a.url, a.title, a.body, an.summary
+FROM content_topics t
+JOIN articles a ON a.id = ANY(t.article_ids)
+LEFT JOIN article_analysis an ON an.article_id = a.id
+WHERE t.id = $1`,
+          options: { queryReplacement: '={{ $json.topic_id }}' },
+        },
+      },
+      {
+        id: 'assemble', name: 'Assemble context', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(340, 0),
+        parameters: {
+          mode: 'runOnceForAllItems', language: 'javaScript',
+          // Two Postgres nodes upstream: the context row (from 'Load topic and
+          // voice') and the source rows (this input). Pull the context off its
+          // node explicitly and fold it into the first item as markers the
+          // drafter reads, then pass the source rows through.
+          jsCode: `const ctxRow = $('Load topic and voice').first().json;
+const sources = $input.all().map(i => i.json).filter(s => s && s.article_id);
+if (!ctxRow || !ctxRow.cycle_id) return [];
+const first = sources[0] ? Object.assign({}, sources[0]) : {};
+first.__cycle = { id: ctxRow.cycle_id, human_perspective: ctxRow.human_perspective };
+first.__topic = { id: ctxRow.topic_id, title: ctxRow.topic_title, angle: ctxRow.topic_angle, pillar: null };
+first.__voice = ctxRow.voice || {};
+first.__recent = ctxRow.recent || [];
+const out = [{ json: first }];
+for (let i = 1; i < sources.length; i++) out.push({ json: sources[i] });
+return out;`,
+        },
+      },
+      {
+        id: 'draft', name: 'Write two variants', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(560, 0),
+        parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: DRAFTS_CODE },
+      },
+      {
+        id: 'save', name: 'Save drafts', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(800, 0),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          // Insert both drafts, then their fact-check claims, then move the cycle
+          // to drafts_ready, in one statement. json_to_recordset expands the
+          // drafts; the claims are inserted by joining each draft back to its
+          // freshly-minted id on the (cycle, variant) pair.
+          query: `WITH d AS (
+  INSERT INTO linkedin_drafts
+    (cycle_id, topic_id, variant, recommended, formula, goal, hook, body, char_count,
+     hashtags, visual_concept, cta, destination_url, audit)
+  SELECT $2::bigint, $3::bigint, x.variant, x.recommended, x.formula, x.goal, x.hook, x.body,
+     x.char_count, x.hashtags, x.visual_concept, x.cta, x.destination_url, x.audit
+  FROM json_to_recordset($1::json) AS x(
+    variant text, recommended boolean, formula text, goal text, hook text, body text,
+    char_count int, hashtags text[], visual_concept text, cta text, destination_url text, audit jsonb)
+  RETURNING id, variant
+), claims AS (
+  INSERT INTO content_claims (draft_id, claim, article_id, source_url, source_quote, verdict)
+  SELECT d.id, c.claim, c.article_id, c.source_url, c.source_quote, c.verdict
+  FROM json_to_recordset($1::json) AS x(variant text, claims json)
+  JOIN d ON d.variant = x.variant
+  CROSS JOIN LATERAL json_to_recordset(x.claims) AS c(
+    claim text, article_id bigint, source_url text, source_quote text, verdict text)
+  RETURNING 1
+)
+UPDATE content_cycles SET status = 'drafts_ready', drafts_at = now()
+WHERE id = $2::bigint
+RETURNING id`,
+          options: { queryReplacement: '={{ $json.drafts }},{{ $json.cycle_id }},{{ $json.topic_id }}' },
+        },
+      },
+      heartbeat('KUMA_PUSH_CONTENT_DRAFTS', -360, 200),
+    ],
+    connections: {
+      'Draft request': { main: [[{ node: 'Claim a selection', type: 'main', index: 0 }]] },
+      'Every 3 minutes': { main: [[{ node: 'Claim a selection', type: 'main', index: 0 }, { node: 'Heartbeat', type: 'main', index: 0 }]] },
+      'Claim a selection': { main: [[{ node: 'Load topic and voice', type: 'main', index: 0 }]] },
+      'Load topic and voice': { main: [[{ node: 'Load the sources', type: 'main', index: 0 }]] },
+      'Load the sources': { main: [[{ node: 'Assemble context', type: 'main', index: 0 }]] },
+      'Assemble context': { main: [[{ node: 'Write two variants', type: 'main', index: 0 }]] },
+      'Write two variants': { main: [[{ node: 'Save drafts', type: 'main', index: 0 }]] },
+    },
+  };
+}
+
+// ── Workflow: Content Actions ────────────────────────────────────────────────
+//
+// The dashboard's write path. In production the dashboard reads Postgres through
+// a SELECT-only proxy and has no other route to the database, so every mutation a
+// human makes — start a cycle, add the perspective, select a topic, approve a
+// draft, mark it published, record its performance — is an authenticated POST to
+// this webhook, and n8n owns the write. The caller names an action and typed
+// fields; the router picks a fixed, parameterised statement. The caller never
+// supplies SQL.
+//
+// One json parameter per action ($1::jsonb), destructured in the statement, so
+// nothing depends on n8n's comma-splitting queryReplacement.
+
+const ACTIONS_ROUTER = `
+// Whitelisted actions -> fixed SQL. The body names an action and its fields; the
+// SQL is chosen here, never sent by the caller. An unknown action throws, which
+// the webhook returns as an error rather than silently doing nothing.
+const body = ($input.first().json && ($input.first().json.body || $input.first().json)) || {};
+const action = String(body.action || '');
+
+const SQL = {
+  start_cycle:
+    "INSERT INTO content_cycles (window_start, window_end, report_ids, trigger, status, requested_by, human_perspective) " +
+    "SELECT (current_date - interval '14 days')::date, current_date, " +
+    "  coalesce((SELECT array_agg(x::int) FROM json_array_elements_text(coalesce(($1::json)->'report_ids','[]'::json)) AS x), '{}'), " +
+    "  'manual', 'queued_topics', ($1::json)->>'requested_by', ($1::json)->>'perspective' " +
+    "RETURNING id, status",
+
+  set_perspective:
+    "UPDATE content_cycles SET human_perspective = ($1::json)->>'perspective' " +
+    "WHERE id = (($1::json)->>'cycle_id')::bigint RETURNING id, status",
+
+  select_topic:
+    "UPDATE content_cycles SET selected_topic_id = (($1::json)->>'topic_id')::bigint, " +
+    "  human_perspective = coalesce(($1::json)->>'perspective', human_perspective), " +
+    "  status = 'queued_drafts', selected_at = now() " +
+    "WHERE id = (($1::json)->>'cycle_id')::bigint AND status = 'topics_ready' RETURNING id, status",
+
+  approve_draft:
+    "WITH d AS ( " +
+    "  UPDATE linkedin_drafts SET status='approved', " +
+    "    final_copy = coalesce(nullif(($1::json)->>'final_copy',''), body), " +
+    "    post_at = nullif(($1::json)->>'post_at','')::timestamptz, " +
+    "    approved_at = now(), approved_by = ($1::json)->>'approved_by', updated_at = now() " +
+    "  WHERE id = (($1::json)->>'draft_id')::bigint AND status IN ('draft','approved') " +
+    "  RETURNING cycle_id, id ), " +
+    "sib AS ( UPDATE linkedin_drafts l SET status='rejected', updated_at=now() " +
+    "  FROM d WHERE l.cycle_id = d.cycle_id AND l.id <> d.id AND l.status='draft' RETURNING 1 ) " +
+    "UPDATE content_cycles c SET status='approved' FROM d WHERE c.id = d.cycle_id RETURNING c.id, c.status",
+
+  reject_draft:
+    "UPDATE linkedin_drafts SET status='rejected', error = nullif(($1::json)->>'reason',''), updated_at=now() " +
+    "WHERE id = (($1::json)->>'draft_id')::bigint RETURNING id, status",
+
+  mark_published:
+    "WITH d AS ( UPDATE linkedin_drafts SET status='published', published_at=now(), " +
+    "    post_url = nullif(($1::json)->>'post_url',''), updated_at=now() " +
+    "  WHERE id = (($1::json)->>'draft_id')::bigint RETURNING cycle_id, id ) " +
+    "UPDATE content_cycles c SET status='published', published_at=now() FROM d WHERE c.id=d.cycle_id RETURNING d.id, 'published' AS status",
+
+  resolve_claim:
+    "UPDATE content_claims SET verdict = coalesce(($1::json)->>'verdict', verdict), " +
+    "  note = nullif(($1::json)->>'note','') WHERE id = (($1::json)->>'claim_id')::bigint RETURNING id, verdict AS status",
+
+  record_performance:
+    "INSERT INTO linkedin_performance (draft_id, impressions, reactions, comments, reposts, clicks, followers, notes, recorded_by) " +
+    "SELECT (($1::json)->>'draft_id')::bigint, " +
+    "  nullif(($1::json)->>'impressions','')::int, nullif(($1::json)->>'reactions','')::int, " +
+    "  nullif(($1::json)->>'comments','')::int, nullif(($1::json)->>'reposts','')::int, " +
+    "  nullif(($1::json)->>'clicks','')::int, nullif(($1::json)->>'followers','')::int, " +
+    "  nullif(($1::json)->>'notes',''), ($1::json)->>'recorded_by' RETURNING id, 'recorded' AS status",
+
+  update_voice:
+    "UPDATE linkedin_voice SET " +
+    "  author = coalesce(nullif(($1::json)->>'author',''), author), " +
+    "  audience = coalesce(nullif(($1::json)->>'audience',''), audience), " +
+    "  fingerprint = coalesce(nullif(($1::json)->>'fingerprint',''), fingerprint), " +
+    "  cta_style = coalesce(nullif(($1::json)->>'cta_style',''), cta_style), " +
+    "  updated_at = now() WHERE id = 1 RETURNING id, 'saved' AS status",
+};
+
+const sql = SQL[action];
+if (!sql) throw new Error('unknown content action: ' + action);
+return [{ json: { sql: sql, params: JSON.stringify(body) } }];
+`;
+
+function contentActionsWorkflow() {
+  return {
+    name: 'BEXT — Content Actions',
+    settings: { executionOrder: 'v1', timezone: 'Australia/Melbourne' },
+    nodes: [
+      {
+        id: 'hook', name: 'Action request', type: 'n8n-nodes-base.webhook',
+        typeVersion: 2, position: pos(-360, 0),
+        webhookId: 'e2b6f4a0-9d31-4c58-8a72-1f3c6b90e457',
+        parameters: {
+          httpMethod: 'POST', path: 'content-actions',
+          // A write endpoint, publicly reachable through traefik: it must be
+          // authenticated, never obscurity. Deploy is skipped without the
+          // credential rather than exposing it open.
+          authentication: 'headerAuth',
+          // lastNode so the RETURNING row (a new cycle id, a new status) comes
+          // back to the dashboard synchronously.
+          responseMode: 'lastNode', options: {},
+        },
+        credentials: WEBHOOK_CRED
+          ? { httpHeaderAuth: { id: WEBHOOK_CRED, name: 'BEXT Webhook Auth' } }
+          : undefined,
+      },
+      {
+        id: 'route', name: 'Route action', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(-120, 0),
+        parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: ACTIONS_ROUTER },
+      },
+      {
+        id: 'apply', name: 'Apply', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(120, 0),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          query: '={{ $json.sql }}',
+          // Single json parameter, so no field with a comma splits the statement.
+          options: { queryReplacement: '={{ $json.params }}' },
+        },
+      },
+    ],
+    connections: {
+      'Action request': { main: [[{ node: 'Route action', type: 'main', index: 0 }]] },
+      'Route action': { main: [[{ node: 'Apply', type: 'main', index: 0 }]] },
+    },
+  };
+}
+
+// ── Workflow: LinkedIn Publish ───────────────────────────────────────────────
+
+const PUBLISH_CODE = `
+const helpers = this.helpers;
+${LI_LIB}
+const env = {
+  LINKEDIN_PUBLISH_MODE: $env.LINKEDIN_PUBLISH_MODE,
+  PUBLORA_API_KEY: $env.PUBLORA_API_KEY,
+  LINKEDIN_PLATFORM_ID: $env.LINKEDIN_PLATFORM_ID,
+  LINKEDIN_API_TOKEN: $env.LINKEDIN_API_TOKEN,
+  LINKEDIN_AUTHOR_URN: $env.LINKEDIN_AUTHOR_URN,
+  LINKEDIN_API_VERSION: $env.LINKEDIN_API_VERSION,
+};
+const out = [];
+for (const item of $input.all()) {
+  const draft = item.json;
+  if (!draft || !draft.id) continue;
+  const p = plan(draft, env);
+
+  if (p.mode === 'manual') {
+    // Manual is the launch default and the brief's own instruction ("approve and
+    // manually publish"). The workflow does not post; it hands the finished text
+    // to the human via Teams and leaves the row approved. The dashboard is where
+    // they mark it published once it is up, so nothing here claims a post went
+    // out that a person still has to make.
+    out.push({ json: { id: draft.id, mode: 'manual', published: false,
+      message: p.message, post_url: null, external_id: null, error: null } });
+    continue;
+  }
+
+  try {
+    const res = await helpers.httpRequest(Object.assign({ json: true, timeout: 60000 }, p.request));
+    const externalId = (res && (res.id || (res.headers && res.headers['x-restli-id']))) || null;
+    out.push({ json: { id: draft.id, mode: p.mode, published: true,
+      external_id: externalId ? String(externalId) : null, post_url: null, error: null } });
+  } catch (e) {
+    out.push({ json: { id: draft.id, mode: p.mode, published: false,
+      external_id: null, post_url: null, error: String((e && (e.message || e.code)) || e).slice(0, 500) } });
+  }
+}
+return out;
+`;
+
+function linkedinPublishWorkflow() {
+  return {
+    name: 'BEXT — LinkedIn Publish',
+    settings: { executionOrder: 'v1', timezone: 'Australia/Melbourne' },
+    nodes: [
+      {
+        id: 'trigger', name: 'Every 15 minutes', type: 'n8n-nodes-base.scheduleTrigger',
+        typeVersion: 1.2, position: pos(-400, 0), alwaysOutputData: true,
+        parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 15 }] } },
+      },
+      {
+        id: 'due', name: 'Due posts', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(-180, 0),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        // Most 15-minute runs have nothing due; the heartbeat fires off the
+        // trigger regardless, so this need not keep the chain alive. R015 wants
+        // it set anyway, and the publisher tolerates an empty item. R015.
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          // Approved drafts whose slot has passed. SKIP LOCKED so two overlapping
+          // runs cannot both take the same post. In manual mode the row stays
+          // approved (the code publishes nothing), so it would be re-selected every
+          // run; the nudged_at guard stops it nagging more than once a day.
+          query: `SELECT id, final_copy, body, hashtags, destination_url, post_at
+FROM linkedin_drafts
+WHERE status = 'approved'
+  AND post_at IS NOT NULL AND post_at <= now()
+  AND (nudged_at IS NULL OR nudged_at < now() - interval '20 hours')
+ORDER BY post_at
+FOR UPDATE SKIP LOCKED
+LIMIT 10`,
+          options: {},
+        },
+      },
+      {
+        id: 'publish', name: 'Publish or prepare', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(40, 0),
+        parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: PUBLISH_CODE },
+      },
+      {
+        id: 'record', name: 'Record result', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(280, 0),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          // One statement handles all three outcomes. Auto-publish success flips
+          // the row to published; a failure flips it to failed with the error;
+          // manual mode leaves it approved and only stamps nudged_at, so the same
+          // post is not announced to Teams twice in a day.
+          query: `UPDATE linkedin_drafts d SET
+  status = CASE WHEN v.published THEN 'published'::linkedin_draft_status
+                WHEN v.error IS NOT NULL THEN 'failed'::linkedin_draft_status
+                ELSE d.status END,
+  published_at = CASE WHEN v.published THEN now() ELSE d.published_at END,
+  external_id = coalesce(v.external_id, d.external_id),
+  error = v.error,
+  nudged_at = CASE WHEN v.mode = 'manual' THEN now() ELSE d.nudged_at END,
+  updated_at = now()
+FROM (SELECT * FROM json_to_recordset($1::json) AS x(
+  id bigint, mode text, published boolean, external_id text, post_url text, error text)) v
+WHERE d.id = v.id
+RETURNING d.id, d.status`,
+          options: { queryReplacement: '={{ JSON.stringify($input.all().map(i => i.json)) }}' },
+        },
+      },
+      {
+        id: 'notify', name: 'Notify Teams', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(520, 0),
+        onError: 'continueRegularOutput',
+        parameters: {
+          mode: 'runOnceForAllItems', language: 'javaScript',
+          // Manual mode posts the ready-to-publish text to the Daily report
+          // channel so the human can act on it from Teams. Auto mode posts a
+          // shorter "published" or "failed" line. Reuses the same Teams Workflows
+          // webhook as the news card. A missing webhook is not an error here.
+          jsCode: `const helpers = this.helpers;
+const url = $env.TEAMS_DAILY_WEBHOOK_URL;
+const items = $input.all().map(i => i.json);
+if (!url) return items.map(j => ({ json: j }));
+for (const it of items) {
+  if (!it || !it.id) continue;   // the empty-run passthrough item carries no post
+  let text;
+  if (it.status === 'published') text = 'LinkedIn: post ' + it.id + ' published.';
+  else if (it.status === 'failed') text = 'LinkedIn: post ' + it.id + ' FAILED to publish. ' + (it.error || '');
+  else text = 'LinkedIn: a post is approved and due. Publish it manually, then close it in the dashboard. (draft ' + it.id + ')';
+  try {
+    await helpers.httpRequest({ method: 'POST', url: url, json: true, timeout: 30000,
+      body: { type: 'message', text: text } });
+  } catch (e) { /* the card is a courtesy; its failure must not fail the workflow */ }
+}
+return items.map(j => ({ json: j }));`,
+        },
+      },
+      heartbeat('KUMA_PUSH_LINKEDIN_PUBLISH', -180, 180),
+    ],
+    connections: {
+      'Every 15 minutes': { main: [[{ node: 'Due posts', type: 'main', index: 0 }, { node: 'Heartbeat', type: 'main', index: 0 }]] },
+      'Due posts': { main: [[{ node: 'Publish or prepare', type: 'main', index: 0 }]] },
+      'Publish or prepare': { main: [[{ node: 'Record result', type: 'main', index: 0 }]] },
+      'Record result': { main: [[{ node: 'Notify Teams', type: 'main', index: 0 }]] },
+    },
+  };
+}
+
 (async () => {
   if (!PG_CRED) {
     console.error('Set N8N_PG_CREDENTIAL_ID in .env first.');
@@ -3192,5 +4466,43 @@ FROM json_to_recordset($1::json) AS x(status text, detail text)`,
     console.error('  node graph/create-channel-flow.js --url --id 77d08f87-08c9-836a-60ef-3e1aab126aaa');
   } else {
     await deploy(dailyNewsCardWorkflow());
+  }
+
+  // Content generation. All three call Gemini, so without a key they would fail
+  // every run — the same red-workflow trade refused above. LinkedIn Publish does
+  // not itself call Gemini, but it is pointless without drafts to publish, so the
+  // three deploy together.
+  if (!process.env.GEMINI_API_KEY) {
+    console.error('GEMINI_API_KEY not set — skipping Content Topics, Content Drafts and LinkedIn Publish.');
+  } else {
+    await deploy(contentTopicsWorkflow());
+    await deploy(contentDraftsWorkflow());
+    await deploy(linkedinPublishWorkflow());
+    // The dashboard's write path. Authenticated, so it is skipped without the
+    // header-auth credential rather than deployed as an open write endpoint —
+    // the same trade as Teams Inbound.
+    if (!WEBHOOK_CRED) {
+      console.error('N8N_WEBHOOK_CREDENTIAL_ID not set — skipping Content Actions (the dashboard write path).');
+      console.error('  Create an n8n Header Auth credential named "BEXT Webhook Auth" and put its id in .env.');
+    } else {
+      await deploy(contentActionsWorkflow());
+    }
+  }
+
+  // The two that watch the other seven. Deployed last so that a failure while
+  // building them cannot stop the pipeline itself from being deployed — the
+  // monitor must never be the reason the monitored thing is missing.
+  //
+  // Both call the n8n API from inside n8n, so they need N8N_API_KEY in the
+  // container (infra/docker-compose.yml). Without it they would deploy and fail
+  // every run, which trains people to ignore a red workflow — the same trade
+  // refused above for Newsletter Intake and Teams Inbound.
+  if (!process.env.N8N_API_KEY) {
+    console.error('N8N_API_KEY not set — skipping Self Heal and Contract Test.');
+    console.error('  Both call the n8n API from inside n8n. Add N8N_API_KEY to .env, and to the');
+    console.error('  n8n service environment in infra/docker-compose.yml, then redeploy the container.');
+  } else {
+    await deploy(selfHealWorkflow());
+    await deploy(contractTestWorkflow());
   }
 })();

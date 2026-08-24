@@ -3,26 +3,25 @@
 import { useMemo, useState } from 'react';
 import type { MeetingRow } from '@/lib/queries';
 
-/**
- * The six stages a meeting passes through, in order. Each reads a column the
- * workflow writes, so the count reflects what actually happened rather than what
- * the workflow reported about itself.
- */
-export const STAGES: { key: string; label: string; of: (m: MeetingRow) => boolean }[] = [
-  { key: 'transcript', label: 'Transcript', of: (m) => !!(m.transcript_path || m.transcript_url) },
-  { key: 'extract', label: 'Extraction', of: (m) => m.has_extract },
-  { key: 'minutes', label: 'Minutes', of: (m) => !!(m.minutes_path || m.minutes_url) },
-  { key: 'filing', label: 'Filing', of: (m) => !!m.folder_url },
-  { key: 'draft', label: 'Draft email', of: (m) => !!m.draft_message_id },
-  { key: 'card', label: 'Channel card', of: (m) => !!m.posted_at },
-];
+// Stage flags arrive precomputed from the server page as plain booleans.
+//
+// Nothing named STAGES crosses the client boundary in either direction any more.
+// Sharing that symbol — in a lib module, or exported from here — made Turbopack
+// resolve the server page's copy to a client reference, and the page 500'd with
+// "STAGES is on the client" while every other page rendered. Plain data has no
+// such failure mode.
+export type StageFlag = { key: string; label: string; ok: boolean };
+export type MeetingWithStages = MeetingRow & { stages: StageFlag[] };
+
+const stagesDone = (m: MeetingWithStages) => m.stages.filter((s) => s.ok).length;
+const STAGE_COUNT = 6;
 
 type SortKey = 'when' | 'subject' | 'organiser' | 'status' | 'stages';
 type Dir = 'asc' | 'desc';
 
 const PAGE_SIZES = [10, 25, 50];
 
-export function MeetingsTable({ rows }: { rows: MeetingRow[] }) {
+export function MeetingsTable({ rows }: { rows: MeetingWithStages[] }) {
   const [q, setQ] = useState('');
   const [status, setStatus] = useState<'all' | MeetingRow['status']>('all');
   const [organiser, setOrganiser] = useState('all');
@@ -51,13 +50,12 @@ export function MeetingsTable({ rows }: { rows: MeetingRow[] }) {
         .some((v) => String(v).toLowerCase().includes(needle));
     });
 
-    const stagesOf = (m: MeetingRow) => STAGES.filter((s) => s.of(m)).length;
-    const cmp: Record<SortKey, (a: MeetingRow, b: MeetingRow) => number> = {
+    const cmp: Record<SortKey, (a: MeetingWithStages, b: MeetingWithStages) => number> = {
       when: (a, b) => (a.started_at || a.updated_at || '').localeCompare(b.started_at || b.updated_at || ''),
       subject: (a, b) => (a.subject || '').localeCompare(b.subject || ''),
       organiser: (a, b) => (a.organiser_upn || '').localeCompare(b.organiser_upn || ''),
       status: (a, b) => a.status.localeCompare(b.status),
-      stages: (a, b) => stagesOf(a) - stagesOf(b),
+      stages: (a, b) => stagesDone(a) - stagesDone(b),
     };
     out = [...out].sort(cmp[sort]);
     if (dir === 'desc') out.reverse();
@@ -228,21 +226,21 @@ export function MeetingsTable({ rows }: { rows: MeetingRow[] }) {
 }
 
 /** Six pips, one per stage — the row-level version of the pipeline strip. */
-function StageBar({ m }: { m: MeetingRow }) {
-  const done = STAGES.filter((s) => s.of(m)).length;
+function StageBar({ m }: { m: MeetingWithStages }) {
+  const done = stagesDone(m);
   return (
     <span className="inline-flex items-center gap-1.5">
       <span className="flex gap-0.5">
-        {STAGES.map((s) => (
+        {m.stages.map((s) => (
           <span
             key={s.key}
             title={s.label}
-            className={`h-3.5 w-1.5 rounded-sm ${s.of(m) ? 'bg-ok' : 'bg-ink-700'}`}
+            className={`h-3.5 w-1.5 rounded-sm ${s.ok ? 'bg-ok' : 'bg-ink-700'}`}
           />
         ))}
       </span>
       <span className="tnum text-ink-400">
-        {done}/{STAGES.length}
+        {done}/{STAGE_COUNT}
       </span>
     </span>
   );

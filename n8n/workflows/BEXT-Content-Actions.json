@@ -1,0 +1,96 @@
+{
+  "name": "BEXT — Content Actions",
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Australia/Melbourne"
+  },
+  "nodes": [
+    {
+      "id": "hook",
+      "name": "Action request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -360,
+        0
+      ],
+      "webhookId": "e2b6f4a0-9d31-4c58-8a72-1f3c6b90e457",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "content-actions",
+        "authentication": "headerAuth",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "LRKNYr1yNB1VI1y4",
+          "name": "BEXT Webhook Auth"
+        }
+      }
+    },
+    {
+      "id": "route",
+      "name": "Route action",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -120,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "language": "javaScript",
+        "jsCode": "\n// Whitelisted actions -> fixed SQL. The body names an action and its fields; the\n// SQL is chosen here, never sent by the caller. An unknown action throws, which\n// the webhook returns as an error rather than silently doing nothing.\nconst body = ($input.first().json && ($input.first().json.body || $input.first().json)) || {};\nconst action = String(body.action || '');\n\nconst SQL = {\n  start_cycle:\n    \"INSERT INTO content_cycles (window_start, window_end, report_ids, trigger, status, requested_by, human_perspective) \" +\n    \"SELECT (current_date - interval '14 days')::date, current_date, \" +\n    \"  coalesce((SELECT array_agg(x::int) FROM json_array_elements_text(coalesce(($1::json)->'report_ids','[]'::json)) AS x), '{}'), \" +\n    \"  'manual', 'queued_topics', ($1::json)->>'requested_by', ($1::json)->>'perspective' \" +\n    \"RETURNING id, status\",\n\n  set_perspective:\n    \"UPDATE content_cycles SET human_perspective = ($1::json)->>'perspective' \" +\n    \"WHERE id = (($1::json)->>'cycle_id')::bigint RETURNING id, status\",\n\n  select_topic:\n    \"UPDATE content_cycles SET selected_topic_id = (($1::json)->>'topic_id')::bigint, \" +\n    \"  human_perspective = coalesce(($1::json)->>'perspective', human_perspective), \" +\n    \"  status = 'queued_drafts', selected_at = now() \" +\n    \"WHERE id = (($1::json)->>'cycle_id')::bigint AND status = 'topics_ready' RETURNING id, status\",\n\n  approve_draft:\n    \"WITH d AS ( \" +\n    \"  UPDATE linkedin_drafts SET status='approved', \" +\n    \"    final_copy = coalesce(nullif(($1::json)->>'final_copy',''), body), \" +\n    \"    post_at = nullif(($1::json)->>'post_at','')::timestamptz, \" +\n    \"    approved_at = now(), approved_by = ($1::json)->>'approved_by', updated_at = now() \" +\n    \"  WHERE id = (($1::json)->>'draft_id')::bigint AND status IN ('draft','approved') \" +\n    \"  RETURNING cycle_id, id ), \" +\n    \"sib AS ( UPDATE linkedin_drafts l SET status='rejected', updated_at=now() \" +\n    \"  FROM d WHERE l.cycle_id = d.cycle_id AND l.id <> d.id AND l.status='draft' RETURNING 1 ) \" +\n    \"UPDATE content_cycles c SET status='approved' FROM d WHERE c.id = d.cycle_id RETURNING c.id, c.status\",\n\n  reject_draft:\n    \"UPDATE linkedin_drafts SET status='rejected', error = nullif(($1::json)->>'reason',''), updated_at=now() \" +\n    \"WHERE id = (($1::json)->>'draft_id')::bigint RETURNING id, status\",\n\n  mark_published:\n    \"WITH d AS ( UPDATE linkedin_drafts SET status='published', published_at=now(), \" +\n    \"    post_url = nullif(($1::json)->>'post_url',''), updated_at=now() \" +\n    \"  WHERE id = (($1::json)->>'draft_id')::bigint RETURNING cycle_id, id ) \" +\n    \"UPDATE content_cycles c SET status='published', published_at=now() FROM d WHERE c.id=d.cycle_id RETURNING d.id, 'published' AS status\",\n\n  resolve_claim:\n    \"UPDATE content_claims SET verdict = coalesce(($1::json)->>'verdict', verdict), \" +\n    \"  note = nullif(($1::json)->>'note','') WHERE id = (($1::json)->>'claim_id')::bigint RETURNING id, verdict AS status\",\n\n  record_performance:\n    \"INSERT INTO linkedin_performance (draft_id, impressions, reactions, comments, reposts, clicks, followers, notes, recorded_by) \" +\n    \"SELECT (($1::json)->>'draft_id')::bigint, \" +\n    \"  nullif(($1::json)->>'impressions','')::int, nullif(($1::json)->>'reactions','')::int, \" +\n    \"  nullif(($1::json)->>'comments','')::int, nullif(($1::json)->>'reposts','')::int, \" +\n    \"  nullif(($1::json)->>'clicks','')::int, nullif(($1::json)->>'followers','')::int, \" +\n    \"  nullif(($1::json)->>'notes',''), ($1::json)->>'recorded_by' RETURNING id, 'recorded' AS status\",\n\n  update_voice:\n    \"UPDATE linkedin_voice SET \" +\n    \"  author = coalesce(nullif(($1::json)->>'author',''), author), \" +\n    \"  audience = coalesce(nullif(($1::json)->>'audience',''), audience), \" +\n    \"  fingerprint = coalesce(nullif(($1::json)->>'fingerprint',''), fingerprint), \" +\n    \"  cta_style = coalesce(nullif(($1::json)->>'cta_style',''), cta_style), \" +\n    \"  updated_at = now() WHERE id = 1 RETURNING id, 'saved' AS status\",\n};\n\nconst sql = SQL[action];\nif (!sql) throw new Error('unknown content action: ' + action);\nreturn [{ json: { sql: sql, params: JSON.stringify(body) } }];\n"
+      }
+    },
+    {
+      "id": "apply",
+      "name": "Apply",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        120,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "0SoqGGqUOqbwYTmJ",
+          "name": "BEXT Postgres"
+        }
+      },
+      "alwaysOutputData": true,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "={{ $json.sql }}",
+        "options": {
+          "queryReplacement": "={{ $json.params }}"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Action request": {
+      "main": [
+        [
+          {
+            "node": "Route action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route action": {
+      "main": [
+        [
+          {
+            "node": "Apply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}

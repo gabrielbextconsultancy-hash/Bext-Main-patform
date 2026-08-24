@@ -82,6 +82,13 @@ export const NAV: NavEntry[] = [
     live: true,
     icon: icon(<><path d="M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9.5" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /></>),
   },
+  {
+    href: '/content',
+    label: 'Content Generation',
+    hint: 'News → LinkedIn drafts → approval',
+    live: true,
+    icon: icon(<><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" /></>),
+  },
 ];
 
 export const NAV_INDEX: NavEntry[] = [...LEAD, ...NAV];

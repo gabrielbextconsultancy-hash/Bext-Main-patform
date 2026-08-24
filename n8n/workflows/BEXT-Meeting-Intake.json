@@ -83,6 +83,37 @@
         "options": {
           "queryReplacement": "={{ $json.payload }}"
         }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "id": "kuma",
+      "name": "Heartbeat",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        560,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "url": "={{ $env.KUMA_PUSH_BASE + \"/\" + $env.KUMA_PUSH_MEETING_INTAKE }}",
+        "options": {
+          "timeout": 5000
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "status",
+              "value": "up"
+            },
+            {
+              "name": "msg",
+              "value": "OK"
+            }
+          ]
+        }
       }
     }
   ],
@@ -114,6 +145,17 @@
         [
           {
             "node": "Record minutes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record minutes": {
+      "main": [
+        [
+          {
+            "node": "Heartbeat",
             "type": "main",
             "index": 0
           }
