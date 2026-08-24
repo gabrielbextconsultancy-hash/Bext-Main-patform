@@ -25,6 +25,10 @@ export function ContentHub({ cycles, reports }: { cycles: CycleRow[]; reports: R
   const [articles, setArticles] = useState<Record<number, ReportArticleRow[] | 'loading' | 'error'>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // One report at a time, or a batch across many. In 'all' mode the primary
+  // button starts a cycle for every report on the current page at once.
+  const [mode, setMode] = useState<'one' | 'all'>('one');
+  const [progress, setProgress] = useState<string | null>(null);
 
   const pages = Math.max(1, Math.ceil(reports.length / PAGE_SIZE));
   const shown = reports.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
@@ -48,23 +52,56 @@ export function ContentHub({ cycles, reports }: { cycles: CycleRow[]; reports: R
     if (next != null) loadArticles(next);
   }
 
+  // Create one cycle. Returns the new cycle id (or null). `navigate` opens the
+  // workspace; the batch path suppresses that so it can start several first.
+  async function createCycle(reportId: number | undefined, navigate: boolean): Promise<number | null> {
+    const res = await fetch('/api/content/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'start_cycle', report_ids: reportId ? [reportId] : [], requested_by: 'dashboard' }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'could not start the cycle');
+    const id = data.row?.id ?? null;
+    if (navigate && id) router.push(`/content/${id}`);
+    return id;
+  }
+
   async function startCycle(reportId?: number) {
     setBusy(reportId ? `report-${reportId}` : 'new');
     setError(null);
     try {
-      const res = await fetch('/api/content/action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'start_cycle', report_ids: reportId ? [reportId] : [], requested_by: 'dashboard' }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'could not start the cycle');
-      if (data.row?.id) router.push(`/content/${data.row.id}`);
-      else router.refresh();
+      const id = await createCycle(reportId, true);
+      if (!id) router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'could not start the cycle');
     } finally {
       setBusy(null);
+    }
+  }
+
+  // Batch: one cycle per report on the current page. Each runs its own topic
+  // ranking (a Gemini call), so this confirms the count first, then starts them
+  // sequentially and lands on the hub where they appear under Cycles.
+  async function startAll() {
+    const targets = shown.map((r) => r.id);
+    if (targets.length === 0) return;
+    if (!window.confirm(`Start ${targets.length} cycles, one per report on this page? Each runs topic ranking now.`)) return;
+    setBusy('all');
+    setError(null);
+    let done = 0;
+    try {
+      for (const id of targets) {
+        setProgress(`Starting ${++done} of ${targets.length}…`);
+        await createCycle(id, false);
+      }
+      setProgress(null);
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'a cycle in the batch failed to start');
+    } finally {
+      setBusy(null);
+      setProgress(null);
     }
   }
 
@@ -83,16 +120,38 @@ export function ContentHub({ cycles, reports }: { cycles: CycleRow[]; reports: R
         <div>
           <p className="text-sm font-semibold text-ink-100">Turn the fortnight into a post</p>
           <p className="mt-0.5 text-xs text-ink-400">
-            Scans the last 14 days, ranks three topics, and drafts two variants. You pick, edit, and approve.
+            {mode === 'one'
+              ? 'One cycle over the last 14 days. Ranks three topics, drafts two variants. You pick, edit, approve.'
+              : `A cycle for each of the ${shown.length} reports on this page, run at once. You review each.`}
           </p>
         </div>
-        <button
-          onClick={() => startCycle()}
-          disabled={busy !== null}
-          className="rounded-lg bg-brief-b px-4 py-2 text-sm font-medium text-ink-950 transition hover:opacity-90 disabled:opacity-50"
-        >
-          {busy === 'new' ? 'Starting…' : 'Start a cycle'}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Run one, or a batch across the reports shown. */}
+          <div className="inline-flex rounded-lg border border-ink-700 p-0.5 text-xs">
+            <button
+              onClick={() => setMode('one')}
+              className={`rounded-md px-2.5 py-1 transition ${mode === 'one' ? 'bg-ink-800 text-ink-100' : 'text-ink-400 hover:text-ink-200'}`}
+            >
+              One
+            </button>
+            <button
+              onClick={() => setMode('all')}
+              className={`rounded-md px-2.5 py-1 transition ${mode === 'all' ? 'bg-ink-800 text-ink-100' : 'text-ink-400 hover:text-ink-200'}`}
+            >
+              All
+            </button>
+          </div>
+          <button
+            onClick={() => (mode === 'one' ? startCycle() : startAll())}
+            disabled={busy !== null}
+            className="rounded-lg bg-brief-b px-4 py-2 text-sm font-medium text-ink-950 transition hover:opacity-90 disabled:opacity-50"
+          >
+            {busy === 'new' ? 'Starting…'
+              : busy === 'all' ? (progress ?? 'Starting…')
+              : mode === 'one' ? 'Start a cycle'
+              : `Start ${shown.length} cycles`}
+          </button>
+        </div>
       </div>
 
       {error && <p className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-warn">{error}</p>}
