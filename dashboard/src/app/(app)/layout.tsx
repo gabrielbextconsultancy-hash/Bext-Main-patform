@@ -1,5 +1,6 @@
 import { SideNav } from '@/components/SideNav';
 import { PageHeader } from '@/components/PageHeader';
+import { SidebarToggle } from '@/components/SidebarToggle';
 
 /**
  * The application shell.
@@ -12,10 +13,14 @@ import { PageHeader } from '@/components/PageHeader';
 export default function AppLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <div className="flex min-h-dvh bg-ink-950">
+      {/* Toggle to hide/show the sidebar on desktop. Its state lives on the
+          <html> data-nav attribute; the hiding is done in globals.css. */}
+      <SidebarToggle />
+
       {/* Sidebar. Fixed on desktop so navigation never scrolls away; on small
           screens it collapses to the header's own menu. */}
       <aside
-        className="fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-ink-800
+        className="app-sidebar fixed inset-y-0 left-0 z-30 hidden w-[248px] flex-col border-r border-ink-800
                    bg-ink-900/60 backdrop-blur md:flex"
       >
         <div className="border-b border-ink-800 px-5 py-5">
@@ -44,8 +49,9 @@ export default function AppLayout({ children }: Readonly<{ children: React.React
         </div>
       </aside>
 
-      {/* Content column. The left offset matches the sidebar width exactly. */}
-      <div className="flex min-w-0 flex-1 flex-col md:pl-[248px]">
+      {/* Content column. The left offset matches the sidebar width exactly, and
+          collapses to zero when the sidebar is hidden (globals.css). */}
+      <div className="app-content flex min-w-0 flex-1 flex-col md:pl-[248px]">
         <PageHeader />
         <main className="min-w-0 flex-1 px-5 py-6 sm:px-8 sm:py-8">
           <div className="mx-auto max-w-[1180px]">{children}</div>

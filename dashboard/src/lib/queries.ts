@@ -628,7 +628,13 @@ export const getReportArticles = (reportIds: number[]) =>
   tryQuery<ReportArticleRow>(
     `SELECT ri.report_id, a.id AS article_id, ri.category, ri.rank,
             a.title, a.url, s.name AS source, an.relevance_score AS score,
-            EXISTS (SELECT 1 FROM linkedin_drafts d WHERE a.id = ANY(d.article_ids)) AS used
+            -- "used" means the article ended up in a topic a cycle selected and
+            -- drafted. article_ids live on content_topics, not on the drafts.
+            EXISTS (
+              SELECT 1 FROM content_topics t
+               JOIN content_cycles c ON c.selected_topic_id = t.id
+              WHERE a.id = ANY(t.article_ids)
+            ) AS used
        FROM report_items ri
        JOIN articles a  ON a.id = ri.article_id
        JOIN sources s   ON s.id = a.source_id

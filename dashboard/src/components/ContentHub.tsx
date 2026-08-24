@@ -10,28 +10,42 @@ import { ContentStatus } from './ContentStatus';
  * The content hub: the daily news the pipeline produced, and the cycles built
  * from it.
  *
- * The reason anyone opens this page is to turn a fortnight of news into a post,
- * so the primary action is at the top: start a cycle. Below it, the daily reports
- * as an accordion — each opens to the articles and links it carried — so a human
- * can start a cycle anchored to a particular day's sheet. Recent cycles sit
- * alongside, each a link into its workspace.
- *
- * The page never calls Gemini or writes to Postgres directly. Starting a cycle
- * POSTs to /api/content/action, which hands off to n8n.
+ * The daily reports are paged, and each report's articles are pulled on demand
+ * when its row is opened, so any report on any page shows its own items rather
+ * than only the most recent few. Starting a cycle POSTs to /api/content/action,
+ * which hands off to n8n; the page never calls Gemini or writes Postgres directly.
  */
-export function ContentHub({
-  cycles,
-  reports,
-  articlesByReport,
-}: {
-  cycles: CycleRow[];
-  reports: ReportRow[];
-  articlesByReport: Record<number, ReportArticleRow[]>;
-}) {
+const PAGE_SIZE = 12;
+
+export function ContentHub({ cycles, reports }: { cycles: CycleRow[]; reports: ReportRow[] }) {
   const router = useRouter();
+  const [page, setPage] = useState(0);
   const [open, setOpen] = useState<number | null>(reports[0]?.id ?? null);
+  const [articles, setArticles] = useState<Record<number, ReportArticleRow[] | 'loading' | 'error'>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const pages = Math.max(1, Math.ceil(reports.length / PAGE_SIZE));
+  const shown = reports.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
+
+  async function loadArticles(reportId: number) {
+    if (articles[reportId] && articles[reportId] !== 'error') return;
+    setArticles((a) => ({ ...a, [reportId]: 'loading' }));
+    try {
+      const res = await fetch(`/api/content/report-articles?id=${reportId}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'failed');
+      setArticles((a) => ({ ...a, [reportId]: data.articles as ReportArticleRow[] }));
+    } catch {
+      setArticles((a) => ({ ...a, [reportId]: 'error' }));
+    }
+  }
+
+  function toggle(reportId: number) {
+    const next = open === reportId ? null : reportId;
+    setOpen(next);
+    if (next != null) loadArticles(next);
+  }
 
   async function startCycle(reportId?: number) {
     setBusy(reportId ? `report-${reportId}` : 'new');
@@ -53,9 +67,17 @@ export function ContentHub({
     }
   }
 
+  // Open the first report on this page by default when paging.
+  function goPage(p: number) {
+    const np = Math.max(0, Math.min(pages - 1, p));
+    setPage(np);
+    const first = reports[np * PAGE_SIZE]?.id ?? null;
+    setOpen(first);
+    if (first != null) loadArticles(first);
+  }
+
   return (
     <div className="space-y-6">
-      {/* Primary action */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brief-b/30 bg-brief-b/5 p-4">
         <div>
           <p className="text-sm font-semibold text-ink-100">Turn the fortnight into a post</p>
@@ -75,61 +97,78 @@ export function ContentHub({
       {error && <p className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-warn">{error}</p>}
 
       <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
-        {/* Daily news, as an accordion */}
         <section className="rounded-xl border border-ink-800 bg-ink-900/60 p-5">
-          <header className="mb-3">
-            <h2 className="text-sm font-semibold text-ink-100">Daily news</h2>
-            <p className="mt-0.5 text-xs text-ink-400">Every report the pipeline sent. Open one to see what it carried, or repurpose it into a cycle.</p>
+          <header className="mb-3 flex items-baseline justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-ink-100">Daily news</h2>
+              <p className="mt-0.5 text-xs text-ink-400">Open one to see what it carried, or repurpose it into a cycle.</p>
+            </div>
+            <span className="text-[11px] text-ink-600">{reports.length} reports</span>
           </header>
+
           {reports.length === 0 ? (
             <p className="py-6 text-center text-sm text-ink-400">No reports yet.</p>
           ) : (
-            <ul className="divide-y divide-ink-800/70">
-              {reports.map((r) => {
-                const arts = articlesByReport[r.id] ?? [];
-                const isOpen = open === r.id;
-                return (
-                  <li key={r.id} className="py-2">
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => setOpen(isOpen ? null : r.id)}
-                        className="flex flex-1 items-center gap-2 text-left"
-                      >
-                        <span className={`text-ink-500 transition ${isOpen ? 'rotate-90' : ''}`}>›</span>
-                        <span className="text-sm text-ink-100">{r.report_date}</span>
-                        <span className="text-xs text-ink-500">{r.item_count} items</span>
-                      </button>
-                      <button
-                        onClick={() => startCycle(r.id)}
-                        disabled={busy !== null}
-                        className="rounded-md border border-ink-700 px-2.5 py-1 text-xs text-ink-300 transition hover:border-brief-b hover:text-brief-b disabled:opacity-50"
-                      >
-                        {busy === `report-${r.id}` ? 'Starting…' : 'Repurpose'}
-                      </button>
-                    </div>
-                    {isOpen && (
-                      <ul className="mt-2 space-y-1.5 pl-6">
-                        {arts.length === 0 && <li className="text-xs text-ink-500">No stored items for this report.</li>}
-                        {arts.map((a) => (
-                          <li key={a.article_id} className="flex items-baseline gap-2 text-[13px]">
-                            <span className="shrink-0 text-[10px] uppercase tracking-wide text-ink-600">{a.category}</span>
-                            <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-ink-300 hover:text-ink-100 hover:underline">
-                              {a.title}
-                            </a>
-                            <span className="shrink-0 text-[10px] text-ink-600">{a.source}{a.score != null ? ` · ${a.score}` : ''}</span>
-                            {a.used && <span className="shrink-0 rounded bg-ink-800 px-1 text-[9px] text-ink-400">used</span>}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+            <>
+              <ul className="divide-y divide-ink-800/70">
+                {shown.map((r) => {
+                  const isOpen = open === r.id;
+                  const arts = articles[r.id];
+                  return (
+                    <li key={r.id} className="py-2">
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => toggle(r.id)} className="flex flex-1 items-center gap-2 text-left">
+                          <span className={`text-ink-500 transition ${isOpen ? 'rotate-90' : ''}`}>›</span>
+                          <span className="text-sm text-ink-100">{r.report_date}</span>
+                          <span className="text-xs text-ink-500">{r.item_count} items</span>
+                        </button>
+                        <button
+                          onClick={() => startCycle(r.id)}
+                          disabled={busy !== null}
+                          className="rounded-md border border-ink-700 px-2.5 py-1 text-xs text-ink-300 transition hover:border-brief-b hover:text-brief-b disabled:opacity-50"
+                        >
+                          {busy === `report-${r.id}` ? 'Starting…' : 'Repurpose'}
+                        </button>
+                      </div>
+                      {isOpen && (
+                        <div className="mt-2 pl-6">
+                          {arts === 'loading' && <p className="text-xs text-ink-500">Loading items…</p>}
+                          {arts === 'error' && <p className="text-xs text-warn">Could not load items.</p>}
+                          {Array.isArray(arts) && arts.length === 0 && (
+                            <p className="text-xs text-ink-500">No stored items for this report.</p>
+                          )}
+                          {Array.isArray(arts) && arts.length > 0 && (
+                            <ul className="space-y-1.5">
+                              {arts.map((a) => (
+                                <li key={a.article_id} className="flex items-baseline gap-2 text-[13px]">
+                                  <span className="shrink-0 text-[10px] uppercase tracking-wide text-ink-600">{a.category}</span>
+                                  <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-ink-300 hover:text-ink-100 hover:underline">
+                                    {a.title}
+                                  </a>
+                                  <span className="shrink-0 text-[10px] text-ink-600">{a.source}{a.score != null ? ` · ${a.score}` : ''}</span>
+                                  {a.used && <span className="shrink-0 rounded bg-ink-800 px-1 text-[9px] text-ink-400">used</span>}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+
+              {pages > 1 && (
+                <div className="mt-3 flex items-center justify-between border-t border-ink-800 pt-3 text-xs text-ink-400">
+                  <button onClick={() => goPage(page - 1)} disabled={page === 0} className="rounded px-2 py-1 transition hover:text-ink-100 disabled:opacity-40">‹ Newer</button>
+                  <span>Page {page + 1} of {pages}</span>
+                  <button onClick={() => goPage(page + 1)} disabled={page >= pages - 1} className="rounded px-2 py-1 transition hover:text-ink-100 disabled:opacity-40">Older ›</button>
+                </div>
+              )}
+            </>
           )}
         </section>
 
-        {/* Cycles */}
         <section className="rounded-xl border border-ink-800 bg-ink-900/60 p-5">
           <header className="mb-3">
             <h2 className="text-sm font-semibold text-ink-100">Cycles</h2>
@@ -141,14 +180,9 @@ export function ContentHub({
             <ul className="space-y-2">
               {cycles.map((c) => (
                 <li key={c.id}>
-                  <Link
-                    href={`/content/${c.id}`}
-                    className="flex items-center justify-between gap-2 rounded-lg border border-ink-800 px-3 py-2 transition hover:border-ink-700 hover:bg-ink-850/60"
-                  >
+                  <Link href={`/content/${c.id}`} className="flex items-center justify-between gap-2 rounded-lg border border-ink-800 px-3 py-2 transition hover:border-ink-700 hover:bg-ink-850/60">
                     <div className="min-w-0">
-                      <p className="truncate text-[13px] text-ink-200">
-                        {c.window_start} → {c.window_end}
-                      </p>
+                      <p className="truncate text-[13px] text-ink-200">{c.window_start} → {c.window_end}</p>
                       <p className="text-[11px] text-ink-500">
                         {c.trigger === 'schedule' ? 'Fortnightly' : 'Manual'} · {c.topic_count} topics · {c.draft_count} drafts
                       </p>

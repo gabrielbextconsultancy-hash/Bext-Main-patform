@@ -1,4 +1,4 @@
-import { getCycles, getReports, getReportArticles, type ReportArticleRow } from '@/lib/queries';
+import { getCycles, getReports } from '@/lib/queries';
 import { DatabaseDown } from '@/components/ui';
 import { ContentHub } from '@/components/ContentHub';
 
@@ -8,21 +8,13 @@ export const revalidate = 0;
 /**
  * Content generation hub. The daily news the pipeline produced, and the cycles
  * built from it. Reads only; every action the human takes here POSTs to n8n
- * through /api/content/action.
+ * through /api/content/action. Report articles load on demand (see ContentHub),
+ * so the list can be paged without pulling every report's items up front.
  */
 export default async function ContentPage() {
   const [cycles, reports] = await Promise.all([getCycles(), getReports()]);
 
   if (cycles === null || reports === null) return <DatabaseDown />;
-
-  // Preload the articles for the most recent reports, so the accordion opens
-  // without a round trip. A fortnight of reports is a handful of rows each.
-  const recent = reports.slice(0, 14).map((r) => r.id);
-  const articles = recent.length ? await getReportArticles(recent) : [];
-  const articlesByReport: Record<number, ReportArticleRow[]> = {};
-  for (const a of articles ?? []) {
-    (articlesByReport[a.report_id] ??= []).push(a);
-  }
 
   return (
     <div className="space-y-6">
@@ -34,7 +26,7 @@ export default async function ContentPage() {
         </p>
       </header>
 
-      <ContentHub cycles={cycles} reports={reports} articlesByReport={articlesByReport} />
+      <ContentHub cycles={cycles} reports={reports} />
     </div>
   );
 }

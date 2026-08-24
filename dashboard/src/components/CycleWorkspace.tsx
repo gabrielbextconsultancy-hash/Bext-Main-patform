@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import type { CycleRow, TopicRow, DraftRow } from '@/lib/queries';
 import { ContentStatus, isTransient } from './ContentStatus';
+import { Pipeline } from './Pipeline';
 
 /**
  * One cycle, from three topics to an approved post. The screen it shows is the
@@ -61,6 +62,9 @@ export function CycleWorkspace({
         </div>
         <ContentStatus status={cycle.status} />
       </header>
+
+      {/* The pipeline this cycle runs as in n8n, its current phase lit. */}
+      <Pipeline status={cycle.status} />
 
       {cycle.error && (
         <p className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-warn">{cycle.error}</p>
