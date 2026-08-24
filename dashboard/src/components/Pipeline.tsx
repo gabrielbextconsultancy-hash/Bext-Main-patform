@@ -30,13 +30,15 @@ interface Phase {
   active: CycleStatus[];
 }
 
+// Node names are the real n8n nodes (see BEXT — Content Topics / Content Drafts /
+// LinkedIn Publish), so the strip reads as the same pipeline that runs server-side.
 const PHASES: Phase[] = [
   {
     key: 'scan',
     title: 'Scan & rank',
     actor: 'n8n',
     workflow: 'BEXT — Content Topics',
-    nodes: ['Claim a cycle', 'Load the 14-day window', 'Rank three topics (Gemini)', 'Save topics'],
+    nodes: ['Claim a cycle', 'Load the window', 'Rank three topics', 'Save topics'],
     active: ['queued_topics', 'scanning'],
   },
   {
@@ -51,7 +53,7 @@ const PHASES: Phase[] = [
     title: 'Draft',
     actor: 'n8n',
     workflow: 'BEXT — Content Drafts',
-    nodes: ['Load topic & sources', 'Write two variants (Gemini)', 'Scrub AI tells', 'Audit', 'Fact-check claims', 'Save drafts'],
+    nodes: ['Claim a selection', 'Load topic and voice', 'Load the sources', 'Assemble context', 'Write two variants', 'Save drafts'],
     active: ['queued_drafts', 'drafting'],
   },
   {
@@ -66,7 +68,7 @@ const PHASES: Phase[] = [
     title: 'Publish',
     actor: 'n8n',
     workflow: 'BEXT — LinkedIn Publish',
-    nodes: ['Due post', 'Prepare / post', 'Record result'],
+    nodes: ['Due posts', 'Publish or prepare', 'Record result'],
     active: ['approved'],
   },
   {

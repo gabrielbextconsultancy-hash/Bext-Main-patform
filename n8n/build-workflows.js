@@ -2712,7 +2712,11 @@ const { URL, URLSearchParams } = require('url');
 ${HEAL_RULES_SRC}
 // --- end shared rules ---
 
-const base = $env.N8N_URL.replace(/\\/+$/, '');
+// The code runs inside the n8n container, so it calls its own API on loopback.
+// $env.N8N_URL is not set in the container (it has N8N_HOST / WEBHOOK_URL), and
+// going out to the public host would round-trip through traefik and TLS for no
+// reason. localhost:5678 is where n8n listens (N8N_PORT).
+const base = 'http://localhost:5678';
 const key = $env.N8N_API_KEY;
 if (!key) throw new Error('N8N_API_KEY is not set in the container — see infra/docker-compose.yml');
 
@@ -2921,7 +2925,11 @@ const CONTRACT_TEST_CODE = `
 // insists here, where the require costs nothing, than let a real one through.
 const { URLSearchParams, URL } = require('url');
 
-const base = $env.N8N_URL.replace(/\\/+$/, '');
+// The code runs inside the n8n container, so it calls its own API on loopback.
+// $env.N8N_URL is not set in the container (it has N8N_HOST / WEBHOOK_URL), and
+// going out to the public host would round-trip through traefik and TLS for no
+// reason. localhost:5678 is where n8n listens (N8N_PORT).
+const base = 'http://localhost:5678';
 const key = $env.N8N_API_KEY;
 if (!key) throw new Error('N8N_API_KEY is not set in the container');
 
@@ -3044,7 +3052,7 @@ const HEARTBEATS = {
   'BEXT — Daily Report':     { anchor: 'Record result',         env: 'KUMA_PUSH_DAILY_REPORT' },
   'BEXT — Daily News Card':  { anchor: 'Record result',         env: 'KUMA_PUSH_DAILY_NEWS_CARD' },
   'BEXT — Graph Health':     { anchor: 'Record health',         env: 'KUMA_PUSH_GRAPH_HEALTH' },
-  'BEXT — Meeting Intake':   { anchor: 'Record minutes',        env: 'KUMA_PUSH_MEETING_INTAKE' },
+  'BEXT — Meeting Intake':   { anchor: 'Load processed meetings', env: 'KUMA_PUSH_MEETING_INTAKE' },
   // Self Heal, Contract Test and the three content workflows wire their own
   // heartbeat, because they poll on a short interval and do work only
   // occasionally. Anchoring the ping on a work node would leave the monitor
@@ -3793,18 +3801,27 @@ RETURNING id, window_start, window_end`,
         alwaysOutputData: true,
         parameters: {
           operation: 'executeQuery',
-          // The claimed cycle id threads through queryReplacement. Articles the
-          // daily sheet judged current (report_eligible) and relevant (score
-          // floor), newest first, capped so the prompt stays within budget.
+          // The claimed cycle id threads through queryReplacement. Two source
+          // modes, chosen by whether the cycle names specific reports:
+          //   report_ids set  -> "Repurpose this report": exactly that report's
+          //                      items, so the button means what it says.
+          //   report_ids empty -> "Start a cycle": the whole 14-day window, per
+          //                      the brief ("viable sources over the previous 14
+          //                      days").
+          // Both keep the daily-sheet gates (report_eligible, relevance floor),
+          // newest first, capped so the prompt stays within budget.
           query: `WITH c AS (
-  SELECT id, window_start, window_end FROM content_cycles WHERE id = $1
+  SELECT id, window_start, window_end, report_ids FROM content_cycles WHERE id = $1
 )
 SELECT c.id AS __cycle_id, a.id, a.title, a.url, a.published_at,
        s.name AS source_name, an.summary, an.relevance_score, an.topics
 FROM c
-JOIN articles a ON a.report_eligible
- AND coalesce(a.published_at, a.fetched_at) >= c.window_start
- AND coalesce(a.published_at, a.fetched_at) < c.window_end + 1
+JOIN articles a ON a.report_eligible AND (
+  CASE WHEN cardinality(c.report_ids) > 0
+    THEN a.id IN (SELECT ri.article_id FROM report_items ri WHERE ri.report_id = ANY(c.report_ids))
+    ELSE coalesce(a.published_at, a.fetched_at) >= c.window_start
+     AND coalesce(a.published_at, a.fetched_at) < c.window_end + 1
+  END)
 JOIN sources s ON s.id = a.source_id
 JOIN article_analysis an ON an.article_id = a.id AND an.relevance_score >= 50
 ORDER BY an.relevance_score DESC, coalesce(a.published_at, a.fetched_at) DESC

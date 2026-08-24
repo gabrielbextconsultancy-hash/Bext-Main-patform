@@ -51,6 +51,10 @@ export function CycleWorkspace({
 
   return (
     <div className="space-y-6">
+      {/* The pipeline sits at the head, so the moment a cycle starts you see the
+          nodes it runs as in n8n, the current phase lit and stepping through. */}
+      <Pipeline status={cycle.status} />
+
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-ink-100">
@@ -62,9 +66,6 @@ export function CycleWorkspace({
         </div>
         <ContentStatus status={cycle.status} />
       </header>
-
-      {/* The pipeline this cycle runs as in n8n, its current phase lit. */}
-      <Pipeline status={cycle.status} />
 
       {cycle.error && (
         <p className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-warn">{cycle.error}</p>

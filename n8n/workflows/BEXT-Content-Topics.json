@@ -130,7 +130,7 @@
       "alwaysOutputData": true,
       "parameters": {
         "operation": "executeQuery",
-        "query": "WITH c AS (\n  SELECT id, window_start, window_end FROM content_cycles WHERE id = $1\n)\nSELECT c.id AS __cycle_id, a.id, a.title, a.url, a.published_at,\n       s.name AS source_name, an.summary, an.relevance_score, an.topics\nFROM c\nJOIN articles a ON a.report_eligible\n AND coalesce(a.published_at, a.fetched_at) >= c.window_start\n AND coalesce(a.published_at, a.fetched_at) < c.window_end + 1\nJOIN sources s ON s.id = a.source_id\nJOIN article_analysis an ON an.article_id = a.id AND an.relevance_score >= 50\nORDER BY an.relevance_score DESC, coalesce(a.published_at, a.fetched_at) DESC\nLIMIT 60",
+        "query": "WITH c AS (\n  SELECT id, window_start, window_end, report_ids FROM content_cycles WHERE id = $1\n)\nSELECT c.id AS __cycle_id, a.id, a.title, a.url, a.published_at,\n       s.name AS source_name, an.summary, an.relevance_score, an.topics\nFROM c\nJOIN articles a ON a.report_eligible AND (\n  CASE WHEN cardinality(c.report_ids) > 0\n    THEN a.id IN (SELECT ri.article_id FROM report_items ri WHERE ri.report_id = ANY(c.report_ids))\n    ELSE coalesce(a.published_at, a.fetched_at) >= c.window_start\n     AND coalesce(a.published_at, a.fetched_at) < c.window_end + 1\n  END)\nJOIN sources s ON s.id = a.source_id\nJOIN article_analysis an ON an.article_id = a.id AND an.relevance_score >= 50\nORDER BY an.relevance_score DESC, coalesce(a.published_at, a.fetched_at) DESC\nLIMIT 60",
         "options": {
           "queryReplacement": "={{ $json.id }}"
         }
