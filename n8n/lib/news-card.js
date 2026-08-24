@@ -112,19 +112,46 @@ var buildNewsCard = function (opts) {
     });
   }
 
-  if (sent.length) {
-    body = body.concat(heading('In today’s report', 'The same items, in the same order, as the emailed sheet.'));
-    for (var i = 0; i < sent.length; i++) body = body.concat(itemBlock(sent[i], 'Accent'));
+  // Solar leads, because it is the business. Everything else energy-related
+  // follows — the client was explicit that prioritising solar must not mean
+  // dropping the rest, so this orders the card rather than filtering it.
+  var solar = o.solar || [];
+  var energy = o.energy || [];
+
+  if (solar.length) {
+    body = body.concat(heading('Solar', 'PV, storage, accreditation, standards and the schemes that fund them.'));
+    for (var i = 0; i < solar.length; i++) body = body.concat(itemBlock(solar[i], 'Accent'));
   }
 
-  if (extra.length) {
-    body = body.concat(heading('Also picked up',
-      'Scored above the floor but below the cut for the sheet — shown here, not emailed.'));
-    for (var j = 0; j < extra.length; j++) body = body.concat(itemBlock(extra[j], 'Good'));
+  if (energy.length) {
+    body = body.concat(heading('Energy and buildings',
+      'Efficiency, ratings, electrification, network and market news.'));
+    for (var j = 0; j < energy.length; j++) body = body.concat(itemBlock(energy[j], 'Good'));
+  }
+
+  // Fallback for callers that still pass the older shape.
+  if (!solar.length && !energy.length) {
+    if (sent.length) {
+      body = body.concat(heading('In today’s report', 'The same items, in the same order, as the emailed sheet.'));
+      for (var k = 0; k < sent.length; k++) body = body.concat(itemBlock(sent[k], 'Accent'));
+    }
+    if (extra.length) {
+      body = body.concat(heading('Also picked up',
+        'Scored above the floor but below the cut for the sheet — shown here, not emailed.'));
+      for (var n = 0; n < extra.length; n++) body = body.concat(itemBlock(extra[n], 'Good'));
+    }
+  }
+
+  if (o.moreCount) {
+    body.push({
+      type: 'TextBlock', wrap: true, isSubtle: true, size: 'Small', spacing: 'Medium',
+      text: o.moreCount + ' further article' + (o.moreCount === 1 ? '' : 's') + ' were retrieved. '
+          + 'The full list is in the PDF, and everything is on the dashboard.',
+    });
   }
 
   var actions = [];
-  if (o.pdfUrl) actions.push({ type: 'Action.OpenUrl', title: 'View all fetched (PDF)', url: o.pdfUrl });
+  if (o.pdfUrl) actions.push({ type: 'Action.OpenUrl', title: 'View more — full list (PDF)', url: o.pdfUrl });
   if (o.reportUrl) actions.push({ type: 'Action.OpenUrl', title: 'Open the dashboard', url: o.reportUrl });
 
   var card = {

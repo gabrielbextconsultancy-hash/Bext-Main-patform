@@ -814,6 +814,10 @@ const REPORT_MIN_RELEVANCE = Number(process.env.REPORT_MIN_RELEVANCE || 50);
 // scoring 60. A cap that bites in normal operation is not a backstop, it is an
 // undocumented second filter.
 const REPORT_MAX_PER_SECTION = Number(process.env.REPORT_MAX_PER_SECTION || 40);
+// Overall ceiling on the emailed sheet. The per-section cap is a backstop against
+// one category flooding the page; this is the length of the sheet itself, which
+// the client set at twenty to thirty.
+const REPORT_MAX_ITEMS = Number(process.env.REPORT_MAX_ITEMS || 30);
 
 const REPORT_SELECT = `
 WITH win AS (
@@ -869,6 +873,14 @@ SELECT id, url, title, image_url, image_state, shown_at, date_is_exact, source_n
        (SELECT count(*) FROM sources WHERE active) AS sources_monitored
 FROM ranked
 WHERE rn <= ${REPORT_MAX_PER_SECTION}
+  -- And an overall ceiling on the sheet: the strongest items across all sections,
+  -- not the strongest within each. Without this a three-section day carries three
+  -- times the intended length. The client set the sheet at twenty to thirty; the
+  -- rest reaches them through the Teams card and the dashboard.
+  AND id IN (
+    SELECT id FROM ranked ORDER BY relevance_score DESC, shown_at DESC
+     LIMIT ${REPORT_MAX_ITEMS}
+  )
 ORDER BY category, relevance_score DESC, shown_at DESC`;
 
 function dailyReportWorkflow() {
@@ -2873,21 +2885,35 @@ const coverage = new Date(day).toLocaleDateString('en-AU',
 
 const FLOOR = Number($env.REPORT_MIN_RELEVANCE || 40);
 
-// What the client received, in the order they read it.
-const sent = rows.filter(r => r.in_report).sort((a, b) => (a.rank || 0) - (b.rank || 0));
+// Everything that cleared the floor, best first.
+const qualifying = rows
+  .filter(r => r.relevance_score >= FLOOR)
+  .sort((a, b) => b.relevance_score - a.relevance_score);
 
-// A handful more that cleared the floor but did not make the sheet. The point of
-// the channel is to show slightly more than the email, not to repeat it — and not
-// to dump everything, which is what the PDF is for.
-const extra = rows
-  .filter(r => !r.in_report && r.relevance_score >= FLOOR)
-  .sort((a, b) => b.relevance_score - a.relevance_score)
-  .slice(0, 10);
+// Solar leads the card because it is the business. Detected from the text rather
+// than from the source, since solar stories arrive from regulators, the trade
+// press and the Minister's office alike — and a source-based split would put a
+// PV standards change under "energy" merely because the AER published it.
+// Escaped as \\\\b because this lives inside a template literal: a single \\b is
+// read as a backspace character before it ever reaches the regex, so the pattern
+// silently requires a backspace before "solar" and matches nothing. It reported
+// "0 solar" on a day carrying a new inverter standard and a PV module changeover.
+const SOLAR = /\\b(solar|photovoltaic|pv|rooftop|inverter|feed-?in|batter(y|ies)|storage|behind[- ]the[- ]meter|solar panel)\\b/i;
+const isSolar = r => SOLAR.test(String(r.title || '') + ' ' + String(r.summary || ''));
+
+const solar = qualifying.filter(isSolar).slice(0, 5);
+const solarUrls = new Set(solar.map(r => r.url));
+// The rest of the energy material. Prioritising solar orders the card; it does
+// not remove anything, which the client was explicit about.
+const energy = qualifying.filter(r => !solarUrls.has(r.url)).slice(0, 15);
+
+const shown = solar.length + energy.length;
 
 const card = buildNewsCard({
   coverage,
-  sent: sent.slice(0, 14),
-  extra,
+  solar,
+  energy,
+  moreCount: Math.max(0, rows.length - shown),
   counts: {
     fetched: rows.length,
     sources_contributing: new Set(rows.map(r => r.source_name)).size,
@@ -2906,7 +2932,7 @@ return [{ json: {
   coverage,
   card,
   listHtml,
-  counts: { fetched: rows.length, sent: sent.length, extra: extra.length },
+  counts: { fetched: rows.length, solar: solar.length, energy: energy.length, shown: shown },
 } }];
 `;
 
@@ -2982,7 +3008,7 @@ await helpers.httpRequest({
     { contentType: 'application/vnd.microsoft.card.adaptive', content: d.card } ] },
 });
 
-notes.push(d.counts.sent + ' sent, ' + d.counts.extra + ' extra, ' + d.counts.fetched + ' fetched');
+notes.push(d.counts.solar + ' solar, ' + d.counts.energy + ' energy, ' + d.counts.fetched + ' fetched');
 return [{ json: { ok: true, detail: notes.join(' · ').slice(0, 400) } }];
 `;
 
