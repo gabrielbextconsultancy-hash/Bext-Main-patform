@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import type { CycleRow, ReportRow, ReportArticleRow } from '@/lib/queries';
 import { ContentStatus } from './ContentStatus';
+import { Pipeline } from './Pipeline';
 
 /**
  * The content hub: the daily news the pipeline produced, and the cycles built
@@ -95,6 +96,10 @@ export function ContentHub({ cycles, reports }: { cycles: CycleRow[]; reports: R
       </div>
 
       {error && <p className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-sm text-warn">{error}</p>}
+
+      {/* The pipeline, horizontal, as an always-visible map of the flow. It lights
+          up per cycle inside a cycle's workspace; here it shows the shape. */}
+      <Pipeline />
 
       <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
         <section className="rounded-xl border border-ink-800 bg-ink-900/60 p-5">

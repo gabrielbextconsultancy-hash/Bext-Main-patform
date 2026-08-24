@@ -96,9 +96,11 @@ const activePhaseIndex = (status: CycleStatus) => {
 const isMachineRunning = (status: CycleStatus) =>
   status === 'queued_topics' || status === 'scanning' || status === 'queued_drafts' || status === 'drafting';
 
-export function Pipeline({ status }: { status: CycleStatus }) {
-  const activeIdx = activePhaseIndex(status);
-  const running = isMachineRunning(status);
+export function Pipeline({ status }: { status?: CycleStatus }) {
+  // No status = an idle overview on the hub: the flow, horizontal, nothing lit.
+  const idle = !status;
+  const activeIdx = idle ? -1 : activePhaseIndex(status);
+  const running = !idle && isMachineRunning(status);
 
   // Step through the active phase's nodes while the machine is working.
   const activeNodes = activeIdx >= 0 ? PHASES[activeIdx].nodes.length : 0;
@@ -115,7 +117,9 @@ export function Pipeline({ status }: { status: CycleStatus }) {
   return (
     <div className="rounded-xl border border-ink-800 bg-ink-900/60 p-4">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-400">Pipeline</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-ink-400">
+          {idle ? 'How a cycle runs' : 'Pipeline'}
+        </h3>
         <span className="text-[10px] text-ink-600">the nodes this runs as in n8n</span>
       </div>
 

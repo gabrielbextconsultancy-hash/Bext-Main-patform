@@ -135,24 +135,9 @@ export function Ring({ value, accent }: { value: number; accent: string }) {
   );
 }
 
-export function DatabaseDown() {
-  return (
-    <Card className="border-warn/30 bg-warn/5">
-      <div className="flex items-start gap-3">
-        <span className="mt-0.5 text-warn">&#9888;</span>
-        <div className="text-sm">
-          <p className="font-medium text-ink-100">Database unreachable</p>
-          <p className="mt-1 text-ink-400">
-            The dashboard reads Postgres on the VPS through an SSH tunnel. Open it with:
-          </p>
-          <pre className="mt-2 overflow-x-auto rounded-lg bg-ink-950 p-3 text-xs text-ink-300">
-            ssh -i ~/.ssh/pf-nfac-hostinger -L 5433:127.0.0.1:5432 root@187.127.213.243 -N
-          </pre>
-        </div>
-      </div>
-    </Card>
-  );
-}
+// Re-exported from the client component so a transient "unreachable" recovers on
+// its own (auto-retry) rather than stranding the page behind a manual instruction.
+export { DatabaseDown } from './DatabaseDown';
 
 export function Empty({ children }: { children: ReactNode }) {
   return <p className="py-6 text-center text-sm text-ink-400">{children}</p>;
