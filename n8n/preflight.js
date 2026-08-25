@@ -543,6 +543,51 @@ check('R027', 'no Kuma push token reaches a committed file', () => {
     : { ok: true, detail: 'push tokens stay in .env' };
 });
 
+// ── R032 ─ the VPS builds the source we shipped, not a stale copy ───────────
+// The repo nests services under infra/ with `build: ../dashboard`; the VPS layout
+// is flat, so .github/workflows/deploy.yml rewrites `build: ../` to `build: ./`
+// on the way over. Copy the repo compose up by hand and you skip the rewrite:
+// `../dashboard` then resolves to /docker/dashboard — a stale directory that
+// still exists — and every rebuild silently compiles old source.
+//
+// Cost: the mind-map slide in 055ea12 built successfully, deployed, and never
+// appeared. The build was green the whole time, which is what made it expensive:
+// nothing failed, the page simply did not change. R014's shape exactly — correct
+// everywhere except where it runs.
+//
+// Any script that ships compose to the VPS must carry the rewrite.
+check('R032', 'deploy scripts rewrite the compose build paths', () => {
+  const shippers = ['infra/deploy-self-healing.sh'];
+  const bad = [];
+  for (const f of shippers) {
+    if (!fs.existsSync(path.join(ROOT, f))) continue;
+    const body = read(f);
+    // Only scripts that actually copy the compose file need the rewrite.
+    if (!/docker-compose\.yml/.test(body)) continue;
+    if (!/build:\s*\\?\.\\?\.\//.test(body) && !/sed .*build/.test(body)) {
+      bad.push(`${f} ships compose without the build-path rewrite`);
+    }
+  }
+  // The VPS itself is the other half; --vps checks the live file.
+  return bad.length ? { ok: false, detail: bad.join(', ') }
+                    : { ok: true, detail: 'shippers rewrite ../ to ./' };
+});
+
+if (VPS) {
+  check('R032b', 'the live compose builds from /docker/bext', () => {
+    const host = process.env.VPS_HOST;
+    const key = (process.env.VPS_SSH_KEY || '').replace(/^~/, process.env.HOME || process.env.USERPROFILE);
+    if (!host || !key) return { ok: false, detail: 'VPS_HOST / VPS_SSH_KEY not set' };
+    const out = execFileSync('ssh', ['-i', key, '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=12',
+      `root@${host}`, 'grep -E "^\\s+build:" /docker/bext/docker-compose.yml || true'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const stale = out.split('\n').filter(l => /build:\s*\.\.\//.test(l));
+    return stale.length
+      ? { ok: false, detail: `${stale.length} service(s) build from ../ — they compile /docker/<name>, not /docker/bext/<name>` }
+      : { ok: true, detail: 'all services build from /docker/bext' };
+  });
+}
+
 // ── R029 ─ the Kuma key and Grafana password never reach a committed file ───
 // Prometheus scrapes Kuma with the API key, but the key belongs in a mounted
 // password_file (written on deploy from .env), never in the committed

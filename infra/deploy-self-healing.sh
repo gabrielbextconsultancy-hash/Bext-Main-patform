@@ -56,8 +56,16 @@ if [ "$DRY" = "--dry" ]; then
 fi
 
 # ── 2. ship ─────────────────────────────────────────────────────────────────
+# The repo nests services under infra/ (`build: ../dashboard`); the VPS layout is
+# flat. Ship the compose without this rewrite and `../dashboard` resolves to
+# /docker/dashboard — a stale directory that still exists — so every later rebuild
+# compiles old source and succeeds while changing nothing. That cost us the
+# mind-map slide in 055ea12. .github/workflows/deploy.yml does the same rewrite;
+# preflight R032 asserts this line is still here.
+sed 's#build: \.\./#build: ./#' infra/docker-compose.yml > "$TMP/docker-compose.yml"
+
 scp -i "$KEY" -o BatchMode=yes "$TMP/env-add.txt"        "root@$HOST:/tmp/env-add.txt"
-scp -i "$KEY" -o BatchMode=yes infra/docker-compose.yml  "root@$HOST:/tmp/docker-compose.yml"
+scp -i "$KEY" -o BatchMode=yes "$TMP/docker-compose.yml" "root@$HOST:/tmp/docker-compose.yml"
 
 # ── 3. apply ────────────────────────────────────────────────────────────────
 "${SSH[@]}" 'bash -s' <<'REMOTE'
