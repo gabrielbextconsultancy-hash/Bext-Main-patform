@@ -26,6 +26,28 @@
       }
     },
     {
+      "id": "seen",
+      "name": "Load minuted transcripts",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        -200,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "0SoqGGqUOqbwYTmJ",
+          "name": "BEXT Postgres"
+        }
+      },
+      "alwaysOutputData": true,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT transcript_id FROM meeting_minutes\n WHERE transcript_id IS NOT NULL\n   AND created_at > now() - interval '30 days'",
+        "options": {}
+      }
+    },
+    {
       "id": "check",
       "name": "Check Graph",
       "type": "n8n-nodes-base.code",
@@ -37,7 +59,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "\n// The Code sandbox withholds URLSearchParams the same way it withholds URL.\n// Missing it, the token step failed every night with a message that named the\n// symbol rather than the cause.\nconst { URLSearchParams } = require('url');\n\nconst TENANT = $env.MS_TENANT_ID;\nconst CLIENT = $env.MS_CLIENT_ID;\nconst SECRET = $env.MS_CLIENT_SECRET;\nconst UPN    = $env.MS_SENDER_UPN;\n\nif (!TENANT || !CLIENT || !SECRET || !UPN) {\n  return [{ json: { ok: false, detail: 'MS_* not present in the container environment',\n                    failures: ['configuration'] } }];\n}\n\nconst http = this.helpers.httpRequest;\nconst results = [];\nasync function step(name, fn) {\n  try { results.push({ name, ok: true, detail: await fn() }); }\n  catch (e) { results.push({ name, ok: false, detail: String(e.message || e).slice(0, 300) }); }\n}\n\nlet token = null;\nawait step('token', async () => {\n  const r = await http({\n    method: 'POST',\n    url: `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0/token`,\n    json: true, timeout: 30000,\n    body: new URLSearchParams({\n      client_id: CLIENT, client_secret: SECRET,\n      scope: 'https://graph.microsoft.com/.default', grant_type: 'client_credentials',\n    }).toString(),\n    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },\n  });\n  token = r.access_token;\n  return `expires in ${Math.round(r.expires_in / 60)} min`;\n});\n\n// Without a token the rest cannot be attempted, and reporting three further\n// failures would misrepresent one broken secret as four broken permissions.\nif (token) {\n  const graph = (p) => http({\n    method: 'GET', url: 'https://graph.microsoft.com/v1.0' + p,\n    json: true, timeout: 30000, headers: { Authorization: 'Bearer ' + token },\n  });\n\n  await step('user lookup (User.Read.All)', async () => {\n    const u = await graph('/users/' + encodeURIComponent(UPN));\n    return u.displayName;\n  });\n\n  await step('sites (Sites.ReadWrite.All)', async () => {\n    const s = await graph('/sites?search=');\n    return `${s.value?.length ?? 0} site(s) visible`;\n  });\n\n  // The folders the meeting workflow writes into. Their absence is the failure\n  // mode that would otherwise surface as a successful run filing nothing.\n  await step('meeting folders', async () => {\n    const site = await graph('/sites/bextconsultancy.sharepoint.com:/sites/BEXTHQ');\n    const drives = await graph('/sites/' + site.id + '/drives');\n    const drive = drives.value.find(d => d.name === 'Documents') || drives.value[0];\n    const want = ['Templates', 'Meeting Transcripts', 'Meeting Minutes'];\n    const found = [];\n    for (const name of want) {\n      try {\n        await graph('/drives/' + drive.id + '/root:/' +\n          encodeURI('API Automation Folder/' + name));\n        found.push(name);\n      } catch { /* recorded by omission below */ }\n    }\n    if (found.length !== want.length) {\n      throw new Error('missing: ' + want.filter(w => !found.includes(w)).join(' / '));\n    }\n    return found.length + ' of ' + want.length + ' present';\n  });\n}\n\nconst failures = results.filter(r => !r.ok);\n// Commas are deliberately absent: n8n's queryReplacement splits on them, which\n// would shift this string into the wrong column.\nconst detail = results.map(r => `${r.ok ? 'ok' : 'FAIL'} ${r.name}: ${r.detail}`).join(' | ');\nreturn [{ json: { ok: failures.length === 0, detail,\n                  failures: failures.map(f => f.name) } }];\n"
+        "jsCode": "\n// The Code sandbox withholds URLSearchParams the same way it withholds URL.\n// Missing it, the token step failed every night with a message that named the\n// symbol rather than the cause.\nconst { URLSearchParams } = require('url');\n\nconst TENANT = $env.MS_TENANT_ID;\nconst CLIENT = $env.MS_CLIENT_ID;\nconst SECRET = $env.MS_CLIENT_SECRET;\nconst UPN    = $env.MS_SENDER_UPN;\n\nif (!TENANT || !CLIENT || !SECRET || !UPN) {\n  return [{ json: { ok: false, detail: 'MS_* not present in the container environment',\n                    failures: ['configuration'] } }];\n}\n\nconst http = this.helpers.httpRequest;\nconst results = [];\nasync function step(name, fn) {\n  try { results.push({ name, ok: true, detail: await fn() }); }\n  catch (e) { results.push({ name, ok: false, detail: String(e.message || e).slice(0, 300) }); }\n}\n\nlet token = null;\nawait step('token', async () => {\n  const r = await http({\n    method: 'POST',\n    url: `https://login.microsoftonline.com/${TENANT}/oauth2/v2.0/token`,\n    json: true, timeout: 30000,\n    body: new URLSearchParams({\n      client_id: CLIENT, client_secret: SECRET,\n      scope: 'https://graph.microsoft.com/.default', grant_type: 'client_credentials',\n    }).toString(),\n    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },\n  });\n  token = r.access_token;\n  return `expires in ${Math.round(r.expires_in / 60)} min`;\n});\n\n// Without a token the rest cannot be attempted, and reporting three further\n// failures would misrepresent one broken secret as four broken permissions.\nif (token) {\n  const graph = (p) => http({\n    method: 'GET', url: 'https://graph.microsoft.com/v1.0' + p,\n    json: true, timeout: 30000, headers: { Authorization: 'Bearer ' + token },\n  });\n\n  await step('user lookup (User.Read.All)', async () => {\n    const u = await graph('/users/' + encodeURIComponent(UPN));\n    return u.displayName;\n  });\n\n  await step('sites (Sites.ReadWrite.All)', async () => {\n    const s = await graph('/sites?search=');\n    return `${s.value?.length ?? 0} site(s) visible`;\n  });\n\n  // The folders the meeting workflow writes into. Their absence is the failure\n  // mode that would otherwise surface as a successful run filing nothing.\n  await step('meeting folders', async () => {\n    const site = await graph('/sites/bextconsultancy.sharepoint.com:/sites/BEXTHQ');\n    const drives = await graph('/sites/' + site.id + '/drives');\n    const drive = drives.value.find(d => d.name === 'Documents') || drives.value[0];\n    const want = ['Templates', 'Meeting Transcripts', 'Meeting Minutes'];\n    const found = [];\n    for (const name of want) {\n      try {\n        await graph('/drives/' + drive.id + '/root:/' +\n          encodeURI('API Automation Folder/' + name));\n        found.push(name);\n      } catch { /* recorded by omission below */ }\n    }\n    if (found.length !== want.length) {\n      throw new Error('missing: ' + want.filter(w => !found.includes(w)).join(' / '));\n    }\n    return found.length + ' of ' + want.length + ' present';\n  });\n\n  // Every mailbox that could host a meeting must answer getAllTranscripts.\n  // Meeting Intake's discovery skips an unreadable host with a bare continue\n  // and still reports success, so one lapsed Teams application access policy\n  // makes that person's meetings vanish with nothing going red. R031.\n  const HOSTS = ($env.MEETING_HOSTS || UPN).split(',')\n    .map(function (s) { return s.trim(); }).filter(Boolean);\n  const seenTranscripts = [];\n  for (const host of HOSTS) {\n    await step('transcripts readable: ' + host, async () => {\n      const hu = await graph('/users/' + encodeURIComponent(host) + '?$select=id');\n      const tr = await graph('/users/' + hu.id + '/onlineMeetings/getAllTranscripts('\n        + 'meetingOrganizerUserId=' + encodeURIComponent(\"'\" + hu.id + \"'\") + ')');\n      for (const t of (tr.value || [])) seenTranscripts.push(t);\n      return (tr.value || []).length + ' transcript(s) visible';\n    });\n  }\n\n  // The reconciliation. Everything above asks \"would it work?\"; this asks the\n  // only question that matters — did every meeting Graph can see actually get\n  // minuted? It is the check that would have caught the recurring-meeting bug\n  // (R030) the next morning instead of a week later, because the failure there\n  // was a transcript sitting in Graph with no row and every run green.\n  await step('every transcript is minuted', async () => {\n    const done = new Set($input.all()\n      .map(function (i) { return i.json.transcript_id; }).filter(Boolean));\n    const GRACE_MS = 30 * 60000;          // a run in flight is not a miss\n    const WINDOW_MS = 7 * 24 * 3600000;   // matches MEETING_LOOKBACK_HOURS\n    const missing = seenTranscripts.filter(function (t) {\n      const age = Date.now() - new Date(t.createdDateTime).getTime();\n      return age > GRACE_MS && age < WINDOW_MS && !done.has(t.id);\n    });\n    if (missing.length) {\n      const oldest = missing.map(function (m) { return m.createdDateTime; }).sort()[0];\n      throw new Error(missing.length + ' transcript(s) with no minutes - oldest ' + oldest);\n    }\n    return seenTranscripts.length + ' transcript(s) all accounted for';\n  });\n}\n\nconst failures = results.filter(r => !r.ok);\n// Commas are deliberately absent: n8n's queryReplacement splits on them, which\n// would shift this string into the wrong column.\nconst detail = results.map(r => `${r.ok ? 'ok' : 'FAIL'} ${r.name}: ${r.detail}`).join(' | ');\nreturn [{ json: { ok: failures.length === 0, detail,\n                  failures: failures.map(f => f.name) } }];\n"
       }
     },
     {
@@ -154,6 +176,17 @@
   ],
   "connections": {
     "Daily 06:00": {
+      "main": [
+        [
+          {
+            "node": "Load minuted transcripts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load minuted transcripts": {
       "main": [
         [
           {

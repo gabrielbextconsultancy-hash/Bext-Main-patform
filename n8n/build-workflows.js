@@ -1629,6 +1629,44 @@ if (token) {
     }
     return found.length + ' of ' + want.length + ' present';
   });
+
+  // Every mailbox that could host a meeting must answer getAllTranscripts.
+  // Meeting Intake's discovery skips an unreadable host with a bare continue
+  // and still reports success, so one lapsed Teams application access policy
+  // makes that person's meetings vanish with nothing going red. R031.
+  const HOSTS = ($env.MEETING_HOSTS || UPN).split(',')
+    .map(function (s) { return s.trim(); }).filter(Boolean);
+  const seenTranscripts = [];
+  for (const host of HOSTS) {
+    await step('transcripts readable: ' + host, async () => {
+      const hu = await graph('/users/' + encodeURIComponent(host) + '?$select=id');
+      const tr = await graph('/users/' + hu.id + '/onlineMeetings/getAllTranscripts('
+        + 'meetingOrganizerUserId=' + encodeURIComponent("'" + hu.id + "'") + ')');
+      for (const t of (tr.value || [])) seenTranscripts.push(t);
+      return (tr.value || []).length + ' transcript(s) visible';
+    });
+  }
+
+  // The reconciliation. Everything above asks "would it work?"; this asks the
+  // only question that matters — did every meeting Graph can see actually get
+  // minuted? It is the check that would have caught the recurring-meeting bug
+  // (R030) the next morning instead of a week later, because the failure there
+  // was a transcript sitting in Graph with no row and every run green.
+  await step('every transcript is minuted', async () => {
+    const done = new Set($input.all()
+      .map(function (i) { return i.json.transcript_id; }).filter(Boolean));
+    const GRACE_MS = 30 * 60000;          // a run in flight is not a miss
+    const WINDOW_MS = 7 * 24 * 3600000;   // matches MEETING_LOOKBACK_HOURS
+    const missing = seenTranscripts.filter(function (t) {
+      const age = Date.now() - new Date(t.createdDateTime).getTime();
+      return age > GRACE_MS && age < WINDOW_MS && !done.has(t.id);
+    });
+    if (missing.length) {
+      const oldest = missing.map(function (m) { return m.createdDateTime; }).sort()[0];
+      throw new Error(missing.length + ' transcript(s) with no minutes - oldest ' + oldest);
+    }
+    return seenTranscripts.length + ' transcript(s) all accounted for';
+  });
 }
 
 const failures = results.filter(r => !r.ok);
@@ -1650,6 +1688,21 @@ function graphHealthWorkflow() {
         // An hour after the daily report, so a secret that expired overnight is
         // reported alongside the send it would have broken.
         parameters: { rule: { interval: [{ field: 'cronExpression', expression: '0 6 * * *' }] } },
+      },
+      {
+        id: 'seen', name: 'Load minuted transcripts', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(-200, 0),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        // alwaysOutputData, because a node emitting no items stops the workflow
+        // dead (R015) and an empty table is the normal state of a new install.
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          query: `SELECT transcript_id FROM meeting_minutes
+ WHERE transcript_id IS NOT NULL
+   AND created_at > now() - interval '30 days'`,
+          options: {},
+        },
       },
       {
         id: 'check', name: 'Check Graph', type: 'n8n-nodes-base.code',
@@ -1705,7 +1758,8 @@ FROM json_to_recordset($1::json) AS x(status text, detail text)`,
       },
     ],
     connections: {
-      'Daily 06:00': { main: [[{ node: 'Check Graph', type: 'main', index: 0 }]] },
+      'Daily 06:00': { main: [[{ node: 'Load minuted transcripts', type: 'main', index: 0 }]] },
+      'Load minuted transcripts': { main: [[{ node: 'Check Graph', type: 'main', index: 0 }]] },
       'Check Graph': { main: [[{ node: 'Record health', type: 'main', index: 0 }]] },
       'Record health': { main: [[{ node: 'Only when broken', type: 'main', index: 0 }]] },
       'Only when broken': { main: [[{ node: 'Alert by email', type: 'main', index: 0 }], []] },
@@ -1928,15 +1982,20 @@ const ORGANISERS = ($env.MEETING_HOSTS || UPN)
 const WINDOW_MS = Number($env.MEETING_LOOKBACK_HOURS || 168) * 3600000;
 
 const candidates = [];
+// A host we cannot read is not the same as a host with no meetings, and the two
+// used to be indistinguishable: both took a bare continue and the run reported
+// success. One lapsed Teams application access policy would silently retire a
+// person's entire meeting history. Collected here and judged after the loop.
+const hostErrors = [];
 for (const upn of ORGANISERS) {
   let org;
   try { org = await graph('/users/' + encodeURIComponent(upn) + '?$select=id,displayName'); }
-  catch (e) { continue; }                       // mailbox gone or not readable
+  catch (e) { hostErrors.push(upn + ': ' + String(e.message || e).slice(0, 120)); continue; }
   let list;
   try {
     list = await graph('/users/' + org.id + '/onlineMeetings/getAllTranscripts('
       + 'meetingOrganizerUserId=' + encodeURIComponent("'" + org.id + "'") + ')');
-  } catch (e) { continue; }                     // no licence, no consent, no meetings
+  } catch (e) { hostErrors.push(upn + ': ' + String(e.message || e).slice(0, 120)); continue; }
   for (const t of (list.value || [])) {
     if (Date.now() - new Date(t.createdDateTime).getTime() > WINDOW_MS) continue;
     // Keyed on the TRANSCRIPT, not the meeting. A recurring series reuses one
@@ -1949,6 +2008,15 @@ for (const upn of ORGANISERS) {
       transcriptId: t.id, meetingId: t.meetingId, createdDateTime: t.createdDateTime,
     });
   }
+}
+
+// Every host unreadable means discovery learned nothing, and returning an empty
+// list would report that as "no new meetings" — the failure this whole pipeline
+// keeps making. Nothing downstream is lost by throwing, because there are no
+// candidates to lose. A PARTIAL failure carries on, and BEXT — Graph Health
+// reconciles it against Graph within the day (R031).
+if (hostErrors.length === ORGANISERS.length && ORGANISERS.length > 0) {
+  throw new Error('no meeting host is readable - ' + hostErrors.join(' | '));
 }
 
 // Oldest first, so the cards post in the order the meetings happened and the most

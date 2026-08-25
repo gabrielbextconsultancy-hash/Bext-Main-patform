@@ -482,3 +482,66 @@ of them drifting back to `meeting_id` reopens this.
 **Not a bug, checked:** the folder name is `{date} {subject}`, so a series
 produces `25 Aug Weekly Meeting`, `01 Sep Weekly Meeting` — distinct. No change
 needed there.
+
+---
+
+## R031 — nothing was checking that a meeting actually got minuted
+
+**Cost:** none directly, but it is why R030 survived a full week. The recurring
+meeting bug produced a transcript sitting in Graph with no row, and not one
+signal we had was capable of noticing: the scheduler fired, the run returned
+success, Kuma got its heartbeat, the readiness probe was green, and the
+dashboard showed the last good meeting from six days earlier.
+
+**Cause, part one — an unreadable host looks like an idle one.** Discovery took a
+bare `continue` on both the user lookup and `getAllTranscripts`:
+
+```js
+try { org = await graph('/users/' + upn + '?$select=id,displayName'); }
+catch (e) { continue; }                       // mailbox gone or not readable
+```
+
+A lapsed Teams application access policy, a licence change, or a revoked consent
+therefore retires that person's meetings permanently, and every run still reports
+success. With two hosts configured, half the pipeline could be dead and invisible.
+
+**Cause, part two — no reconciliation.** Every health check asked *"would this
+work?"*. None asked *"did it work?"* — which is the only question whose answer
+would have caught R030.
+
+**Fix:**
+
+- Meeting Intake collects `hostErrors` instead of discarding them. If **every**
+  host is unreadable it throws, because discovery learned nothing and returning
+  `[]` would report that as "no new meetings" — the exact failure this pipeline
+  keeps repeating. A *partial* failure carries on, since there are real meetings
+  to process, and Graph Health catches it within the day.
+- Graph Health probes each `MEETING_HOSTS` mailbox for transcript readability,
+  one health line per host.
+- Graph Health reconciles: every transcript Graph can see, older than 30 minutes
+  and inside the 7-day discovery window, must have a row in `meeting_minutes`.
+  Any that does not fails the check and sends the alert email. This is fed by a
+  new `Load minuted transcripts` node — with `alwaysOutputData`, because an empty
+  table would otherwise stop the workflow dead (R015).
+
+**Verified against live data**, not assumed:
+
+```
+host readability:  ok Admin…: 2 visible   ok Brent…: 4 visible
+transcripts seen: 6 | minuted ids in db: 6
+unminuted inside the 7-day window: 0        RECONCILIATION PASSES
+```
+
+**Guard:** R031 — asserts both halves, including that the loader is wired into
+`Check Graph` and carries `alwaysOutputData`. A reconciliation that is never fed
+its input would pass forever while checking nothing, which is the R002 mistake.
+
+**Known limits, deliberately not covered.** Neither check can see a meeting that
+produced no transcript at all:
+
+- an **ad-hoc call** (the call button, "meet now") — Graph's transcript APIs
+  cover scheduled meetings only, so use a calendar invite;
+- **transcription never switched on** for the meeting;
+- a meeting **organised outside `MEETING_HOSTS`** — the transcript resolves under
+  the organiser's mailbox, and a client organiser's tenant is not ours to read.
+  If RACV ever chairs the weekly, BEXT must host it or we get nothing.

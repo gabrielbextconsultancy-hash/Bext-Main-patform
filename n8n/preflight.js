@@ -377,6 +377,43 @@ check('R030', 'meetings are deduped by transcript, not by meeting', () => {
   return { ok: true, detail: 'dedupe keyed on transcriptId end to end' };
 });
 
+// ── R031 ─ a host we cannot read must not look like a host with no meetings ──
+// Discovery took a bare `continue` on an unreadable mailbox, so a lapsed Teams
+// application access policy retired that person's meetings while every run
+// reported success. Nothing anywhere compared "transcripts Graph can see"
+// against "minutes actually written" — which is why R030 survived a week.
+//
+// Two halves, and both are load-bearing:
+//   Meeting Intake  — total discovery failure throws instead of returning [].
+//   Graph Health    — per-host readability, plus the reconciliation.
+check('R031', 'an unreadable meeting host cannot pass as an empty one', () => {
+  const mi = codeNodes(workflow('BEXT-Meeting-Intake'))
+    .map(x => x.parameters.jsCode).join('\n');
+  if (!/hostErrors/.test(mi))
+    return { ok: false, detail: 'Meeting Intake still swallows a host failure silently' };
+  if (!/hostErrors\.length === ORGANISERS\.length/.test(mi))
+    return { ok: false, detail: 'Meeting Intake does not fail when every host is unreadable' };
+
+  const gh = workflow('BEXT-Graph-Health');
+  const code = codeNodes(gh).map(x => x.parameters.jsCode).join('\n');
+  if (!/transcripts readable: /.test(code))
+    return { ok: false, detail: 'Graph Health does not probe each MEETING_HOSTS mailbox' };
+  if (!/every transcript is minuted/.test(code))
+    return { ok: false, detail: 'Graph Health does not reconcile transcripts against minutes' };
+
+  // The reconciliation is only meaningful if it is actually fed the ids.
+  const seen = (gh.nodes || []).find(x => /Load minuted transcripts/i.test(x.name || ''));
+  if (!seen)
+    return { ok: false, detail: 'Graph Health has no node loading minuted transcript ids' };
+  if (seen.alwaysOutputData !== true)
+    return { ok: false, detail: 'Load minuted transcripts lacks alwaysOutputData — an empty table would stop the workflow (R015)' };
+  const wired = ((gh.connections || {})['Load minuted transcripts'] || {}).main;
+  if (!wired || !JSON.stringify(wired).includes('Check Graph'))
+    return { ok: false, detail: 'Load minuted transcripts is not wired into Check Graph' };
+
+  return { ok: true, detail: 'host failures surface; transcripts reconciled against minutes' };
+});
+
 // ── R024 ─ active is not the same as running ────────────────────────────────
 // Every workflow read ACTIVE while nothing had executed for fifteen hours. One
 // flapping IMAP trigger on BEXT — Newsletter Intake reactivated in a loop, and
