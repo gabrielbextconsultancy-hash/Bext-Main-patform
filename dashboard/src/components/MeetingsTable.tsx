@@ -164,7 +164,7 @@ export function MeetingsTable({ rows }: { rows: MeetingWithStages[] }) {
             </thead>
             <tbody>
               {shown.map((m) => (
-                <tr key={m.meeting_id} className="border-b border-ink-800/60 align-top">
+                <tr key={m.transcript_id ?? m.meeting_id} className="border-b border-ink-800/60 align-top">
                   <td className="py-3 pr-3 text-ink-100">
                     {m.subject}
                     {m.error && <p className="mt-1 text-[11px] text-blocked">{m.error}</p>}

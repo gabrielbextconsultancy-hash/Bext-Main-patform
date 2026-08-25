@@ -420,3 +420,65 @@ green for days over code that would throw on first execution.
 failure.** `put()` collecting failures is right — a bad write should not cost the
 draft — but the filing stage now raises those collected failures before anything
 downstream can produce a more visible, less true error.
+
+---
+
+## R030 — a recurring meeting is many meetings, but one meetingId
+
+**Cost:** the 25 August weekly. It would have cost every weekly after it, and the
+RACV program check-in is weekly — so this was on track to silently lose the
+engagement's entire minute trail while reporting success throughout.
+
+**Symptom:** Brent held a meeting, Teams published the transcript, and nothing
+happened. No row, no folder, no card, no email. `BEXT — Meeting Intake` ran on
+schedule and every run returned `success`.
+
+**Cause:** a recurring Teams series reuses **one `meetingId` for every
+occurrence**. Discovery excluded any transcript whose `meetingId` was already in
+`meeting_minutes`, so the moment occurrence 1 was minuted the whole series was
+retired.
+
+Byte-for-byte identical across two different meetings a week apart:
+
+```
+18 Aug 03:16Z  meetingId MSoy…OTk6bWVldGluZ19OMlptTXpRelpUUXRNbVk0…QHRocmVhZC52Mg
+25 Aug 03:01Z  meetingId MSoy…OTk6bWVldGluZ19OMlptTXpRelpUUXRNbVk0…QHRocmVhZC52Mg
+```
+
+The transcript ids differ, and carry the occurrence timestamp:
+
+```
+…-1787022989-TranscriptV2      18 Aug
+…-1787626860-TranscriptV2      25 Aug
+```
+
+**Why nothing went red.** A skipped candidate is not an error. The workflow did
+exactly what it was told, quickly, and reported success. Uptime Kuma saw a
+heartbeat, the readiness probe saw a healthy pipeline, and the dashboard showed
+the last good meeting from six days earlier. Every signal we had was green.
+
+This is the third time in this project that **"success" has meant "did nothing"**
+— R015 (a node emitting no items skips everything downstream) and R024
+(`EXECUTIONS_DATA_SAVE_ON_SUCCESS=none` leaves successes invisible) are the same
+shape. A pipeline that can legitimately do nothing cannot use "it ran" as
+evidence that it worked.
+
+**Fix:** migration `013_transcript_id.sql` makes `transcript_id` the identity —
+unique per occurrence, partial-unique index for the dropped-file path that has no
+Graph id — and demotes the `meeting_id` unique index to a plain one, so it now
+*groups* a series rather than forbidding it. Discovery excludes on `t.id`, the
+send guard keys on `cand.transcriptId`, and the upsert conflicts on
+`(transcript_id) WHERE transcript_id IS NOT NULL`.
+
+Existing rows were backfilled by `graph/backfill-transcript-ids.js`, which maps
+each row to the **oldest** transcript sharing its `meetingId` — the occurrence
+that actually wrote the row. Getting that wrong would have re-minuted and
+re-emailed the 18 Aug weekly to the client.
+
+**Guard:** R030 — asserts the key at all four sites (discovery exclusion, send
+guard, both halves of the exclusion query, and the `ON CONFLICT` target). Any one
+of them drifting back to `meeting_id` reopens this.
+
+**Not a bug, checked:** the folder name is `{date} {subject}`, so a series
+produces `25 Aug Weekly Meeting`, `01 Sep Weekly Meeting` — distinct. No change
+needed there.

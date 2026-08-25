@@ -340,6 +340,43 @@ check('R023', 'exclusion window outlasts discovery, and sends are deduped', () =
   return { ok: true, detail: `exclusion ${exclusionDays}d ≥ discovery ${discoveryDays}d, sends deduped` };
 });
 
+// ── R030 ─ a recurring meeting is many meetings ─────────────────────────────
+// A recurring Teams series reuses ONE meetingId across every occurrence. Keying
+// the exclusion list on meeting_id therefore retired the whole series the moment
+// its first occurrence was minuted: the 25 Aug weekly carried byte-for-byte the
+// same meetingId as the 18 Aug one and was skipped, while every run still
+// reported success — a skipped candidate is not an error, so nothing went red.
+//
+// transcriptId is unique per occurrence. This asserts the dedupe key never
+// drifts back to the meeting, at all four places it is read or written.
+check('R030', 'meetings are deduped by transcript, not by meeting', () => {
+  const wf = workflow('BEXT-Meeting-Intake');
+  const code = codeNodes(wf).map(x => x.parameters.jsCode).join('\n');
+
+  if (/done\.has\(\s*t\.meetingId\s*\)/.test(code))
+    return { ok: false, detail: 'discovery excludes on t.meetingId — a recurring series stops after occurrence 1' };
+  if (!/done\.has\(\s*t\.id\s*\)/.test(code))
+    return { ok: false, detail: 'discovery has no transcript-keyed exclusion' };
+  if (/ALREADY_SENT\.has\(\s*cand\.meetingId\s*\)/.test(code))
+    return { ok: false, detail: 'send guard keys on meetingId — occurrence 2 would never be emailed' };
+
+  const seen = (wf.nodes || []).find(x => /processed meetings/i.test(x.name || ''));
+  const q = (seen && seen.parameters && seen.parameters.query) || '';
+  if (!/'done'\s+AS\s+kind,\s*transcript_id/i.test(q))
+    return { ok: false, detail: "the 'done' list still selects meeting_id" };
+  if (!/'sent',\s*transcript_id/i.test(q))
+    return { ok: false, detail: "the 'sent' list still selects meeting_id" };
+
+  const rec = (wf.nodes || []).find(x => /Record minutes/i.test(x.name || ''));
+  const ins = (rec && rec.parameters && rec.parameters.query) || '';
+  if (!/ON CONFLICT \(transcript_id\)\s+WHERE transcript_id IS NOT NULL/i.test(ins))
+    return { ok: false, detail: 'upsert does not conflict on the partial transcript_id index' };
+  if (!/transcript_id text/.test(ins))
+    return { ok: false, detail: 'transcript_id missing from the json_to_recordset column list' };
+
+  return { ok: true, detail: 'dedupe keyed on transcriptId end to end' };
+});
+
 // ── R024 ─ active is not the same as running ────────────────────────────────
 // Every workflow read ACTIVE while nothing had executed for fifteen hours. One
 // flapping IMAP trigger on BEXT — Newsletter Intake reactivated in a loop, and

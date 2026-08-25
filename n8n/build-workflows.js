@@ -1939,7 +1939,11 @@ for (const upn of ORGANISERS) {
   } catch (e) { continue; }                     // no licence, no consent, no meetings
   for (const t of (list.value || [])) {
     if (Date.now() - new Date(t.createdDateTime).getTime() > WINDOW_MS) continue;
-    if (done.has(t.meetingId)) continue;
+    // Keyed on the TRANSCRIPT, not the meeting. A recurring series reuses one
+    // meetingId across every occurrence, so keying on that marked occurrence 2
+    // as already done and skipped it forever — silently, because a skipped
+    // candidate is not an error. See docs/REGRESSIONS.md R030.
+    if (done.has(t.id)) continue;
     candidates.push({
       organiserId: org.id, organiserUpn: upn, organiserName: org.displayName,
       transcriptId: t.id, meetingId: t.meetingId, createdDateTime: t.createdDateTime,
@@ -2346,7 +2350,7 @@ for (const cand of candidates) {
     // Send only when a recipient is configured. The attachments have to be on the
     // message before this, because a sent message cannot be added to.
     let sentAt = null;
-    if (SEND_TO && ALREADY_SENT.has(cand.meetingId)) {
+    if (SEND_TO && ALREADY_SENT.has(cand.transcriptId)) {
       // Reprocessed for some other reason — refile the documents, but do not mail
       // the client a second copy of the same minutes. Not a failure: the record is
       // fine and the card should still post. sent_at is left null here and the
@@ -2423,6 +2427,7 @@ for (const cand of candidates) {
     }
 
     out.push({ json: {
+      transcript_id: cand.transcriptId,
       meeting_id: meeting.id,
       subject: x.title || ev.subject || 'Meeting',
       organiser_upn: ev.organizer?.emailAddress?.address || '',
@@ -2452,6 +2457,7 @@ for (const cand of candidates) {
     // Recorded rather than thrown: one unreadable meeting must not stop the
     // others, and a failure with no record is a meeting silently lost.
     out.push({ json: {
+      transcript_id: cand.transcriptId,
       meeting_id: meeting.id, subject: ev.subject || '', status: 'failed',
       organiser_upn: ev.organizer?.emailAddress?.address || '',
       started_at: null, ended_at: null, attendees: [], transcript_path: null,
@@ -2522,17 +2528,22 @@ function meetingIntakeWorkflow() {
           // 90 days is deliberately far beyond any plausible discovery window, so
           // widening the lookback again cannot reopen this. The list stays small
           // because it holds ids, not rows.
-          query: `SELECT 'done' AS kind, meeting_id AS a, NULL::text AS b, NULL::text AS c,
+          // Both lists key on transcript_id, NOT meeting_id. A recurring series
+          // shares one meeting_id across occurrences, so a meeting_id exclusion
+          // list retires the whole series after its first occurrence — which is
+          // exactly what happened to the 25 Aug weekly. R030.
+          query: `SELECT 'done' AS kind, transcript_id AS a, NULL::text AS b, NULL::text AS c,
                          NULL::text[] AS d
   FROM meeting_minutes
  WHERE status <> 'failed'
+   AND transcript_id IS NOT NULL
    AND created_at > now() - interval '90 days'
 UNION ALL
 -- Every meeting whose minutes email has already gone out, whatever its status.
 -- This is the backstop: the window arithmetic above can be wrong again, but a
 -- client must never receive the same minutes twice.
-SELECT 'sent', meeting_id, NULL, NULL, NULL::text[]
-  FROM meeting_minutes WHERE sent_at IS NOT NULL
+SELECT 'sent', transcript_id, NULL, NULL, NULL::text[]
+  FROM meeting_minutes WHERE sent_at IS NOT NULL AND transcript_id IS NOT NULL
 UNION ALL
 SELECT 'participant', name, company, email, aliases FROM participants`,
           options: {},
@@ -2552,29 +2563,33 @@ SELECT 'participant', name, company, email, aliases FROM participants`,
           // One JSON parameter rather than positional ones: queryReplacement
           // splits on commas, and every one of these fields is full of them.
           query: `INSERT INTO meeting_minutes
-  (meeting_id, subject, organiser_upn, started_at, ended_at, attendees, status,
+  (transcript_id, meeting_id, subject, organiser_upn, started_at, ended_at, attendees, status,
    transcript_path, minutes_path, draft_message_id, extracted, model, error,
    folder_url, minutes_url, summary_url, transcript_url, posted_at, post_error,
    minutes_pdf_url, summary_pdf_url, transcript_pdf_url, sent_at)
-SELECT meeting_id, subject, organiser_upn, started_at, ended_at,
+SELECT transcript_id, meeting_id, subject, organiser_upn, started_at, ended_at,
        coalesce(attendees, '{}'), status::minutes_status,
        transcript_path, minutes_path, draft_message_id, extracted, model, error,
        folder_url, minutes_url, summary_url, transcript_url, posted_at, post_error,
        minutes_pdf_url, summary_pdf_url, transcript_pdf_url, sent_at
 FROM json_to_recordset($1::json) AS x(
-  meeting_id text, subject text, organiser_upn text,
+  transcript_id text, meeting_id text, subject text, organiser_upn text,
   started_at timestamptz, ended_at timestamptz, attendees text[], status text,
   transcript_path text, minutes_path text, draft_message_id text,
   extracted jsonb, model text, error text,
   folder_url text, minutes_url text, summary_url text, transcript_url text,
   minutes_pdf_url text, summary_pdf_url text, transcript_pdf_url text, sent_at timestamptz,
   posted_at timestamptz, post_error text)
--- The unique index on meeting_id is PARTIAL (WHERE meeting_id IS NOT NULL), which
--- lets several rows carry a null id. Postgres will not match a partial index unless
--- the inference repeats its predicate, so omitting the WHERE here fails with
--- "no unique or exclusion constraint matching the ON CONFLICT specification".
-ON CONFLICT (meeting_id) WHERE meeting_id IS NOT NULL DO UPDATE SET
+-- Conflict on transcript_id (migration 013), because meeting_id is no longer
+-- unique: a recurring series reuses it for every occurrence.
+--
+-- The index is PARTIAL (WHERE transcript_id IS NOT NULL), which lets the
+-- dropped-file path carry a null id. Postgres will not match a partial index
+-- unless the inference repeats its predicate, so omitting the WHERE here fails
+-- with "no unique or exclusion constraint matching the ON CONFLICT specification".
+ON CONFLICT (transcript_id) WHERE transcript_id IS NOT NULL DO UPDATE SET
   status = EXCLUDED.status, minutes_path = EXCLUDED.minutes_path,
+  meeting_id = EXCLUDED.meeting_id,
   draft_message_id = EXCLUDED.draft_message_id, extracted = EXCLUDED.extracted,
   error = EXCLUDED.error, folder_url = EXCLUDED.folder_url,
   minutes_url = EXCLUDED.minutes_url, summary_url = EXCLUDED.summary_url,
