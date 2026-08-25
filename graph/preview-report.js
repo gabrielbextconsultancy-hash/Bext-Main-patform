@@ -24,6 +24,14 @@ const { Pool } = require('pg');
 const outIdx = process.argv.indexOf('--out');
 const OUT = outIdx > -1 ? process.argv[outIdx + 1] : path.join(__dirname, '..', 'report-preview.html');
 
+// --date YYYY-MM-DD previews a specific covered day rather than the default
+// (yesterday). Useful for showing the client exactly what a given date produced.
+const dateIdx = process.argv.indexOf('--date');
+const FORCE_DATE = dateIdx > -1 ? process.argv[dateIdx + 1] : null;
+if (FORCE_DATE && !/^\d{4}-\d{2}-\d{2}$/.test(FORCE_DATE)) {
+  console.error('--date must be YYYY-MM-DD'); process.exit(1);
+}
+
 const WF = path.join(__dirname, '..', 'n8n', 'workflows', 'BEXT-Daily-Report.json');
 const wf = JSON.parse(fs.readFileSync(WF, 'utf8'));
 const selectSql = wf.nodes.find(n => n.name === 'Top articles, prior day').parameters.query;
@@ -37,7 +45,16 @@ const ORDER = ['Australian News', 'Industry Updates', 'International Industry Up
     host: process.env.PG_HOST, port: Number(process.env.PG_PORT),
     database: process.env.PG_DB, user: process.env.PG_USER, password: process.env.PG_PASSWORD,
   });
-  const { rows } = await db.query(selectSql);
+  // For a forced date, swap the "yesterday" window for that day's start. The rest
+  // of the query — floor, sections, ordering — is left exactly as deployed, so the
+  // preview stays faithful to what the workflow produces.
+  const sql = FORCE_DATE
+    ? selectSql.replace(
+        /date_trunc\('day', now\(\) AT TIME ZONE 'Australia\/Melbourne'\)\s*-\s*interval '1 day' AS day_start/,
+        `'${FORCE_DATE} 00:00'::timestamp AS day_start`)
+    : selectSql;
+
+  const { rows } = await db.query(sql);
   await db.end();
 
   if (!rows.length) {
