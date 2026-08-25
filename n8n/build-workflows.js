@@ -3583,7 +3583,24 @@ try {
     headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/pdf' },
     body: Buffer.from(pdf), json: true, timeout: 120000,
   });
-  pdfUrl = up.webUrl || null;
+  // The item's raw webUrl is its canonical path, and clicking it lands on a
+  // sign-in or access-denied wall unless the viewer already holds a live session
+  // for this SharePoint site — which is why "View" did nothing for the client.
+  // An organization-scoped view link resolves to the browser PDF viewer for
+  // anyone in the tenant, which is what a card button needs.
+  try {
+    const link = await helpers.httpRequest({
+      method: 'POST',
+      url: 'https://graph.microsoft.com/v1.0/drives/' + DRIVE + '/items/' + up.id + '/createLink',
+      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
+      body: { type: 'view', scope: 'organization' }, json: true, timeout: 30000,
+    });
+    pdfUrl = (link && link.link && link.link.webUrl) || up.webUrl || null;
+  } catch (e) {
+    // A sharing link is better, but the raw URL still opens for anyone already
+    // signed in, so fall back rather than dropping the button.
+    pdfUrl = up.webUrl || null;
+  }
   notes.push('pdf ' + name);
 } catch (e) {
   notes.push('pdf failed: ' + String(e.message || e).slice(0, 90));
