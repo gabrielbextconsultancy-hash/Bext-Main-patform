@@ -30,6 +30,12 @@ const INGEST_SRC = fs
   .replace(/^module\.exports\s*=.*$/m, '')
   .replace(/^const crypto = require\('crypto'\);$/m, '');
 
+// The news-versus-reference judge, minus its export line. Used by News Quality
+// to keep a site's standing pages out of a daily briefing.
+const CLASSIFY_SRC = fs
+  .readFileSync(path.join(__dirname, 'lib', 'classify-kind.js'), 'utf8')
+  .replace(/^module\.exports\s*=.*$/m, '');
+
 // The model-backed fallback reader, minus its export line. Runs only when the
 // ordinary parser finds nothing, so a broken source degrades instead of dying.
 const HERMES_SRC = fs
@@ -1001,6 +1007,12 @@ ranked AS (
     -- as a batch — the Gemini daily quota was exhausted on 25 Aug 2026 — and a
     -- null score must rank last, not vanish from the sheet unremarked.
     AND coalesce(an.relevance_score, 0) >= ${REPORT_EMAIL_MIN}
+    -- A standing reference page is not news of any day. "Declared Wholesale Gas
+    -- Market (DWGM)", "Integrated System Plan (ISP)" and "IT change and release
+    -- management" are real pages about real subjects, they score well, and a
+    -- daily briefing that carries them looks broken. Judged once and stored;
+    -- anything the model would not commit on stays 'unknown' and still goes out.
+    AND a.content_kind <> 'reference'
     -- Website furniture, not news. Opening the page found no publication date
     -- anywhere AND the scorer found nothing relevant in it — failing both tests
     -- at once is what separates "Legal notice and disclaimer", "Subscribe to our
@@ -1893,6 +1905,39 @@ return [{ json: {
 } }];
 `;
 
+// The judge runs after enrichment, on the pages that still have no date of
+// their own. A model is used because the call is editorial: a missing date is
+// the tell, not the proof — the Clean Energy Council publishes real articles
+// with no date in their markup, and AEMO publishes market explainers the same
+// way. Rules could not separate them; the model did, ten out of ten.
+const CLASSIFY_CODE = `
+${CLASSIFY_SRC}
+
+const rows = $input.all().map(i => i.json).filter(r => r && r.id && r.title);
+const helpers = this.helpers;
+
+const verdicts = await classifyKind(rows, {
+  http: helpers.httpRequest,
+  ollamaUrl: 'http://ollama:11434/api/generate',
+  batch: 5,
+});
+
+const updates = [];
+for (const row of rows) {
+  const kind = verdicts.get(row.id);
+  if (kind) updates.push({ id: Number(row.id), content_kind: kind });
+}
+const reference = updates.filter(u => u.content_kind === 'reference').length;
+
+return [{ json: {
+  kind_updates: JSON.stringify(updates),
+  judged: updates.length,
+  reference: reference,
+  undecided: rows.length - updates.length,
+  detail: 'judged ' + updates.length + ' of ' + rows.length + ', ' + reference + ' held as reference',
+} }];
+`;
+
 function newsQualityWorkflow() {
   return {
     name: 'BEXT — News Quality',
@@ -2010,13 +2055,55 @@ FROM (
 ) c`,
         },
       },
+      {
+        id: 'loadkind', name: 'Undated pages to judge', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(560, 160),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          // Only what could still reach a sheet, and only what has no date of
+          // its own — a page that declares a publication date is news by
+          // construction, and does not need judging.
+          query: `SELECT a.id, a.title, s.name AS source
+FROM articles a JOIN sources s ON s.id = a.source_id
+WHERE a.content_kind = 'unknown'
+  AND a.published_at IS NULL
+  AND a.fetched_at > now() - interval '5 days'
+ORDER BY a.fetched_at DESC
+LIMIT 60`,
+        },
+      },
+      {
+        id: 'judge', name: 'News or reference', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(780, 160),
+        parameters: { jsCode: CLASSIFY_CODE },
+      },
+      {
+        id: 'savekind', name: 'Save the verdict', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(1000, 160),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          query: `UPDATE articles a
+SET content_kind = v.content_kind::article_content_kind
+FROM (SELECT * FROM json_to_recordset($1::json)
+      AS x(id bigint, content_kind text)) v
+WHERE a.id = v.id`,
+          options: { queryReplacement: '={{ $json.kind_updates }}' },
+        },
+      },
       heartbeat('KUMA_PUSH_NEWS_QUALITY', 780, 0),
     ],
     connections: {
       'Three times daily AEST': { main: [[{ node: 'Articles missing a date', type: 'main', index: 0 }]] },
       'Articles missing a date': { main: [[{ node: 'Read publish dates', type: 'main', index: 0 }]] },
       'Read publish dates': { main: [[{ node: 'Save publish dates', type: 'main', index: 0 }]] },
-      'Save publish dates': { main: [[{ node: 'Record coverage', type: 'main', index: 0 }]] },
+      'Save publish dates': { main: [[{ node: 'Undated pages to judge', type: 'main', index: 0 }]] },
+      'Undated pages to judge': { main: [[{ node: 'News or reference', type: 'main', index: 0 }]] },
+      'News or reference': { main: [[{ node: 'Save the verdict', type: 'main', index: 0 }]] },
+      'Save the verdict': { main: [[{ node: 'Record coverage', type: 'main', index: 0 }]] },
       'Record coverage': { main: [[{ node: 'Heartbeat', type: 'main', index: 0 }]] },
     },
   };

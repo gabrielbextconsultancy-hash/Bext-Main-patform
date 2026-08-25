@@ -46,7 +46,7 @@ export interface ArchitectureGraph {
 }
 
 export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
-  "generatedAt": "2026-08-25T16:20:22.351Z",
+  "generatedAt": "2026-08-25T17:47:22.559Z",
   "workflowCount": 15,
   "edgeCount": 45,
   "workflows": [
@@ -962,6 +962,38 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
             "report_items",
             "reports"
           ],
+          "writes": [
+            "articles"
+          ],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "loadkind",
+          "name": "Undated pages to judge",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [
+            "articles",
+            "sources"
+          ],
+          "writes": [],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "judge",
+          "name": "News or reference",
+          "type": "n8n-nodes-base.code",
+          "actor": "ai",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "savekind",
+          "name": "Save the verdict",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [],
           "writes": [
             "articles"
           ],

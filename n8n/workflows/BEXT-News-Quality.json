@@ -113,6 +113,64 @@
       }
     },
     {
+      "id": "loadkind",
+      "name": "Undated pages to judge",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        560,
+        160
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "0SoqGGqUOqbwYTmJ",
+          "name": "BEXT Postgres"
+        }
+      },
+      "alwaysOutputData": true,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT a.id, a.title, s.name AS source\nFROM articles a JOIN sources s ON s.id = a.source_id\nWHERE a.content_kind = 'unknown'\n  AND a.published_at IS NULL\n  AND a.fetched_at > now() - interval '5 days'\nORDER BY a.fetched_at DESC\nLIMIT 60"
+      }
+    },
+    {
+      "id": "judge",
+      "name": "News or reference",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        160
+      ],
+      "parameters": {
+        "jsCode": "\n/**\r\n * News, or the website's standing furniture?\r\n *\r\n * A listing page links a site's scaffolding alongside its stories, and the\r\n * scraper takes both. Regulators gave us \"Renewable Energy Zones\", \"Gas Retail\r\n * Markets\" and \"Equipment Energy Efficiency (E3) Program\"; AEMO gave us a\r\n * podcast landing page, an XML standards page and a scholarship. Every one is on\r\n * topic and scores well, and none is news of any particular day.\r\n *\r\n * A missing publication date is the tell but not the proof — the Clean Energy\r\n * Council and NABERS publish real articles with no date in their markup — so the\r\n * call is editorial, and made by the model. On hermes3:8b it answered ten of ten\r\n * correctly on live titles, including the four that fooled every rule tried\r\n * before it.\r\n *\r\n * Conservative by construction. Anything the model does not clearly mark as\r\n * reference stays 'unknown' and keeps going out, because dropping a real story\r\n * is the failure being fixed, and carrying a reference page for one more day is\r\n * merely untidy.\r\n */\r\n'use strict';\r\n\r\nconst PROMPT_HEAD =\r\n  'You are sorting pages from Australian energy and building industry websites.\\n\\n'\r\n  + 'For each item decide if it is NEWS (a story published on a particular date - an\\n'\r\n  + 'announcement, a decision, a consultation opening, a report release, a media\\n'\r\n  + 'release) or REFERENCE (a standing page that is always there - a program or\\n'\r\n  + 'scheme overview, a portal, a market or mechanism explainer, a team or contact\\n'\r\n  + 'page, a legal or policy notice, a standards page).\\n\\n'\r\n  + 'When a title reads like a subject rather than an event, it is reference.\\n'\r\n  + 'When in doubt, answer news.\\n\\n'\r\n  + 'Return ONLY a JSON array, one object per item, in the same order, like:\\n'\r\n  + '[{\"id\":1,\"kind\":\"news\"},{\"id\":2,\"kind\":\"reference\"}]\\n\\n'\r\n  + 'ITEMS:\\n';\r\n\r\n/**\r\n * items: [{ id, title, source }]\r\n * http:  a request function — this.helpers.httpRequest in n8n, or an equivalent\r\n * Returns a Map of id -> 'news' | 'reference'.\r\n */\r\nasync function classifyKind(items, opts) {\r\n  const options = opts || {};\r\n  const http = options.http;\r\n  const url = options.ollamaUrl || 'http://ollama:11434/api/generate';\r\n  const model = options.model || 'hermes3:8b';\r\n  const out = new Map();\r\n  if (!items || !items.length || !http) return out;\r\n\r\n  // Five at a time. Ten was tried first and every batch came back unusable —\r\n  // an 8B model asked for a longer list drifts out of the format, and one\r\n  // malformed array costs all ten verdicts. Five answers cleanly and the extra\r\n  // round trips are cheap against a workflow that runs three times a day.\r\n  const BATCH = Number(options.batch || 5);\r\n\r\n  for (let i = 0; i < items.length; i += BATCH) {\r\n    const batch = items.slice(i, i + BATCH);\r\n    const lines = batch.map(function (a, n) {\r\n      const src = a.source ? ' [' + a.source + ']' : '';\r\n      return (n + 1) + '. ' + String(a.title || '').slice(0, 140) + src;\r\n    }).join('\\n');\r\n\r\n    let text = '';\r\n    try {\r\n      const r = await http({\r\n        method: 'POST', url: url, json: true, timeout: 180000,\r\n        body: {\r\n          model: model, stream: false,\r\n          // Generous. The model pretty-prints its JSON — about forty tokens an\r\n          // item once braces and whitespace are counted — and a budget that\r\n          // truncates the array costs the whole batch, because a JSON fragment\r\n          // with no closing bracket cannot be parsed at all. Twenty items were\r\n          // silently discarded that way before this was raised.\r\n          options: { temperature: 0.1, num_predict: 150 + batch.length * 45 },\r\n          prompt: PROMPT_HEAD + lines + '\\n',\r\n        },\r\n      });\r\n      text = (r && r.response) || '';\r\n    } catch (e) {\r\n      continue;\r\n    }\r\n\r\n    const m = text.match(/\\[[\\s\\S]*\\]/);\r\n    if (!m) continue;\r\n    let parsed;\r\n    try { parsed = JSON.parse(m[0]); } catch (e) { continue; }\r\n    if (!Array.isArray(parsed)) continue;\r\n\r\n    // The model reliably drops the id on some entries — it returned\r\n    // {\"kind\":\"reference\"} with no id for six of ten in testing — so order is\r\n    // the primary key and the id, when present, is only a cross-check. A\r\n    // mismatched length means the answer cannot be aligned and is discarded\r\n    // rather than guessed at, which would mislabel real stories.\r\n    if (parsed.length !== batch.length) continue;\r\n    for (let k = 0; k < batch.length; k++) {\r\n      const p = parsed[k] || {};\r\n      if (p.id !== undefined && Number(p.id) !== k + 1) continue;\r\n      const kind = String(p.kind || '').toLowerCase();\r\n      if (kind === 'reference' || kind === 'news') out.set(batch[k].id, kind);\r\n    }\r\n  }\r\n  return out;\r\n}\r\n\r\n\r\n\n\nconst rows = $input.all().map(i => i.json).filter(r => r && r.id && r.title);\nconst helpers = this.helpers;\n\nconst verdicts = await classifyKind(rows, {\n  http: helpers.httpRequest,\n  ollamaUrl: 'http://ollama:11434/api/generate',\n  batch: 5,\n});\n\nconst updates = [];\nfor (const row of rows) {\n  const kind = verdicts.get(row.id);\n  if (kind) updates.push({ id: Number(row.id), content_kind: kind });\n}\nconst reference = updates.filter(u => u.content_kind === 'reference').length;\n\nreturn [{ json: {\n  kind_updates: JSON.stringify(updates),\n  judged: updates.length,\n  reference: reference,\n  undecided: rows.length - updates.length,\n  detail: 'judged ' + updates.length + ' of ' + rows.length + ', ' + reference + ' held as reference',\n} }];\n"
+      }
+    },
+    {
+      "id": "savekind",
+      "name": "Save the verdict",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1000,
+        160
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "0SoqGGqUOqbwYTmJ",
+          "name": "BEXT Postgres"
+        }
+      },
+      "alwaysOutputData": true,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE articles a\nSET content_kind = v.content_kind::article_content_kind\nFROM (SELECT * FROM json_to_recordset($1::json)\n      AS x(id bigint, content_kind text)) v\nWHERE a.id = v.id",
+        "options": {
+          "queryReplacement": "={{ $json.kind_updates }}"
+        }
+      }
+    },
+    {
       "id": "kuma",
       "name": "Heartbeat",
       "type": "n8n-nodes-base.httpRequest",
@@ -178,6 +236,39 @@
       ]
     },
     "Save publish dates": {
+      "main": [
+        [
+          {
+            "node": "Undated pages to judge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Undated pages to judge": {
+      "main": [
+        [
+          {
+            "node": "News or reference",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "News or reference": {
+      "main": [
+        [
+          {
+            "node": "Save the verdict",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save the verdict": {
       "main": [
         [
           {
