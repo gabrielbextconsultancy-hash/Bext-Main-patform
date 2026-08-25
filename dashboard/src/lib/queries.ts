@@ -151,9 +151,9 @@ export const getPipelineReadiness = async () => {
        count(*) FILTER (WHERE a.fetched_at > now() - interval '24 hours')::int AS articles_24h,
        count(an.article_id) FILTER (WHERE a.fetched_at > now() - interval '24 hours')::int AS analysed_24h,
        count(*) FILTER (WHERE a.fetched_at > now() - interval '24 hours'
-                          AND an.relevance_score >= 40)::int AS qualifying,
+                          AND a.report_eligible AND an.relevance_score >= 16)::int AS qualifying,
        count(DISTINCT s.category) FILTER (WHERE a.fetched_at > now() - interval '24 hours'
-                                            AND an.relevance_score >= 40)::int AS categories
+                                            AND a.report_eligible AND an.relevance_score >= 16)::int AS categories
      FROM articles a
      JOIN sources s ON s.id = a.source_id
      LEFT JOIN article_analysis an ON an.article_id = a.id`
@@ -384,6 +384,10 @@ export const getScoredCount = async () => {
 // ── Meeting pipeline ─────────────────────────────────────────────────────────
 
 export interface MeetingRow {
+  // Unique per meeting OCCURRENCE. meeting_id is NOT unique — a recurring
+  // series shares one across every occurrence (migration 013), so this is the
+  // row identity and the React key.
+  transcript_id: string | null;
   meeting_id: string;
   subject: string;
   organiser_upn: string | null;
@@ -414,7 +418,7 @@ export interface MeetingRow {
  */
 export const getMeetings = () =>
   tryQuery<MeetingRow>(
-    `SELECT meeting_id, subject, organiser_upn, started_at::text, status::text,
+    `SELECT transcript_id, meeting_id, subject, organiser_upn, started_at::text, status::text,
             coalesce(array_length(attendees, 1), 0) AS attendee_count,
             transcript_path, minutes_path, draft_message_id,
             posted_at::text, post_error, error,

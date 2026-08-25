@@ -149,7 +149,7 @@ export default async function ReportsPage() {
               <Stat label="Fetched 24h" value={ready.articles_24h} />
               <Stat label="Analysed" value={ready.analysed_24h} />
               <Stat
-                label="Qualifying (≥40)"
+                label="Qualifying (≥16)"
                 value={ready.qualifying}
                 tone={ready.qualifying > 0 ? 'good' : 'bad'}
               />
