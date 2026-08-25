@@ -48,11 +48,20 @@ const ORDER = ['Australian News', 'Industry Updates', 'International Industry Up
   // For a forced date, swap the "yesterday" window for that day's start. The rest
   // of the query — floor, sections, ordering — is left exactly as deployed, so the
   // preview stays faithful to what the workflow produces.
-  const sql = FORCE_DATE
+  let sql = FORCE_DATE
     ? selectSql.replace(
         /date_trunc\('day', now\(\) AT TIME ZONE 'Australia\/Melbourne'\)\s*-\s*interval '1 day' AS day_start/,
         `'${FORCE_DATE} 00:00'::timestamp AS day_start`)
     : selectSql;
+
+  // --floor N overrides the relevance line, for showing the full unfiltered fetch.
+  // 0 keeps everything scored; the deployed default is 16.
+  const floorIdx = process.argv.indexOf('--floor');
+  if (floorIdx > -1) {
+    const f = Number(process.argv[floorIdx + 1]);
+    sql = sql.replace(/an\.relevance_score >= \d+/, `an.relevance_score >= ${f}`);
+    console.log('floor overridden to ' + f + ' (deployed default is 16)');
+  }
 
   const { rows } = await db.query(sql);
   await db.end();
