@@ -605,30 +605,14 @@ hotels, healthcare and aged care, education campuses, warehouses and logistics.
 So the sharpest test is: could this change what they advise a building owner to do,
 what a project costs, or what the rules require?
 
-PRIORITY. Rank on this ladder when deciding a score, not merely on whether the
-subject appears in the in-scope list below.
-
-  1. SOLAR FIRST. Solar and PV are the core of this business — commercial rooftop
-     and behind-the-meter systems, batteries and storage paired with them, feed-in
-     and export rules, connection and inverter standards, panel supply, pricing and
-     payback, installer accreditation, and the schemes that pay for any of it
-     (Solar Victoria, the Victorian Energy Upgrades solar measures, the federal
-     rebate). A solar story a commercial owner could act on starts at 70 and goes
-     up; nothing else outranks it at equal specificity.
-
-  2. Then building energy performance — NABERS, Commercial Building Disclosure,
-     the National Construction Code, GEMS, efficiency upgrades, electrification
-     away from gas, heat pumps.
-
-  3. Then the wider energy market — generation, transmission, network rules,
-     national policy. Genuine industry context, and it belongs in the sheet, but
-     it sits below the two tiers above rather than competing with them.
-
-Storage counts as tier 1 when it is paired with solar or behind the meter, and
-tier 3 when it is grid-scale generation news with no customer-side angle.
+Score every article on the same test — how much it could change what a building
+owner is advised to do, what a project costs, or what the rules require. Solar,
+building performance and the wider energy market are all in scope and judged the
+same way; a story is not worth more for being about solar, nor less for being
+about the grid. Specificity and actionability decide the score, not the subject.
 
 IN SCOPE — what their clients pay them to know about:
-  - solar and PV above all: commercial and rooftop installations, behind-the-meter
+  - solar and PV: commercial and rooftop installations, behind-the-meter
     generation, batteries paired with solar, feed-in tariffs and export limits,
     grid connection and inverter standards, module supply and pricing, installed
     cost and payback, accreditation, and the rebates and schemes that fund them
@@ -644,7 +628,9 @@ IN SCOPE — what their clients pay them to know about:
   - grants and funding programs their clients could apply for
   - electrification of buildings and industry, gas substitution, heat pumps
 
-OUT OF SCOPE — score these 15 or below however reputable the source:
+OUT OF SCOPE — score these exactly 0 however reputable the source. A 0 is the one
+score dropped from the sheet, so reserve it for articles with no energy, building
+or climate bearing at all — genuinely the wrong subject, not merely weak:
   - mining and resource extraction that is not about energy supply
   - legislation with no energy, building or climate content — tax, industrial
     relations, foreign relations, health, tobacco, corporate governance
@@ -670,11 +656,9 @@ Being on-topic is not the same as being useful. Two traps in particular:
     a practitioner could act on it now — a testing method they could use, a cost
     curve that changes a business case, a field trial with deployable results.
 
-    This does not contradict solar ranking first. The priority is for solar a
-    commercial owner could act on — a scheme, a price, a rule, a standard, a
-    supply or connection change. A perovskite record in a laboratory is a solar
-    story that changes nothing this year, and ranks accordingly. Ask what a client
-    would do differently on Monday, not what the article is about.
+    A perovskite efficiency record in a laboratory is a solar story that changes
+    nothing a consultant advises this year, and ranks accordingly. Ask what a
+    client would do differently on Monday, not what the article is about.
 
 A source being monitored does not make everything it publishes relevant. The
 government and parliamentary feeds carry the whole of government, and most of it
@@ -690,13 +674,17 @@ For each article below, return a JSON object with:
                              policy direction, credible research with practical bearing
                      20-54   tangential — real energy content but remote from their work,
                              or overseas news with no Australian read-across
-                     0-19    out of scope per the list above
+                     1-19    weak but on-subject — thin energy/building content, routine
+                             notices, marginal read-across. Kept in the full digest as
+                             noise, not discarded
+                     0       irrelevant — no energy, building or climate bearing at all
+                             (see OUT OF SCOPE). This is the only score dropped
   topics           up to 4 short lowercase tags
   entities         named organisations, schemes or people mentioned
 
-Be decisive. A middling score for something clearly irrelevant is worse than a low
-one, because the sheet is filtered on this number and borderline scores let noise
-through to the client.
+Be decisive. The one cut that matters is 0 versus 1 — is this the wrong subject
+entirely, or merely weak but on-subject. Everything from 1 up is kept and ranked
+by this number, so score honestly across the range; only a genuine 0 is dropped.
 
 Return ONLY a JSON array, no markdown fence, no commentary.
 
@@ -905,7 +893,7 @@ const REPORT_MAX_PER_SECTION = Number(process.env.REPORT_MAX_PER_SECTION || 80);
 // export figure, an EV market piece — goes in.
 //
 // The card (BEXT — Daily News Card) stays curated at 40; only the email goes wide.
-const REPORT_EMAIL_MIN = Number(process.env.REPORT_EMAIL_MIN || 16);
+const REPORT_EMAIL_MIN = Number(process.env.REPORT_EMAIL_MIN || 1);
 
 const REPORT_SELECT = `
 WITH win AS (

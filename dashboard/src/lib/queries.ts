@@ -151,9 +151,9 @@ export const getPipelineReadiness = async () => {
        count(*) FILTER (WHERE a.fetched_at > now() - interval '24 hours')::int AS articles_24h,
        count(an.article_id) FILTER (WHERE a.fetched_at > now() - interval '24 hours')::int AS analysed_24h,
        count(*) FILTER (WHERE a.fetched_at > now() - interval '24 hours'
-                          AND a.report_eligible AND an.relevance_score >= 16)::int AS qualifying,
+                          AND a.report_eligible AND an.relevance_score >= 1)::int AS qualifying,
        count(DISTINCT s.category) FILTER (WHERE a.fetched_at > now() - interval '24 hours'
-                                            AND a.report_eligible AND an.relevance_score >= 16)::int AS categories
+                                            AND a.report_eligible AND an.relevance_score >= 1)::int AS categories
      FROM articles a
      JOIN sources s ON s.id = a.source_id
      LEFT JOIN article_analysis an ON an.article_id = a.id`
