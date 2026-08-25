@@ -1,0 +1,276 @@
+<title>BEXT Session Reference</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  :root{
+    --bg:#F5F2EC; --surface:#fff; --surface-2:#FBF9F5;
+    --ink:#16211F; --muted:#5C6B66; --faint:#8A968F;
+    --line:#DFD9CC; --line-2:#C9C1B1;
+    --teal:#0E7C6B; --teal-soft:#DCEBE6;
+    --violet:#6D4AB8; --violet-soft:#E9E2F7;
+    --amber:#A9691B; --amber-soft:#F3E6D0;
+    --red:#B3261E; --red-soft:#F7E0DE;
+    --shadow:0 1px 2px rgba(22,33,31,.05),0 8px 24px -14px rgba(22,33,31,.18);
+  }
+  :root:not([data-theme="light"]){ @media (prefers-color-scheme:dark){
+    --bg:#0C1312; --surface:#141D1B; --surface-2:#101816;
+    --ink:#E9EEEB; --muted:#93A29D; --faint:#6E7C77;
+    --line:#26312E; --line-2:#34403C;
+    --teal:#45B9A0; --teal-soft:#14302A;
+    --violet:#A98CE8; --violet-soft:#221B38;
+    --amber:#D6A24E; --amber-soft:#312614;
+    --red:#E8837B; --red-soft:#381D1B;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px -16px rgba(0,0,0,.7);
+  }}
+  :root[data-theme="dark"]{
+    --bg:#0C1312; --surface:#141D1B; --surface-2:#101816;
+    --ink:#E9EEEB; --muted:#93A29D; --faint:#6E7C77;
+    --line:#26312E; --line-2:#34403C;
+    --teal:#45B9A0; --teal-soft:#14302A;
+    --violet:#A98CE8; --violet-soft:#221B38;
+    --amber:#D6A24E; --amber-soft:#312614;
+    --red:#E8837B; --red-soft:#381D1B;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px -16px rgba(0,0,0,.7);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:52px 22px 80px}
+  .eyebrow{font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--teal);margin:0 0 12px}
+  h1{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:clamp(2rem,4.6vw,3rem);
+    line-height:1.05;letter-spacing:-.01em;margin:0 0 14px;text-wrap:balance}
+  .lede{font-size:1.08rem;color:var(--muted);max-width:62ch;margin:0 0 24px}
+  .meta{display:flex;flex-wrap:wrap;gap:8px 24px;padding-top:18px;border-top:1px solid var(--line);
+    font-size:.84rem;color:var(--muted)}
+  .meta b{color:var(--ink);font-weight:600}
+  .meta .k{display:block;font-family:"IBM Plex Mono",monospace;font-size:.7rem;
+    text-transform:uppercase;letter-spacing:.1em;color:var(--faint)}
+  h2{font-family:"Fraunces",Georgia,serif;font-weight:600;font-size:1.42rem;margin:56px 0 6px;letter-spacing:-.01em}
+  .sub{color:var(--muted);margin:0 0 20px;max-width:66ch;font-size:.94rem}
+  a{color:var(--teal)}
+
+  .links{display:grid;grid-template-columns:repeat(2,1fr);gap:11px}
+  @media(max-width:660px){.links{grid-template-columns:1fr}}
+  .link{display:block;background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--teal);
+    border-radius:10px;padding:13px 15px;box-shadow:var(--shadow);text-decoration:none;color:inherit}
+  .link:hover{border-color:var(--line-2);border-left-color:var(--teal)}
+  .link .n{font-weight:600;font-size:.97rem}
+  .link .u{font-family:"IBM Plex Mono",monospace;font-size:.72rem;color:var(--teal);word-break:break-all;margin-top:2px}
+  .link .d{font-size:.79rem;color:var(--muted);margin-top:4px}
+
+  table{width:100%;border-collapse:collapse;font-size:.86rem}
+  .scroll{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+  th{text-align:left;font-family:"IBM Plex Mono",monospace;font-size:.68rem;letter-spacing:.09em;
+    text-transform:uppercase;color:var(--faint);font-weight:500;padding:10px 13px;border-bottom:1px solid var(--line)}
+  td{padding:10px 13px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  code{font-family:"IBM Plex Mono",monospace;font-size:.86em;background:var(--surface-2);
+    border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+  .pill{display:inline-block;font-family:"IBM Plex Mono",monospace;font-size:.66rem;letter-spacing:.05em;
+    text-transform:uppercase;padding:2px 7px;border-radius:5px;font-weight:500}
+  .p-live{background:var(--teal-soft);color:var(--teal)}
+  .p-next{background:var(--violet-soft);color:var(--violet)}
+  .p-warn{background:var(--amber-soft);color:var(--amber)}
+
+  .cards{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+  @media(max-width:660px){.cards{grid-template-columns:1fr}}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:15px;box-shadow:var(--shadow)}
+  .card h4{margin:0 0 4px;font-size:.98rem;font-weight:600}
+  .card p{margin:0;font-size:.84rem;color:var(--muted)}
+  .card .tag{margin-top:9px;display:block}
+
+  .lesson{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--red);
+    border-radius:10px;padding:14px 16px;margin-bottom:11px;box-shadow:var(--shadow)}
+  .lesson h4{margin:0 0 5px;font-size:.95rem;font-weight:600;color:var(--red)}
+  .lesson p{margin:0 0 6px;font-size:.85rem;color:var(--muted)}
+  .lesson p:last-child{margin-bottom:0}
+  .lesson b{color:var(--ink)}
+
+  ol.steps{counter-reset:s;list-style:none;padding:0;margin:0}
+  ol.steps li{counter-increment:s;position:relative;padding:11px 0 11px 40px;border-top:1px solid var(--line)}
+  ol.steps li:first-child{border-top:0}
+  ol.steps li::before{content:counter(s);position:absolute;left:0;top:11px;width:24px;height:24px;
+    border-radius:50%;background:var(--violet-soft);color:var(--violet);font-family:"IBM Plex Mono",monospace;
+    font-size:.72rem;display:grid;place-items:center;font-weight:600}
+  ol.steps b{font-weight:600}
+  ol.steps .d{display:block;font-size:.84rem;color:var(--muted);margin-top:2px}
+
+  footer{margin-top:60px;padding-top:18px;border-top:1px solid var(--line);font-size:.79rem;color:var(--faint)}
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">BEXT Consultancy · Working session reference</p>
+    <h1>Self-healing, monitoring, and the architecture map</h1>
+    <p class="lede">What was built and deployed on 24–25 August 2026, where everything lives,
+      the mistakes worth remembering, and the approved plan for what comes next.</p>
+    <div class="meta">
+      <span><span class="k">Repo</span><b>bext-automation</b></span>
+      <span><span class="k">Preflight</span><b>29 checks passing</b></span>
+      <span><span class="k">Workflows</span><b>14 · all monitored</b></span>
+      <span><span class="k">Kuma monitors</span><b>20</b></span>
+    </div>
+  </header>
+
+  <h2>Live links</h2>
+  <p class="sub">Credentials live in <code>.env</code> (gitignored) and <code>/docker/bext/.env</code> — never in this document.</p>
+  <div class="links">
+    <a class="link" href="https://bext-kuma.srv1866850.hstgr.cloud">
+      <span class="n">Uptime Kuma</span>
+      <span class="u">bext-kuma.srv1866850.hstgr.cloud</span>
+      <span class="d">20 monitors. Green/red per endpoint and per workflow heartbeat. Login is your email.</span>
+    </a>
+    <a class="link" href="https://bext-grafana.srv1866850.hstgr.cloud">
+      <span class="n">Grafana</span>
+      <span class="u">bext-grafana.srv1866850.hstgr.cloud</span>
+      <span class="d">Three dashboards: Overview (ops), Self-Healing (incidents), GitHub (repo activity).</span>
+    </a>
+    <a class="link" href="https://bext.dev-environment.site/proposal">
+      <span class="n">Proposal deck</span>
+      <span class="u">bext.dev-environment.site/proposal</span>
+      <span class="d">Client-facing. Now includes the radial mind map of the operating model.</span>
+    </a>
+    <a class="link" href="https://bext-gitnexus.srv1866850.hstgr.cloud">
+      <span class="n">GitNexus</span>
+      <span class="u">bext-gitnexus.srv1866850.hstgr.cloud</span>
+      <span class="d">Code knowledge graph. Analyse works over the SSH tunnel only — see Open items.</span>
+    </a>
+  </div>
+
+  <h2>What the self-healing agent does</h2>
+  <p class="sub">Four rings on top of the regression registry that already existed. Full detail in
+    <code>docs/SELF-HEALING.md</code>.</p>
+  <div class="cards">
+    <div class="card">
+      <h4>Ring 0 — Detect</h4>
+      <p>Uptime Kuma. HTTP, TCP and DNS checks, plus one <strong>push deadman per scheduled
+        workflow</strong> — the only thing that sees a workflow that is active and not running.</p>
+      <span class="tag pill p-live">live</span>
+    </div>
+    <div class="card">
+      <h4>Ring 1 — Diagnose</h4>
+      <p><code>heal-rules.js</code> is REGRESSIONS.md as data: 14 rules, each sharing an id with its
+        preflight check and its written section. One fact, three views.</p>
+      <span class="tag pill p-live">live</span>
+    </div>
+    <div class="card">
+      <h4>Ring 2 — Remediate</h4>
+      <p>Six reversible actions, rate-capped, written to the incident log <em>before</em> they run.
+        Container restarts pass two independent gates; Premier Fitness is unreachable by design.</p>
+      <span class="tag pill p-live">live</span>
+    </div>
+    <div class="card">
+      <h4>Ring 2.5 — Validate</h4>
+      <p>Actions are recorded <code>attempted</code>, never <code>healed</code>. Next cycle the healer
+        checks the workflow actually recovered, and escalates a fix that did not hold.</p>
+      <span class="tag pill p-live">live</span>
+    </div>
+    <div class="card">
+      <h4>Ring 3 — Learn</h4>
+      <p>An unknown failure escalates to Teams with its signature. You diagnose once; the rule,
+        the check and the write-up land in the same commit. Coverage grows.</p>
+      <span class="tag pill p-live">live</span>
+    </div>
+    <div class="card">
+      <h4>Validation — Contract Test</h4>
+      <p>02:00 nightly, three hours before the client report. Asserts what only the running
+        container can see: env, sandbox limits, code that parses, heartbeats present.</p>
+      <span class="tag pill p-live">live</span>
+    </div>
+  </div>
+
+  <h2>Commits</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Commit</th><th>What it did</th></tr></thead>
+      <tbody>
+        <tr><td><code>a327f9d</code></td><td>Self-healing loop, Uptime Kuma, Prometheus + Grafana. Migration 024, heal rules, Self Heal and Contract Test workflows, six new preflight checks.</td></tr>
+        <tr><td><code>2739ac4</code></td><td>The healer validates its own work; heal-metrics dashboard on a read-only Postgres role (migration 025). Fixed escalations that had been posting nothing.</td></tr>
+        <tr><td><code>055ea12</code></td><td>Business Systems Integration Diagram + the radial mind-map slide in the proposal deck.</td></tr>
+        <tr><td><code>844d15b</code></td><td>The deploy-path fix — see below — plus R032/R032b so it cannot recur.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Three things worth remembering</h2>
+  <p class="sub">Each cost real time, and each is now guarded by an assertion rather than by memory.</p>
+
+  <div class="lesson">
+    <h4>A green build is not a deployed change</h4>
+    <p>The repo nests services under <code>infra/</code> with <code>build: ../dashboard</code>; the VPS
+      layout is flat, and CI rewrites the path on the way over. Shipping the compose by hand skipped
+      that rewrite, so Docker built <code>/docker/dashboard</code> — a stale copy that still existed.</p>
+    <p><b>Every rebuild succeeded and changed nothing</b>, which is exactly what made it expensive.
+      Guarded by <code>R032</code> / <code>R032b</code>.</p>
+  </div>
+
+  <div class="lesson">
+    <h4>The sandbox is not Node</h4>
+    <p>The self-healer shipped twice with faults only a real run could find: <code>$env.N8N_URL</code>
+      is not set inside the container, and the Code sandbox exposes neither <code>fetch</code> nor
+      <code>http</code>. Both compiled clean.</p>
+    <p><b>Nothing was committed until a live run passed</b> — that discipline is why the healer works
+      rather than merely deploys.</p>
+  </div>
+
+  <div class="lesson">
+    <h4>A monitor that cries wolf gets ignored</h4>
+    <p>Fixing the escalation path meant 136 already-logged failures would have posted to Teams, then
+      re-posted every 15 minutes. Two guards went in first: an execution is never re-escalated, and a
+      persistently broken workflow is <em>recorded</em> every cycle but <em>announced</em> once.</p>
+    <p>The same reasoning put the Graph Health heartbeat before its IF node rather than after —
+      anchored after, it would have pinged only when Graph Health was <b>broken</b>.</p>
+  </div>
+
+  <h2>Configuration added</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Thing</th><th>Scope</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td><code>codebase-memory</code> MCP</td><td>project</td><td>Sub-millisecond symbol and caller queries over the repo</td></tr>
+        <tr><td><code>headroom</code> MCP</td><td>user / global</td><td>Token compression + <code>headroom learn</code> across all projects</td></tr>
+        <tr><td><code>bext-observability</code> skill</td><td>project</td><td>Operating Kuma, Prometheus and Grafana — the two-auth-plane model, monitor set, deploys</td></tr>
+        <tr><td><code>graphify</code> skill</td><td>user / global</td><td>Multimodal knowledge graph over docs and PDFs</td></tr>
+        <tr><td>Kuma · Prometheus · node-exporter · Grafana</td><td>VPS, project <code>bext</code></td><td>The monitoring stack, all memory-capped</td></tr>
+        <tr><td>GitNexus</td><td>VPS, own project</td><td>Code knowledge graph, capped at 2&nbsp;GB so it can never OOM the host</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Approved plan — next</h2>
+  <p class="sub">An <code>/architecture</code> page showing the whole estate and every workflow inside
+    it, generated from the workflows themselves so it cannot drift.</p>
+  <ol class="steps">
+    <li><b>Generator</b><span class="d"><code>n8n/build-architecture.js</code> reads all 14 workflow JSONs and derives triggers, node order, actors and the tables each reads and writes. Workflows are linked where one writes a table another reads — nothing hand-listed.</span></li>
+    <li><b>Excalidraw skill</b><span class="d">Installed at project scope with the BEXT palette. Diagrams are editable, and the skill renders and inspects its own output to catch overlaps.</span></li>
+    <li><b>Diagrams</b><span class="d">One estate map plus one per workflow, in <code>docs/diagrams/</code>.</span></li>
+    <li><b>The page</b><span class="d"><code>@excalidraw/excalidraw</code> embedded so the map pans and zooms, and element colours are patched from live <code>incidents</code> — a failing workflow is red in the diagram itself.</span></li>
+    <li><b>Guards</b><span class="d">A preflight check regenerates the graph and fails if it has drifted from the committed copy.</span></li>
+  </ol>
+
+  <h2>Open items</h2>
+  <div class="scroll">
+    <table>
+      <thead><tr><th>Item</th><th>State</th><th>Note</th></tr></thead>
+      <tbody>
+        <tr><td>Grafana admin password</td><td><span class="pill p-warn">yours</span></td><td>Starts <code>admin</code>/<code>admin</code> and forces a change. Do it — the URL is public.</td></tr>
+        <tr><td>Kuma password rotation</td><td><span class="pill p-warn">yours</span></td><td>It was typed into chat. Rotate when convenient and I will re-sync.</td></tr>
+        <tr><td>Content Drafts &amp; Content Topics</td><td><span class="pill p-warn">failing</span></td><td>Erroring roughly every six minutes. Surfaced by the healer; a task chip is queued to fix them.</td></tr>
+        <tr><td>GitNexus public analyse</td><td><span class="pill p-warn">upstream</span></td><td>Its server only accepts repo analysis from a loopback origin, so use the SSH tunnel. Not a deployment fault.</td></tr>
+        <tr><td>Parallel session</td><td><span class="pill p-warn">watch</span></td><td>Another session is editing the same files and has taken rule ids R030 and R031.</td></tr>
+        <tr><td>Architecture page</td><td><span class="pill p-next">next</span></td><td>Plan approved, prerequisite cleared, ready to build.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <footer>
+    BEXT Consultancy — Business Structure Efficiency. Session of 24–25 August 2026.
+    Plan file: <code>~/.claude/plans/i-want-you-to-polished-pebble.md</code>.
+    Operating detail: <code>docs/SELF-HEALING.md</code>, <code>docs/OBSERVABILITY.md</code>,
+    <code>docs/REGRESSIONS.md</code>.
+  </footer>
+</div>

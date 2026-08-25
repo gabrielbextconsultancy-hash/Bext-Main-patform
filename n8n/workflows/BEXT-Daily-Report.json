@@ -73,7 +73,7 @@
       "parameters": {
         "mode": "runOnceForAllItems",
         "language": "javaScript",
-        "jsCode": "\n// Why this exists: the sheet spent weeks in Gmail's spam folder while every\n// dashboard read healthy, because \"the workflow ran\" is not \"the mail arrived\".\n// These are the settings that decide whether a receiver trusts the message, and\n// they now travel with the report so a regression is visible the next morning.\n//\n// DNS over HTTPS rather than require('dns') — the Code sandbox exposes only the\n// modules in NODE_FUNCTION_ALLOW_BUILTIN.\nconst http = this.helpers.httpRequest;\nconst DOMAIN = String($env.REPORT_SENDER || '').split('@')[1] || '';\n\nconst lookup = async (name, type) => {\n  try {\n    const r = await http({\n      method: 'GET', url: 'https://dns.google/resolve',\n      qs: { name: name, type: type }, json: true, timeout: 15000,\n    });\n    return (r.Answer || []).map(a => String(a.data || '').replace(/^\"|\"$/g, ''));\n  } catch (e) { return []; }\n};\n\nconst checks = [];\nif (!DOMAIN) {\n  checks.push({ name: 'sender', ok: false, detail: 'REPORT_SENDER not set' });\n} else {\n  const spf = (await lookup(DOMAIN, 'TXT')).find(t => /^v=spf1/i.test(t)) || '';\n  checks.push({\n    name: 'SPF',\n    ok: /-all/.test(spf) && /mailchannels|ip4:/i.test(spf),\n    detail: spf ? (/-all/.test(spf) ? 'published, hard fail' : 'published, soft ~all') : 'MISSING',\n  });\n\n  const dmarc = (await lookup('_dmarc.' + DOMAIN, 'TXT')).find(t => /^v=DMARC1/i.test(t)) || '';\n  checks.push({\n    name: 'DMARC', ok: !!dmarc,\n    detail: dmarc ? (/rua=/.test(dmarc) ? 'published with reporting' : 'published, no reporting') : 'MISSING',\n  });\n\n  const dkim = (await lookup('default._domainkey.' + DOMAIN, 'TXT')).join('');\n  checks.push({ name: 'DKIM', ok: /v=DKIM1/i.test(dkim), detail: /v=DKIM1/i.test(dkim) ? 'key published' : 'MISSING' });\n\n  const mx = await lookup(DOMAIN, 'MX');\n  // A sending domain that cannot receive mail is a long-standing spam heuristic,\n  // and it also means every reply to the sheet disappears.\n  checks.push({ name: 'MX', ok: mx.length > 0, detail: mx.length ? 'can receive replies' : 'MISSING — replies vanish' });\n}\n\nconst failed = checks.filter(c => !c.ok);\nconst line = checks.map(c => c.name + ' ' + (c.ok ? 'ok' : 'FAIL')).join(' · ');\n// Carry the input forward. This node sits mid-chain between the brief and the\n// renderer, and returning only its own fields silently dropped the entire report\n// — sections, item_count, recipient — so Render HTML received a payload with no\n// articles in it and died on sections.map. Four consecutive scheduled runs\n// errored or crashed that way before anyone looked at an execution.\n//\n// A node inserted into a pipeline has to pass through what it did not produce.\nreturn [{ json: Object.assign({}, $input.first().json, {\n  deliverability: line,\n  deliverability_ok: failed.length === 0,\n  deliverability_detail: checks.map(c => c.name + ': ' + c.detail).join(' | '),\n}) }];\n"
+        "jsCode": "\n// Why this exists: the sheet spent weeks in Gmail's spam folder while every\n// dashboard read healthy, because \"the workflow ran\" is not \"the mail arrived\".\n// These are the settings that decide whether a receiver trusts the message, and\n// they now travel with the report so a regression is visible the next morning.\n//\n// DNS over HTTPS rather than require('dns') — the Code sandbox exposes only the\n// modules in NODE_FUNCTION_ALLOW_BUILTIN.\nconst http = this.helpers.httpRequest;\n// The domain the mail is actually sent from. Delivery moved to Microsoft Graph,\n// so that is MS_SENDER_UPN's domain; checking REPORT_SENDER would report on a\n// path no longer in use and hide a real fault on the one that is.\nconst DOMAIN = String($env.MS_SENDER_UPN || $env.REPORT_SENDER || '').split('@')[1] || '';\n\nconst lookup = async (name, type) => {\n  try {\n    const r = await http({\n      method: 'GET', url: 'https://dns.google/resolve',\n      qs: { name: name, type: type }, json: true, timeout: 15000,\n    });\n    return (r.Answer || []).map(a => String(a.data || '').replace(/^\"|\"$/g, ''));\n  } catch (e) { return []; }\n};\n\nconst checks = [];\nif (!DOMAIN) {\n  checks.push({ name: 'sender', ok: false, detail: 'REPORT_SENDER not set' });\n} else {\n  const spf = (await lookup(DOMAIN, 'TXT')).find(t => /^v=spf1/i.test(t)) || '';\n  checks.push({\n    name: 'SPF',\n    // Microsoft 365 publishes include:spf.protection.outlook.com and commonly\n    // ~all; the old iFastNet path used MailChannels with -all. Accept either,\n    // so the check follows the sending path rather than one provider's shape.\n    ok: /all/.test(spf) && /outlook.com|mailchannels|ip4:/i.test(spf),\n    detail: spf ? (/-all/.test(spf) ? 'published, hard fail' : 'published, soft ~all') : 'MISSING',\n  });\n\n  const dmarc = (await lookup('_dmarc.' + DOMAIN, 'TXT')).find(t => /^v=DMARC1/i.test(t)) || '';\n  checks.push({\n    name: 'DMARC', ok: !!dmarc,\n    detail: dmarc ? (/rua=/.test(dmarc) ? 'published with reporting' : 'published, no reporting') : 'MISSING',\n  });\n\n  // Selectors differ by provider: Microsoft 365 signs with selector1/selector2,\n  // the old MailChannels path with 'default'. Try each rather than report a\n  // missing key for a domain that is signing correctly under another selector.\n  let dkim = '';\n  for (const sel of ['selector1', 'selector2', 'default']) {\n    dkim = (await lookup(sel + '._domainkey.' + DOMAIN, 'TXT')).join('');\n    if (/v=DKIM1/i.test(dkim)) break;\n    // A CNAME to the provider's key counts as published; DoH returns it as data.\n    if (/onmicrosoft.com|dkim/i.test(dkim)) break;\n  }\n  const dkimOk = /v=DKIM1/i.test(dkim) || /onmicrosoft.com/i.test(dkim);\n  checks.push({ name: 'DKIM', ok: dkimOk, detail: dkimOk ? 'key published' : 'MISSING' });\n\n  const mx = await lookup(DOMAIN, 'MX');\n  // A sending domain that cannot receive mail is a long-standing spam heuristic,\n  // and it also means every reply to the sheet disappears.\n  checks.push({ name: 'MX', ok: mx.length > 0, detail: mx.length ? 'can receive replies' : 'MISSING — replies vanish' });\n}\n\nconst failed = checks.filter(c => !c.ok);\nconst line = checks.map(c => c.name + ' ' + (c.ok ? 'ok' : 'FAIL')).join(' · ');\n// Carry the input forward. This node sits mid-chain between the brief and the\n// renderer, and returning only its own fields silently dropped the entire report\n// — sections, item_count, recipient — so Render HTML received a payload with no\n// articles in it and died on sections.map. Four consecutive scheduled runs\n// errored or crashed that way before anyone looked at an execution.\n//\n// A node inserted into a pipeline has to pass through what it did not produce.\nreturn [{ json: Object.assign({}, $input.first().json, {\n  deliverability: line,\n  deliverability_ok: failed.length === 0,\n  deliverability_detail: checks.map(c => c.name + ': ' + c.detail).join(' | '),\n}) }];\n"
       }
     },
     {
@@ -177,29 +177,15 @@
     },
     {
       "id": "send",
-      "name": "Send via SMTP",
-      "type": "n8n-nodes-base.emailSend",
-      "typeVersion": 2.1,
+      "name": "Send via Graph",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         720,
         0
       ],
-      "credentials": {
-        "smtp": {
-          "id": "Yv2DyL0Zv3xyY1lW",
-          "name": "BEXT SMTP"
-        }
-      },
       "parameters": {
-        "fromEmail": "={{ \"BEXT Consultancy <\" + $env.REPORT_SENDER + \">\" }}",
-        "toEmail": "={{ $(\"Render HTML\").first().json.recipient }}",
-        "subject": "={{ $(\"Render HTML\").first().json.subject }}",
-        "emailFormat": "both",
-        "text": "={{ $(\"Render HTML\").first().json.text }}",
-        "html": "={{ $(\"Render HTML\").first().json.html }}",
-        "options": {
-          "replyTo": "={{ $env.REPORT_REPLY_TO || $env.MS_SENDER_UPN }}"
-        }
+        "jsCode": "const R = $('Render HTML').first().json;\nconst TENANT = $env.MS_TENANT_ID, CLIENT = $env.MS_CLIENT_ID, SECRET = $env.MS_CLIENT_SECRET;\nconst FROM = $env.MS_SENDER_UPN;\nif (!TENANT || !CLIENT || !SECRET || !FROM) {\n  throw new Error('Graph send needs MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET and MS_SENDER_UPN');\n}\n\n// One address per recipient. REPORT_RECIPIENT is a comma-separated list.\nconst rcpts = String(R.recipient || '').split(',').map(function (s) { return s.trim(); })\n  .filter(Boolean).map(function (a) { return { emailAddress: { address: a } }; });\nif (!rcpts.length) throw new Error('no recipients on the rendered report');\n\nconst tok = await this.helpers.httpRequest({\n  method: 'POST',\n  url: 'https://login.microsoftonline.com/' + TENANT + '/oauth2/v2.0/token',\n  form: {\n    client_id: CLIENT, client_secret: SECRET,\n    grant_type: 'client_credentials', scope: 'https://graph.microsoft.com/.default',\n  },\n  json: true, timeout: 30000,\n});\nif (!tok || !tok.access_token) throw new Error('Graph token refused');\n\nconst replyTo = $env.REPORT_REPLY_TO || FROM;\nconst res = await this.helpers.httpRequest({\n  method: 'POST',\n  url: 'https://graph.microsoft.com/v1.0/users/' + encodeURIComponent(FROM) + '/sendMail',\n  headers: { Authorization: 'Bearer ' + tok.access_token, 'Content-Type': 'application/json' },\n  body: {\n    message: {\n      subject: R.subject,\n      body: { contentType: 'HTML', content: R.html },\n      toRecipients: rcpts,\n      replyTo: [{ emailAddress: { address: replyTo } }],\n    },\n    saveToSentItems: true,\n  },\n  json: true, timeout: 120000, returnFullResponse: true,\n});\n\n// sendMail answers 202 with an empty body. Anything else did not send, and must\n// throw rather than let 'Mark sent' record a delivery that did not happen.\nconst code = res && res.statusCode;\nif (code !== 202 && code !== 200) throw new Error('Graph sendMail returned ' + code);\n\nreturn [{ json: {\n  sent_via: 'graph', from: FROM,\n  recipients: rcpts.length,\n  size_kb: Math.round(String(R.html || '').length / 1024),\n} }];"
       }
     },
     {
@@ -367,14 +353,14 @@
       "main": [
         [
           {
-            "node": "Send via SMTP",
+            "node": "Send via Graph",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Send via SMTP": {
+    "Send via Graph": {
       "main": [
         [
           {

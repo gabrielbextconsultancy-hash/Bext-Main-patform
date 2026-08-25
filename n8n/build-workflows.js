@@ -1052,7 +1052,10 @@ return [{ json: { empty: false, item_count: rows.length, sections, intro,
 // DNS over HTTPS rather than require('dns') — the Code sandbox exposes only the
 // modules in NODE_FUNCTION_ALLOW_BUILTIN.
 const http = this.helpers.httpRequest;
-const DOMAIN = String($env.REPORT_SENDER || '').split('@')[1] || '';
+// The domain the mail is actually sent from. Delivery moved to Microsoft Graph,
+// so that is MS_SENDER_UPN's domain; checking REPORT_SENDER would report on a
+// path no longer in use and hide a real fault on the one that is.
+const DOMAIN = String($env.MS_SENDER_UPN || $env.REPORT_SENDER || '').split('@')[1] || '';
 
 const lookup = async (name, type) => {
   try {
@@ -1071,7 +1074,10 @@ if (!DOMAIN) {
   const spf = (await lookup(DOMAIN, 'TXT')).find(t => /^v=spf1/i.test(t)) || '';
   checks.push({
     name: 'SPF',
-    ok: /-all/.test(spf) && /mailchannels|ip4:/i.test(spf),
+    // Microsoft 365 publishes include:spf.protection.outlook.com and commonly
+    // ~all; the old iFastNet path used MailChannels with -all. Accept either,
+    // so the check follows the sending path rather than one provider's shape.
+    ok: /all/.test(spf) && /outlook\.com|mailchannels|ip4:/i.test(spf),
     detail: spf ? (/-all/.test(spf) ? 'published, hard fail' : 'published, soft ~all') : 'MISSING',
   });
 
@@ -1081,8 +1087,18 @@ if (!DOMAIN) {
     detail: dmarc ? (/rua=/.test(dmarc) ? 'published with reporting' : 'published, no reporting') : 'MISSING',
   });
 
-  const dkim = (await lookup('default._domainkey.' + DOMAIN, 'TXT')).join('');
-  checks.push({ name: 'DKIM', ok: /v=DKIM1/i.test(dkim), detail: /v=DKIM1/i.test(dkim) ? 'key published' : 'MISSING' });
+  // Selectors differ by provider: Microsoft 365 signs with selector1/selector2,
+  // the old MailChannels path with 'default'. Try each rather than report a
+  // missing key for a domain that is signing correctly under another selector.
+  let dkim = '';
+  for (const sel of ['selector1', 'selector2', 'default']) {
+    dkim = (await lookup(sel + '._domainkey.' + DOMAIN, 'TXT')).join('');
+    if (/v=DKIM1/i.test(dkim)) break;
+    // A CNAME to the provider's key counts as published; DoH returns it as data.
+    if (/onmicrosoft\.com|dkim/i.test(dkim)) break;
+  }
+  const dkimOk = /v=DKIM1/i.test(dkim) || /onmicrosoft\.com/i.test(dkim);
+  checks.push({ name: 'DKIM', ok: dkimOk, detail: dkimOk ? 'key published' : 'MISSING' });
 
   const mx = await lookup(DOMAIN, 'MX');
   // A sending domain that cannot receive mail is a long-standing spam heuristic,
@@ -1467,26 +1483,69 @@ ON CONFLICT (report_id, article_id) DO NOTHING`,
         },
       },
       {
-        id: 'send', name: 'Send via SMTP', type: 'n8n-nodes-base.emailSend',
-        typeVersion: 2.1, position: pos(720, 0),
-        credentials: { smtp: { id: SMTP_CRED, name: 'BEXT SMTP' } },
+        // Sent through Microsoft Graph, not SMTP.
+        //
+        // The iFastNet path signs as reports@bext.dev-environment.site, and that
+        // domain fails DKIM at Gmail. A DKIM failure is not a bounce — Gmail
+        // accepts the message and silently discards it, so the workflow recorded
+        // a clean send for mail nobody ever received. Graph sends from the tenant
+        // mailbox instead, which Microsoft signs, so it authenticates for both
+        // recipients: Gmail and the bextconsultancy.com.au mailbox.
+        id: 'send', name: 'Send via Graph', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(720, 0),
         parameters: {
-          // A display name rather than a bare address. Mail from a naked machine
-          // address reads as automated to a filter and to a person.
-          fromEmail: '={{ "BEXT Consultancy <" + $env.REPORT_SENDER + ">" }}',
-          toEmail: '={{ $("Render HTML").first().json.recipient }}',
-          subject: '={{ $("Render HTML").first().json.subject }}',
-          // Both parts, not HTML alone. A single-part text/html message with no
-          // plain-text alternative is one of the oldest bulk-mail signals there is,
-          // and the sheet reads perfectly well as text.
-          emailFormat: 'both',
-          text: '={{ $("Render HTML").first().json.text }}',
-          html: '={{ $("Render HTML").first().json.html }}',
-          options: {
-            // Replies went to a mailbox on a domain with no MX record, so they
-            // vanished. Point them at one someone actually reads.
-            replyTo: '={{ $env.REPORT_REPLY_TO || $env.MS_SENDER_UPN }}',
-          },
+          jsCode: `
+const R = $('Render HTML').first().json;
+const TENANT = $env.MS_TENANT_ID, CLIENT = $env.MS_CLIENT_ID, SECRET = $env.MS_CLIENT_SECRET;
+const FROM = $env.MS_SENDER_UPN;
+if (!TENANT || !CLIENT || !SECRET || !FROM) {
+  throw new Error('Graph send needs MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET and MS_SENDER_UPN');
+}
+
+// One address per recipient. REPORT_RECIPIENT is a comma-separated list.
+const rcpts = String(R.recipient || '').split(',').map(function (s) { return s.trim(); })
+  .filter(Boolean).map(function (a) { return { emailAddress: { address: a } }; });
+if (!rcpts.length) throw new Error('no recipients on the rendered report');
+
+const tok = await this.helpers.httpRequest({
+  method: 'POST',
+  url: 'https://login.microsoftonline.com/' + TENANT + '/oauth2/v2.0/token',
+  form: {
+    client_id: CLIENT, client_secret: SECRET,
+    grant_type: 'client_credentials', scope: 'https://graph.microsoft.com/.default',
+  },
+  json: true, timeout: 30000,
+});
+if (!tok || !tok.access_token) throw new Error('Graph token refused');
+
+const replyTo = $env.REPORT_REPLY_TO || FROM;
+const res = await this.helpers.httpRequest({
+  method: 'POST',
+  url: 'https://graph.microsoft.com/v1.0/users/' + encodeURIComponent(FROM) + '/sendMail',
+  headers: { Authorization: 'Bearer ' + tok.access_token, 'Content-Type': 'application/json' },
+  body: {
+    message: {
+      subject: R.subject,
+      body: { contentType: 'HTML', content: R.html },
+      toRecipients: rcpts,
+      replyTo: [{ emailAddress: { address: replyTo } }],
+    },
+    saveToSentItems: true,
+  },
+  json: true, timeout: 120000, returnFullResponse: true,
+});
+
+// sendMail answers 202 with an empty body. Anything else did not send, and must
+// throw rather than let 'Mark sent' record a delivery that did not happen.
+const code = res && res.statusCode;
+if (code !== 202 && code !== 200) throw new Error('Graph sendMail returned ' + code);
+
+return [{ json: {
+  sent_via: 'graph', from: FROM,
+  recipients: rcpts.length,
+  size_kb: Math.round(String(R.html || '').length / 1024),
+} }];
+`.trim(),
         },
       },
       {
@@ -1527,8 +1586,8 @@ VALUES ('daily_report', 'up', $1)`,
       },
       'Render HTML': { main: [[{ node: 'Save report', type: 'main', index: 0 }]] },
       'Save report': { main: [[{ node: 'Record items sent', type: 'main', index: 0 }]] },
-      'Record items sent': { main: [[{ node: 'Send via SMTP', type: 'main', index: 0 }]] },
-      'Send via SMTP': { main: [[{ node: 'Mark sent', type: 'main', index: 0 }]] },
+      'Record items sent': { main: [[{ node: 'Send via Graph', type: 'main', index: 0 }]] },
+      'Send via Graph': { main: [[{ node: 'Mark sent', type: 'main', index: 0 }]] },
       'Mark sent': { main: [[{ node: 'Record result', type: 'main', index: 0 }]] },
     },
   };

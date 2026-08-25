@@ -103,6 +103,28 @@ Use `graph/fix-mail-dns.js`.
 
 ### Mail
 
+**The daily report sends through Microsoft Graph, not SMTP** (changed 25 Aug 2026).
+
+```
+path          Graph /users/{MS_SENDER_UPN}/sendMail, app-only client credentials
+sender        Admin.bext-automation@bextconsultancy.com.au   (Microsoft-signed)
+node          BEXT — Daily Report › "Send via Graph" (Code node)
+needs         MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET, MS_SENDER_UPN in n8n's env
+```
+
+Why it moved: the SMTP path below authenticates as `bext.dev-environment.site`, which
+**fails DKIM**. A DKIM failure is not a bounce — Gmail accepts the message and silently
+discards it, so the workflow recorded a clean send for mail the recipient never got. That
+is exactly what happened: the client reported nothing in inbox or spam while every run
+showed as successful. Graph sends from the tenant mailbox, which Microsoft signs, so it
+authenticates for the Gmail recipient and the bextconsultancy.com.au one alike.
+
+`Send via Graph` throws on any status other than 202/200, so a failed send can no longer
+be recorded as `sent` by the node after it.
+
+The SMTP path below is **no longer used by the report**. It remains documented because
+`Alert by email` in BEXT — Self-Heal still uses it, and because the DKIM fault is unfixed.
+
 ```
 SMTP          mail.dev-environment.site:465 (implicit TLS)
 sender        reports@bext.dev-environment.site
