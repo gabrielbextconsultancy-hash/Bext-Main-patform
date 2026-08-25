@@ -118,8 +118,7 @@ sources:
     url: "https://www.spglobal.com/energy/en/news-research/latest-news"
     method: sitemap
     active: true
-    config:
-      feed_url: "https://www.spglobal.com/energy/en.sitemap.news-research-latest-news-sitemap.xml"
+    feed_url: "https://www.spglobal.com/energy/en.sitemap.news-research-latest-news-sitemap.xml"
     note: >-
       Read from the sitemap, not the listing. The listing renders its articles
       client-side, so Scrapling returns 200 with no links, and Chromium is
@@ -133,8 +132,7 @@ sources:
     url: "https://www.spglobal.com/energy/en/news-research/latest-news/crude-oil"
     method: sitemap
     active: true
-    config:
-      feed_url: "https://www.spglobal.com/energy/en.sitemap.news-research-latest-news-crude-oil-sitemap.xml"
+    feed_url: "https://www.spglobal.com/energy/en.sitemap.news-research-latest-news-crude-oil-sitemap.xml"
     note: >-
       Same client-rendered listing and same edge block as the parent section;
       read from its own sitemap. See spglobal-latest-news.
@@ -144,8 +142,7 @@ sources:
     url: "https://www.spglobal.com/energy/en/news-research/latest-news/natural-gas"
     method: sitemap
     active: true
-    config:
-      feed_url: "https://www.spglobal.com/energy/en.sitemap.news-research-latest-news-natural-gas-sitemap.xml"
+    feed_url: "https://www.spglobal.com/energy/en.sitemap.news-research-latest-news-natural-gas-sitemap.xml"
     note: >-
       Same client-rendered listing and same edge block as the parent section;
       read from its own sitemap. See spglobal-latest-news.
