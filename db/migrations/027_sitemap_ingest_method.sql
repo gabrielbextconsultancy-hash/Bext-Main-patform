@@ -1,0 +1,14 @@
+-- 027_sitemap_ingest_method.sql
+--
+-- Adds 'sitemap' to ingest_method.
+--
+-- Some publishers render their article listing entirely client-side and refuse
+-- a headless browser at the edge, so neither the direct fetcher nor Chromium can
+-- read the list: Scrapling returns 200 with no article links, Chromium a 403.
+-- S&P Global is both, which is why four crude-oil stories the client raised on
+-- 25 Aug 2026 had never been fetched at all.
+--
+-- Their sitemaps are plain XML, are served without the block, and carry a real
+-- <lastmod>. Reading the sitemap is the only route that works, and it yields a
+-- better publication date than the listing would have.
+ALTER TYPE ingest_method ADD VALUE IF NOT EXISTS 'sitemap';

@@ -6,15 +6,15 @@ import {
   SESSION_COOKIE_OPTIONS,
 } from '@/lib/auth';
 
-// /proposal is a client-facing deliverable — shareable by link, so it stays
-// outside the admin session (it carries its own noindex).
+// /proposal and /architecture are client-facing deliverables — shareable by link,
+// so they stay outside the admin session (they carry their own noindex).
 //
 // /api/fetched is the target of the Teams card's "View more" button, opened in
 // the Teams in-app browser which holds no dashboard session. It carries its own
 // token in the query string and enforces it in the route handler, so the session
 // guard must let it reach that handler rather than bouncing it to /login — the
 // bounce is exactly what made the SharePoint link fail.
-const PUBLIC = ['/login', '/api/login', '/proposal', '/api/fetched'];
+const PUBLIC = ['/login', '/api/login', '/proposal', '/architecture', '/graph.html', '/tree.html', '/api/fetched'];
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;

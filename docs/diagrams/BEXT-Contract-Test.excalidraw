@@ -1,0 +1,507 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "id": "wf-BEXT-Contract-Test-title",
+      "type": "text",
+      "x": 40,
+      "y": 30,
+      "width": 600,
+      "height": 32,
+      "strokeColor": "#38bdf8",
+      "backgroundColor": "transparent",
+      "text": "BEXT — Contract Test",
+      "fontSize": 22,
+      "fontFamily": 1
+    },
+    {
+      "id": "wf-BEXT-Contract-Test-trigger",
+      "type": "text",
+      "x": 40,
+      "y": 68,
+      "width": 900,
+      "height": 20,
+      "strokeColor": "#94a3b8",
+      "backgroundColor": "transparent",
+      "text": "Trigger: Schedule (0 2 * * *) | Domain: OPS | Tables Read: [] | Tables Written: [integration_health]",
+      "fontSize": 13,
+      "fontFamily": 1
+    },
+    {
+      "id": "node-BEXT-Contract-Test-0-box",
+      "type": "rectangle",
+      "x": 40,
+      "y": 120,
+      "width": 200,
+      "height": 75,
+      "angle": 0,
+      "strokeColor": "#f43f5e",
+      "backgroundColor": "#0f172a",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Contract-Test-0"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 1001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "node-BEXT-Contract-Test-0-text"
+        }
+      ]
+    },
+    {
+      "id": "node-BEXT-Contract-Test-0-text",
+      "type": "text",
+      "x": 48,
+      "y": 130,
+      "width": 184,
+      "height": 24,
+      "angle": 0,
+      "strokeColor": "#f8fafc",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Contract-Test-0"
+      ],
+      "roundness": null,
+      "seed": 1002,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "Daily 02:00 AEST",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "node-BEXT-Contract-Test-0-box"
+    },
+    {
+      "id": "node-BEXT-Contract-Test-0-subtext",
+      "type": "text",
+      "x": 48,
+      "y": 169,
+      "width": 184,
+      "height": 18,
+      "angle": 0,
+      "strokeColor": "#f43f5e",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Contract-Test-0"
+      ],
+      "roundness": null,
+      "seed": 1003,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "🤖 AI Model",
+      "fontSize": 11,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle"
+    },
+    {
+      "id": "arrow-BEXT-Contract-Test-0-arrow",
+      "type": "arrow",
+      "x": 240,
+      "y": 157.5,
+      "width": 50,
+      "height": 0,
+      "angle": 0,
+      "strokeColor": "#64748b",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 2001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          0
+        ]
+      ],
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "node-BEXT-Contract-Test-1-box",
+      "type": "rectangle",
+      "x": 290,
+      "y": 120,
+      "width": 200,
+      "height": 75,
+      "angle": 0,
+      "strokeColor": "#94a3b8",
+      "backgroundColor": "#0f172a",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Contract-Test-1"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 1001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "node-BEXT-Contract-Test-1-text"
+        }
+      ]
+    },
+    {
+      "id": "node-BEXT-Contract-Test-1-text",
+      "type": "text",
+      "x": 298,
+      "y": 130,
+      "width": 184,
+      "height": 24,
+      "angle": 0,
+      "strokeColor": "#f8fafc",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Contract-Test-1"
+      ],
+      "roundness": null,
+      "seed": 1002,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "Assert contracts",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "node-BEXT-Contract-Test-1-box"
+    },
+    {
+      "id": "node-BEXT-Contract-Test-1-subtext",
+      "type": "text",
+      "x": 298,
+      "y": 169,
+      "width": 184,
+      "height": 18,
+      "angle": 0,
+      "strokeColor": "#cbd5e1",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Contract-Test-1"
+      ],
+      "roundness": null,
+      "seed": 1003,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "⚙️ System Node",
+      "fontSize": 11,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle"
+    },
+    {
+      "id": "arrow-BEXT-Contract-Test-1-arrow",
+      "type": "arrow",
+      "x": 490,
+      "y": 157.5,
+      "width": 50,
+      "height": 0,
+      "angle": 0,
+      "strokeColor": "#64748b",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 2001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          0
+        ]
+      ],
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "node-BEXT-Contract-Test-2-box",
+      "type": "rectangle",
+      "x": 540,
+      "y": 120,
+      "width": 200,
+      "height": 75,
+      "angle": 0,
+      "strokeColor": "#94a3b8",
+      "backgroundColor": "#0f172a",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Contract-Test-2"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 1001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "node-BEXT-Contract-Test-2-text"
+        }
+      ]
+    },
+    {
+      "id": "node-BEXT-Contract-Test-2-text",
+      "type": "text",
+      "x": 548,
+      "y": 130,
+      "width": 184,
+      "height": 24,
+      "angle": 0,
+      "strokeColor": "#f8fafc",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Contract-Test-2"
+      ],
+      "roundness": null,
+      "seed": 1002,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "Record result",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "node-BEXT-Contract-Test-2-box"
+    },
+    {
+      "id": "node-BEXT-Contract-Test-2-subtext",
+      "type": "text",
+      "x": 548,
+      "y": 169,
+      "width": 184,
+      "height": 18,
+      "angle": 0,
+      "strokeColor": "#cbd5e1",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Contract-Test-2"
+      ],
+      "roundness": null,
+      "seed": 1003,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "⚙️ System Node",
+      "fontSize": 11,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle"
+    },
+    {
+      "id": "arrow-BEXT-Contract-Test-2-arrow",
+      "type": "arrow",
+      "x": 740,
+      "y": 157.5,
+      "width": 50,
+      "height": 0,
+      "angle": 0,
+      "strokeColor": "#64748b",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 2001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          0
+        ]
+      ],
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "node-BEXT-Contract-Test-3-box",
+      "type": "rectangle",
+      "x": 790,
+      "y": 120,
+      "width": 200,
+      "height": 75,
+      "angle": 0,
+      "strokeColor": "#94a3b8",
+      "backgroundColor": "#0f172a",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Contract-Test-3"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 1001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "node-BEXT-Contract-Test-3-text"
+        }
+      ]
+    },
+    {
+      "id": "node-BEXT-Contract-Test-3-text",
+      "type": "text",
+      "x": 798,
+      "y": 130,
+      "width": 184,
+      "height": 24,
+      "angle": 0,
+      "strokeColor": "#f8fafc",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Contract-Test-3"
+      ],
+      "roundness": null,
+      "seed": 1002,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "Heartbeat",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "node-BEXT-Contract-Test-3-box"
+    },
+    {
+      "id": "node-BEXT-Contract-Test-3-subtext",
+      "type": "text",
+      "x": 798,
+      "y": 169,
+      "width": 184,
+      "height": 18,
+      "angle": 0,
+      "strokeColor": "#cbd5e1",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Contract-Test-3"
+      ],
+      "roundness": null,
+      "seed": 1003,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "⚙️ System Node",
+      "fontSize": 11,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle"
+    }
+  ],
+  "appState": {
+    "viewBackgroundColor": "#020617",
+    "gridSize": 20
+  },
+  "files": {}
+}

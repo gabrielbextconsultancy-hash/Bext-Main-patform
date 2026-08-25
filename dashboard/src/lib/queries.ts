@@ -190,6 +190,26 @@ export const getHealth = () =>
      FROM integration_health ORDER BY service, checked_at DESC`
   );
 
+export interface IncidentSummaryRow {
+  id: number;
+  detected_at: string;
+  workflow: string;
+  rule_id: string | null;
+  action: string;
+  outcome: string;
+  detail: string | null;
+  resolved_at: string | null;
+}
+
+/** Open or recent incidents for architecture & ops health overlays. */
+export const getRecentIncidents = () =>
+  tryQuery<IncidentSummaryRow>(
+    `SELECT id, detected_at::text, workflow, rule_id, action::text, outcome::text, detail, resolved_at::text
+     FROM incidents
+     ORDER BY detected_at DESC
+     LIMIT 30`
+  );
+
 export function pct(p: { total: number; done: number }) {
   return p.total === 0 ? 0 : Math.round((p.done / p.total) * 100);
 }

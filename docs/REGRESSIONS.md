@@ -545,3 +545,35 @@ produced no transcript at all:
 - a meeting **organised outside `MEETING_HOSTS`** — the transcript resolves under
   the organiser's mailbox, and a client organiser's tenant is not ours to read.
   If RACV ever chairs the weekly, BEXT must host it or we get nothing.
+
+---
+
+## R032 — the VPS builds the source we shipped, not a stale copy
+
+**Cost:** the mind-map slide in `055ea12` compiled successfully, deployed, and never
+appeared on the live dashboard. The build was green the whole time.
+
+**Cause:** the repo nests services under `infra/` with `build: ../dashboard`; the VPS
+layout is flat (`/docker/bext/dashboard`). Copying compose without rewriting `build: ../`
+caused Docker on the VPS to build from `/docker/dashboard` (a stale leftover directory)
+instead of `/docker/bext/dashboard`.
+
+**Fix:** `.github/workflows/deploy.yml` and `infra/deploy-self-healing.sh` rewrite
+`build: ../` to `build: ./`.
+
+**Guard:** R032, R032b.
+
+---
+
+## R033 — architecture graph in sync with exported workflows
+
+**Cost:** manual diagrams and documentation drift from what is actually deployed in n8n.
+
+**Cause:** table reads and writes, node sequences, and execution paths evolve over time
+across 14 workflows. Maintaining hand-drawn maps leads to inaccurate architectural handover.
+
+**Fix:** `n8n/build-architecture.js` parses workflow JSON directly and emits
+`dashboard/src/lib/architecture.generated.ts`.
+
+**Guard:** R033 — asserts the generated TypeScript file strictly matches the exported workflows.
+

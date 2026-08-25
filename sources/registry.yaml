@@ -112,6 +112,43 @@ sources:
       a TLS fingerprint, not a subscription wall; the Scrapling fetcher returns
       200. Verified 22 Aug 2026. The old research-insights URL now redirects, so
       the canonical newsroom path is used here.
+  - slug: spglobal-latest-news
+    name: "S&P Global — Latest News"
+    category: International Industry Updates
+    url: "https://www.spglobal.com/energy/en/news-research/latest-news"
+    method: sitemap
+    active: true
+    config:
+      feed_url: "https://www.spglobal.com/energy/en.sitemap.news-research-latest-news-sitemap.xml"
+    note: >-
+      Read from the sitemap, not the listing. The listing renders its articles
+      client-side, so Scrapling returns 200 with no links, and Chromium is
+      refused outright with a 403 from the Akamai edge — neither retrieval tier
+      can work on it. The sitemap is plain XML, is served without the block, and
+      carries a real publication date. Added 25 Aug 2026 after the client found
+      four crude-oil stories the pipeline had never seen.
+  - slug: spglobal-crude-oil
+    name: "S&P Global — Crude Oil"
+    category: International Industry Updates
+    url: "https://www.spglobal.com/energy/en/news-research/latest-news/crude-oil"
+    method: sitemap
+    active: true
+    config:
+      feed_url: "https://www.spglobal.com/energy/en.sitemap.news-research-latest-news-crude-oil-sitemap.xml"
+    note: >-
+      Same client-rendered listing and same edge block as the parent section;
+      read from its own sitemap. See spglobal-latest-news.
+  - slug: spglobal-natural-gas
+    name: "S&P Global — Natural Gas"
+    category: International Industry Updates
+    url: "https://www.spglobal.com/energy/en/news-research/latest-news/natural-gas"
+    method: sitemap
+    active: true
+    config:
+      feed_url: "https://www.spglobal.com/energy/en.sitemap.news-research-latest-news-natural-gas-sitemap.xml"
+    note: >-
+      Same client-rendered listing and same edge block as the parent section;
+      read from its own sitemap. See spglobal-latest-news.
   - slug: iea-energy-efficiency
     name: IEA — Energy Efficiency
     category: International Industry Updates

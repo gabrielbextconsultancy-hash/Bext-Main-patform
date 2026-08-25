@@ -3,5 +3,6 @@
     "allow": [
       "Read(C:/Users/Gab/.claude/plans/**)"
     ]
-  }
+  },
+  "$version": 4
 }

@@ -660,6 +660,25 @@ check('R028', 'every scheduled workflow has an unconditional heartbeat', () => {
                          : { ok: true, detail: 'every schedule has a deadman that always fires' };
 });
 
+// ── R033 ─ architecture graph in sync with workflows ─────────────────────────
+// dashboard/src/lib/architecture.generated.ts is derived from the exported
+// workflows by n8n/build-architecture.js. Assert that regenerating in memory
+// matches the committed file, preventing the architecture map from drifting.
+check('R033', 'architecture graph is in sync with exported workflows', () => {
+  const genPath = path.join(ROOT, 'dashboard/src/lib/architecture.generated.ts');
+  if (!fs.existsSync(genPath)) return { ok: false, detail: 'architecture.generated.ts missing' };
+  const current = read('dashboard/src/lib/architecture.generated.ts');
+  const { buildArchitectureGraph, generateTypeScript } = require('./build-architecture.js');
+  const freshGraph = buildArchitectureGraph();
+  // Match without timestamp line to test semantic equality
+  const stripTime = s => s.replace(/"generatedAt":\s*"[^"]*"/, '"generatedAt": "CHECK"');
+  const freshTs = generateTypeScript(freshGraph);
+  if (stripTime(current) !== stripTime(freshTs)) {
+    return { ok: false, detail: 'architecture.generated.ts is out of sync — run `node n8n/build-architecture.js`' };
+  }
+  return { ok: true, detail: `${freshGraph.workflowCount} workflows, ${freshGraph.edgeCount} edges in sync` };
+});
+
 check('R012', 'required env is set locally', () => {
   const need = ['MS_TENANT_ID', 'MS_CLIENT_ID', 'MS_CLIENT_SECRET', 'MS_SENDER_UPN',
                 'MEETING_HOSTS', 'TEAMS_MEETING_WEBHOOK_URL', 'N8N_WEBHOOK_CREDENTIAL_ID'];

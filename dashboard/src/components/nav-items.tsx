@@ -36,6 +36,13 @@ export const LEAD: NavEntry[] = [
 
 export const NAV: NavEntry[] = [
   {
+    href: '/architecture',
+    label: 'Architecture Map',
+    hint: 'Workflow estate & data flow',
+    live: true,
+    icon: icon(<><rect x="3" y="3" width="6" height="6" rx="1" /><rect x="15" y="3" width="6" height="6" rx="1" /><rect x="9" y="15" width="6" height="6" rx="1" /><path d="M6 9v3a3 3 0 0 0 3 3h3m6-6v3a3 3 0 0 1-3 3h-3" /></>),
+  },
+  {
     href: '/health',
     label: 'Connection Health',
     hint: 'Tools & configuration',

@@ -57,6 +57,49 @@ function parseDate(raw) {
   return Number.isFinite(t) ? new Date(t).toISOString() : null;
 }
 
+/**
+ * The publication date carried in the URL itself.
+ *
+ * Seven sources in ten publish no machine-readable date, so the pipeline fell
+ * back to fetch time. Ingest runs hourly, so a story published late in the
+ * evening was first seen after midnight and got stamped the following day —
+ * which put it in the wrong morning's report and made it look as though it had
+ * never been fetched at all. That was the single largest cause of the "you are
+ * missing yesterday's articles" complaints.
+ *
+ * Most publishers put the date in the path even when they omit it from the
+ * markup. Reading it there is exact, free, and needs no extra request.
+ *
+ *   /news/2026-08-24/slug        ABC
+ *   /2026/08/24/slug             WordPress and most trade press
+ *   /082426-slug                 S&P Global (MMDDYY)
+ *
+ * Returns null when the path carries no date, and never guesses: a wrong date is
+ * worse than no date, because no date still falls back to fetch time.
+ */
+function dateFromUrl(url) {
+  let path;
+  try { path = new URL(url).pathname; } catch { return null; }
+
+  const iso = path.match(/\/(20\d{2})[-\/](0[1-9]|1[0-2])[-\/](0[1-9]|[12]\d|3[01])(?=[\/-]|$)/);
+  if (iso) return isoDate(+iso[1], +iso[2], +iso[3]);
+
+  // MMDDYY immediately before a slug, as S&P Global writes it. Anchored to a
+  // path segment so an arbitrary six-digit article id cannot masquerade as one.
+  const mdy = path.match(/\/(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])(\d{2})-[a-z]/i);
+  if (mdy) return isoDate(2000 + +mdy[3], +mdy[1], +mdy[2]);
+
+  return null;
+}
+
+function isoDate(y, m, d) {
+  const dt = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  // Reject a date the calendar rolled over (31 February) and anything in the
+  // future, which means the pattern matched something that was not a date.
+  if (dt.getUTCMonth() !== m - 1 || dt.getTime() > Date.now() + 864e5) return null;
+  return dt.toISOString();
+}
+
 function parseFeed(xml, baseUrl) {
   const blocks = [...xml.matchAll(/<(item|entry)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/gi)];
   const out = [];
@@ -176,6 +219,52 @@ function titleFromSlug(url) {
   }
 }
 
+/**
+ * A sitemap, read as a news feed.
+ *
+ * Some publishers render their article lists entirely client-side, so the
+ * listing page arrives as an empty shell and the headless browser is refused
+ * outright. S&P Global is both: Scrapling gets 200 with no article links,
+ * Chromium gets a 403 from the edge. Neither tier can work, and four articles
+ * the client asked about on 25 Aug 2026 were missed that way.
+ *
+ * Their sitemaps are plain XML, served without the block, and carry <lastmod>
+ * — which is a real publication date, better than anything the listing offered.
+ *
+ * Only recent entries are kept. A sitemap lists the whole archive (19,281 URLs
+ * for one S&P section), and importing that wholesale is precisely the bulk
+ * unlock that put 2022 articles into a 2026 report once already.
+ */
+function parseSitemap(xml, baseUrl, { maxAgeDays = 3, limit = 60 } = {}) {
+  const cutoff = Date.now() - maxAgeDays * 864e5;
+  const out = [];
+
+  for (const m of xml.matchAll(/<url>([\s\S]*?)<\/url>/gi)) {
+    const block = m[1];
+    const loc = (block.match(/<loc>([^<]+)<\/loc>/i) || [])[1];
+    if (!loc) continue;
+    const lastmod = (block.match(/<lastmod>([^<]+)<\/lastmod>/i) || [])[1];
+
+    // Prefer the date in the URL — it is the publication date. lastmod moves
+    // when a page is merely re-rendered, so it is the fallback, not the source.
+    const published = dateFromUrl(loc) || parseDate(lastmod);
+    if (!published || Date.parse(published) < cutoff) continue;
+
+    // The slug leads with the date on these sites, which is not part of the
+    // headline: "082426 india ceo series bp sees..." reads as noise.
+    let title = titleFromSlug(loc);
+    if (title) title = title.replace(/^\d{6}\s+/, '').replace(/^\d{4}[- ]\d{2}[- ]\d{2}\s+/, '');
+    if (title) title = title.charAt(0).toUpperCase() + title.slice(1);
+    if (!title || title.split(/\s+/).length < 3) continue;
+
+    out.push({ url: absolute(loc, baseUrl), title, author: null, published_at: published, summary_raw: null });
+  }
+
+  return out
+    .sort((a, b) => Date.parse(b.published_at) - Date.parse(a.published_at))
+    .slice(0, limit);
+}
+
 function parseIndex(html, pageUrl, { minScore = 6, limit = 40 } = {}) {
   const origin = new URL(pageUrl).origin;
   const seen = new Map();
@@ -198,7 +287,13 @@ function parseIndex(html, pageUrl, { minScore = 6, limit = 40 } = {}) {
     // Same URL can appear as image link and headline link; keep the better title.
     const prev = seen.get(url);
     if (!prev || title.length > prev.title.length) {
-      seen.set(url, { url, title, author: null, published_at: null, summary_raw: null, _score: score });
+      // Date from the path where the publisher put one there. Without this the
+      // article inherits fetch time and can drift into the next day's report.
+      seen.set(url, {
+        url, title, author: null,
+        published_at: dateFromUrl(url),
+        summary_raw: null, _score: score,
+      });
     }
   }
 
@@ -297,4 +392,4 @@ function normalise(raw, source) {
     }));
 }
 
-module.exports = { parseFeed, parseIndex, normalise, contentHash, passesFilter, strip, absolute, cleanSyndicatedTitle };
+module.exports = { parseFeed, parseIndex, normalise, contentHash, passesFilter, strip, absolute, cleanSyndicatedTitle, dateFromUrl, parseSitemap };

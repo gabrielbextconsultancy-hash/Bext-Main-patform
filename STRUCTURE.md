@@ -9,11 +9,13 @@ The repo is the source of truth — never the n8n UI.
 | Path | What it is |
 |---|---|
 | `n8n/workflows/*.json` | Exported n8n workflows (source of truth). Built/tagged by `n8n/build-workflows.js` |
+| `n8n/build-architecture.js` | Generates `dashboard/src/lib/architecture.generated.ts` and `docs/diagrams/*.excalidraw` from exported workflows |
 | `db/migrations/` | Numbered, append-only SQL. Never edit an applied migration |
 | `sources/registry.yaml` | Single source of truth for the 68 monitored sources; seeds the `sources` table |
-| `dashboard/` | Next.js 16 App Router + Tailwind v4, direct `pg` from server components. Deployed to Hostinger VPS via `.github/workflows/deploy.yml` |
+| `dashboard/` | Next.js 16 App Router + Tailwind v4, direct `pg` from server components (`/architecture` live workflow map). Deployed to Hostinger VPS via `.github/workflows/deploy.yml` |
 | `graph/` | Microsoft Graph setup: `app-registration.md` (instructions + blocker log), `verify.js` (4-step health check) |
 | `docs/INFRASTRUCTURE.md` | **Verified map of hosting, cPanel/DNS, mail and M365.** Read before touching any of them |
+| `docs/diagrams/` | Excalidraw architectural estate and workflow maps generated from runnable JSON |
 | `docs/` | Deliverable drafts, runbook (`05-runbook.md`), `SETUP-CHECKLIST.md` (manual human steps) |
 | `deliverables/` | Client-facing PDFs |
 | `api/`, `fetcher/`, `infra/` | Support code and infra config |

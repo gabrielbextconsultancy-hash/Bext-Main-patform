@@ -1,0 +1,759 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://excalidraw.com",
+  "elements": [
+    {
+      "id": "wf-BEXT-Self-Heal-title",
+      "type": "text",
+      "x": 40,
+      "y": 30,
+      "width": 600,
+      "height": 32,
+      "strokeColor": "#38bdf8",
+      "backgroundColor": "transparent",
+      "text": "BEXT — Self Heal",
+      "fontSize": 22,
+      "fontFamily": 1
+    },
+    {
+      "id": "wf-BEXT-Self-Heal-trigger",
+      "type": "text",
+      "x": 40,
+      "y": 68,
+      "width": 900,
+      "height": 20,
+      "strokeColor": "#94a3b8",
+      "backgroundColor": "transparent",
+      "text": "Trigger: Interval (15m) | Domain: OPS | Tables Read: [incidents] | Tables Written: [incidents]",
+      "fontSize": 13,
+      "fontFamily": 1
+    },
+    {
+      "id": "node-BEXT-Self-Heal-0-box",
+      "type": "rectangle",
+      "x": 40,
+      "y": 120,
+      "width": 200,
+      "height": 75,
+      "angle": 0,
+      "strokeColor": "#94a3b8",
+      "backgroundColor": "#0f172a",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Self-Heal-0"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 1001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "node-BEXT-Self-Heal-0-text"
+        }
+      ]
+    },
+    {
+      "id": "node-BEXT-Self-Heal-0-text",
+      "type": "text",
+      "x": 48,
+      "y": 130,
+      "width": 184,
+      "height": 24,
+      "angle": 0,
+      "strokeColor": "#f8fafc",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Self-Heal-0"
+      ],
+      "roundness": null,
+      "seed": 1002,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "Every 15 minutes",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "node-BEXT-Self-Heal-0-box"
+    },
+    {
+      "id": "node-BEXT-Self-Heal-0-subtext",
+      "type": "text",
+      "x": 48,
+      "y": 169,
+      "width": 184,
+      "height": 18,
+      "angle": 0,
+      "strokeColor": "#cbd5e1",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Self-Heal-0"
+      ],
+      "roundness": null,
+      "seed": 1003,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "⚙️ System Node",
+      "fontSize": 11,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle"
+    },
+    {
+      "id": "arrow-BEXT-Self-Heal-0-arrow",
+      "type": "arrow",
+      "x": 240,
+      "y": 157.5,
+      "width": 50,
+      "height": 0,
+      "angle": 0,
+      "strokeColor": "#64748b",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 2001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          0
+        ]
+      ],
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "node-BEXT-Self-Heal-1-box",
+      "type": "rectangle",
+      "x": 290,
+      "y": 120,
+      "width": 200,
+      "height": 75,
+      "angle": 0,
+      "strokeColor": "#94a3b8",
+      "backgroundColor": "#0f172a",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Self-Heal-1"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 1001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "node-BEXT-Self-Heal-1-text"
+        }
+      ]
+    },
+    {
+      "id": "node-BEXT-Self-Heal-1-text",
+      "type": "text",
+      "x": 298,
+      "y": 130,
+      "width": 184,
+      "height": 24,
+      "angle": 0,
+      "strokeColor": "#f8fafc",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Self-Heal-1"
+      ],
+      "roundness": null,
+      "seed": 1002,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "Load unvalidated",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "node-BEXT-Self-Heal-1-box"
+    },
+    {
+      "id": "node-BEXT-Self-Heal-1-subtext",
+      "type": "text",
+      "x": 298,
+      "y": 169,
+      "width": 184,
+      "height": 18,
+      "angle": 0,
+      "strokeColor": "#cbd5e1",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Self-Heal-1"
+      ],
+      "roundness": null,
+      "seed": 1003,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "⚙️ System Node",
+      "fontSize": 11,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle"
+    },
+    {
+      "id": "arrow-BEXT-Self-Heal-1-arrow",
+      "type": "arrow",
+      "x": 490,
+      "y": 157.5,
+      "width": 50,
+      "height": 0,
+      "angle": 0,
+      "strokeColor": "#64748b",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 2001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          0
+        ]
+      ],
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "node-BEXT-Self-Heal-2-box",
+      "type": "rectangle",
+      "x": 540,
+      "y": 120,
+      "width": 200,
+      "height": 75,
+      "angle": 0,
+      "strokeColor": "#94a3b8",
+      "backgroundColor": "#0f172a",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Self-Heal-2"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 1001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "node-BEXT-Self-Heal-2-text"
+        }
+      ]
+    },
+    {
+      "id": "node-BEXT-Self-Heal-2-text",
+      "type": "text",
+      "x": 548,
+      "y": 130,
+      "width": 184,
+      "height": 24,
+      "angle": 0,
+      "strokeColor": "#f8fafc",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Self-Heal-2"
+      ],
+      "roundness": null,
+      "seed": 1002,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "Classify, heal and validate",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "node-BEXT-Self-Heal-2-box"
+    },
+    {
+      "id": "node-BEXT-Self-Heal-2-subtext",
+      "type": "text",
+      "x": 548,
+      "y": 169,
+      "width": 184,
+      "height": 18,
+      "angle": 0,
+      "strokeColor": "#cbd5e1",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Self-Heal-2"
+      ],
+      "roundness": null,
+      "seed": 1003,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "⚙️ System Node",
+      "fontSize": 11,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle"
+    },
+    {
+      "id": "arrow-BEXT-Self-Heal-2-arrow",
+      "type": "arrow",
+      "x": 740,
+      "y": 157.5,
+      "width": 50,
+      "height": 0,
+      "angle": 0,
+      "strokeColor": "#64748b",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 2001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          0
+        ]
+      ],
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "node-BEXT-Self-Heal-3-box",
+      "type": "rectangle",
+      "x": 790,
+      "y": 120,
+      "width": 200,
+      "height": 75,
+      "angle": 0,
+      "strokeColor": "#94a3b8",
+      "backgroundColor": "#0f172a",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Self-Heal-3"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 1001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "node-BEXT-Self-Heal-3-text"
+        }
+      ]
+    },
+    {
+      "id": "node-BEXT-Self-Heal-3-text",
+      "type": "text",
+      "x": 798,
+      "y": 130,
+      "width": 184,
+      "height": 24,
+      "angle": 0,
+      "strokeColor": "#f8fafc",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Self-Heal-3"
+      ],
+      "roundness": null,
+      "seed": 1002,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "Record incidents",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "node-BEXT-Self-Heal-3-box"
+    },
+    {
+      "id": "node-BEXT-Self-Heal-3-subtext",
+      "type": "text",
+      "x": 798,
+      "y": 169,
+      "width": 184,
+      "height": 18,
+      "angle": 0,
+      "strokeColor": "#cbd5e1",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Self-Heal-3"
+      ],
+      "roundness": null,
+      "seed": 1003,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "⚙️ System Node",
+      "fontSize": 11,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle"
+    },
+    {
+      "id": "arrow-BEXT-Self-Heal-3-arrow",
+      "type": "arrow",
+      "x": 990,
+      "y": 157.5,
+      "width": 50,
+      "height": 0,
+      "angle": 0,
+      "strokeColor": "#64748b",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 2001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          0
+        ]
+      ],
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "node-BEXT-Self-Heal-4-box",
+      "type": "rectangle",
+      "x": 1040,
+      "y": 120,
+      "width": 200,
+      "height": 75,
+      "angle": 0,
+      "strokeColor": "#94a3b8",
+      "backgroundColor": "#0f172a",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Self-Heal-4"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 1001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "node-BEXT-Self-Heal-4-text"
+        }
+      ]
+    },
+    {
+      "id": "node-BEXT-Self-Heal-4-text",
+      "type": "text",
+      "x": 1048,
+      "y": 130,
+      "width": 184,
+      "height": 24,
+      "angle": 0,
+      "strokeColor": "#f8fafc",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Self-Heal-4"
+      ],
+      "roundness": null,
+      "seed": 1002,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "Escalate to Teams",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "node-BEXT-Self-Heal-4-box"
+    },
+    {
+      "id": "node-BEXT-Self-Heal-4-subtext",
+      "type": "text",
+      "x": 1048,
+      "y": 169,
+      "width": 184,
+      "height": 18,
+      "angle": 0,
+      "strokeColor": "#cbd5e1",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Self-Heal-4"
+      ],
+      "roundness": null,
+      "seed": 1003,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "⚙️ System Node",
+      "fontSize": 11,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle"
+    },
+    {
+      "id": "arrow-BEXT-Self-Heal-4-arrow",
+      "type": "arrow",
+      "x": 1140,
+      "y": 195,
+      "width": 1000,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#64748b",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 2001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          -1000,
+          50
+        ]
+      ],
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "node-BEXT-Self-Heal-5-box",
+      "type": "rectangle",
+      "x": 40,
+      "y": 245,
+      "width": 200,
+      "height": 75,
+      "angle": 0,
+      "strokeColor": "#94a3b8",
+      "backgroundColor": "#0f172a",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Self-Heal-5"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 1001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "node-BEXT-Self-Heal-5-text"
+        }
+      ]
+    },
+    {
+      "id": "node-BEXT-Self-Heal-5-text",
+      "type": "text",
+      "x": 48,
+      "y": 255,
+      "width": 184,
+      "height": 24,
+      "angle": 0,
+      "strokeColor": "#f8fafc",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Self-Heal-5"
+      ],
+      "roundness": null,
+      "seed": 1002,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "Heartbeat",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "node-BEXT-Self-Heal-5-box"
+    },
+    {
+      "id": "node-BEXT-Self-Heal-5-subtext",
+      "type": "text",
+      "x": 48,
+      "y": 294,
+      "width": 184,
+      "height": 18,
+      "angle": 0,
+      "strokeColor": "#cbd5e1",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-Self-Heal-5"
+      ],
+      "roundness": null,
+      "seed": 1003,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "⚙️ System Node",
+      "fontSize": 11,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle"
+    }
+  ],
+  "appState": {
+    "viewBackgroundColor": "#020617",
+    "gridSize": 20
+  },
+  "files": {}
+}

@@ -159,7 +159,9 @@ const SESSION_FETCH = 'http://fetcher:8080/session-fetch';
 // paying for a browser render, and later whether to ask Hermes.
 const parseIndex_isEmpty = (html, url, method) => {
   try {
-    const got = method === 'rss' ? parseFeed(html, url) : parseIndex(html, url);
+    const got = method === 'sitemap' ? parseSitemap(html, url)
+      : method === 'rss' ? parseFeed(html, url)
+      : parseIndex(html, url);
     return !Array.isArray(got) || got.length === 0;
   } catch (e) {
     return true;
@@ -180,7 +182,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function fetchOne(s) {
   const config = typeof s.config === 'string' ? JSON.parse(s.config) : (s.config || {});
-  const target = s.method === 'rss' ? (config.feed_url || s.url) : s.url;
+  // A sitemap source points at the XML in feed_url; s.url stays the human page
+  // so the dashboard and the sheet still link somewhere a person can read.
+  const target = (s.method === 'rss' || s.method === 'sitemap')
+    ? (config.feed_url || s.url) : s.url;
   let articles = [], status = 'ok', error = null, seen = 0, via = 'http';
 
   // Every tier logs what it did, whether it ran or not. A checklist that only
@@ -303,7 +308,9 @@ async function fetchOne(s) {
       }
 
       html = got || '';
-      const parsed = s.method === 'rss' ? parseFeed(html, target) : parseIndex(html, target);
+      const parsed = s.method === 'sitemap' ? parseSitemap(html, target)
+        : s.method === 'rss' ? parseFeed(html, target)
+        : parseIndex(html, target);
       if (parsed && parsed.length) {
         raw = parsed;
         via = tier.name;
@@ -630,7 +637,17 @@ IN SCOPE — what their clients pay them to know about:
 
 OUT OF SCOPE — score these exactly 0 however reputable the source. A 0 is the one
 score dropped from the sheet, so reserve it for articles with no energy, building
-or climate bearing at all — genuinely the wrong subject, not merely weak:
+or climate bearing at all — genuinely the wrong subject, not merely weak.
+
+Before scoring 0, check it is not one of these, which ARE in scope and score low
+rather than zero. Both were wrongly dropped on 25 Aug 2026 and the client asked
+for them back:
+  - the economy, markets or politics where climate or energy is a named driver
+    (climate risk moving interest rates, insurance, or investment)
+  - corporate news at an energy company — results, dividends, board and
+    chairmanship contests, takeovers, executive changes
+A story touching energy or climate at all belongs somewhere on the 1-100 scale.
+Zero is for the wrong subject entirely, not for a weak or tangential one:
   - mining and resource extraction that is not about energy supply
   - legislation with no energy, building or climate content — tax, industrial
     relations, foreign relations, health, tobacco, corporate governance
@@ -879,7 +896,11 @@ const REPORT_MIN_RELEVANCE = Number(process.env.REPORT_MIN_RELEVANCE || 50);
 // printed, so six relevant pieces were dropped with no trace, including one
 // scoring 60. A cap that bites in normal operation is not a backstop, it is an
 // undocumented second filter.
-const REPORT_MAX_PER_SECTION = Number(process.env.REPORT_MAX_PER_SECTION || 80);
+// A backstop against one category flooding the sheet, not a length. It was 80,
+// which the catch-up backlog reached on 25 Aug 2026 — and a cap that binds is a
+// cap that silently drops articles, which is the very complaint this work is
+// answering. Raised so it only trips on a genuine runaway.
+const REPORT_MAX_PER_SECTION = Number(process.env.REPORT_MAX_PER_SECTION || 250);
 
 // The email is a comprehensive 24-hour digest: everything from the covered day
 // EXCEPT the irrelevant, listed down in full, no upper cap.
@@ -929,10 +950,28 @@ ranked AS (
   -- Only about a quarter of these sources publish a machine-readable date, so
   -- fall back to when we first saw the article. Ingest runs hourly, which keeps
   -- that within an hour of publication for the sources that omit it.
+  -- The window opens two days before the day being reported and runs to now,
+  -- rather than closing at midnight. Nothing is sent twice — the ledger below
+  -- guarantees that — so widening it can only add articles that were missed.
+  --
+  -- It has to be this way because seven sources in ten publish no date, and
+  -- those articles are dated by when we first saw them. A story published at
+  -- 23:30 is fetched after midnight, dated the following day, and a window that
+  -- stopped at midnight skipped it in both reports: too late for its own, and
+  -- filtered out of the next. That is what the client saw as missing articles
+  -- on 25 Aug 2026 — sixteen of twenty-six examples were fetched all along.
   WHERE (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')
-          >= w.day_start
+          >= w.day_start - interval '2 days'
     AND (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')
-          <  w.day_start + interval '1 day'
+          <  (now() AT TIME ZONE 'Australia/Melbourne')
+    -- The ledger. An article that already went out in a report that actually
+    -- sent is never repeated; one recorded against a report that failed to send
+    -- is still owed to the reader, so status is checked rather than presence.
+    AND NOT EXISTS (
+      SELECT 1 FROM report_items ri
+        JOIN reports r ON r.id = ri.report_id
+       WHERE ri.article_id = a.id AND r.status = 'sent'
+    )
     AND an.relevance_score >= ${REPORT_EMAIL_MIN}
     -- Archive material discovered in bulk is not news of the day. Scraped
     -- listings rarely carry a date, so those articles fall back to fetched_at and
