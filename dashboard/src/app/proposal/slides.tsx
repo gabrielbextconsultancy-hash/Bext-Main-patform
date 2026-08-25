@@ -1,4 +1,5 @@
 import { Box, Cols, Flow, Step, Table, Tag, type Slide } from '@/components/Deck';
+import { SystemMindmap } from '@/components/SystemMindmap';
 
 /**
  * Draft Plan for Business Structure Efficiency, due 11 August 2026.
@@ -169,6 +170,30 @@ export const SLIDES: Slide[] = [
           n8n is self-hosted on infrastructure you own — it is the integration layer, not a
           third-party management platform, which is what keeps the design inside the constraint.
         </p>
+      </div>
+    ),
+  },
+
+  // 5b ────────────────────────────────────────────────────────────────
+  {
+    section: 'Future state',
+    kicker: 'Future state · the whole picture',
+    title: 'One centre, five branches',
+    lede:
+      'The same architecture as a mind map — every platform hung off the branch that owns it, ' +
+      'colour telling you what kind of thing each one is.',
+    body: (
+      <div className="flex h-full flex-col">
+        <div className="flex min-h-0 flex-1 items-center justify-center">
+          <SystemMindmap />
+        </div>
+        <div className="flex flex-wrap justify-center gap-x-5 gap-y-1 text-[11px] text-ink-500">
+          <span><span style={{ color: '#38bdf8' }}>●</span> Capture</span>
+          <span><span style={{ color: '#a78bfa' }}>●</span> AI &amp; automation</span>
+          <span><span style={{ color: '#14b8a6' }}>●</span> Systems of record</span>
+          <span><span style={{ color: '#fbbf24' }}>●</span> Output</span>
+          <span><span style={{ color: '#34d399' }}>●</span> AI workflows</span>
+        </div>
       </div>
     ),
   },
