@@ -893,18 +893,19 @@ const REPORT_MIN_RELEVANCE = Number(process.env.REPORT_MIN_RELEVANCE || 50);
 // undocumented second filter.
 const REPORT_MAX_PER_SECTION = Number(process.env.REPORT_MAX_PER_SECTION || 80);
 
-// The email is now a comprehensive 24-hour digest, not a curated top-30. The
-// client asked for "all of it, with filters" — everything from the covered day
-// that clears the noise line, listed down in full, no upper cap.
+// The email is a comprehensive 24-hour digest: everything from the covered day
+// EXCEPT the irrelevant, listed down in full, no upper cap.
 //
-// So it filters at 20, not the card's 40. Below 20 is almost entirely site
-// furniture — AEMO's "Wholesale Electricity Market", "Gas Bulletin Board" and the
-// like, menu pages the scraper picked up as if they were stories — plus foreign,
-// off-topic items. Dropping it costs no real news; keeping the 20-39 band keeps
-// the tangential-but-real (a China solar export figure, an EV market piece).
+// The client drew the line precisely — scores 1 to 15 are noise and are not
+// wanted; everything 16 and above is. So the floor is 16, not the card's 40. The
+// scorer places genuinely off-topic material there and below: European heatwaves
+// scored 5-15, foreign non-solar items likewise, and AEMO's menu pages ("Wholesale
+// Electricity Market", "Gas Bulletin Board") that the scraper takes for stories.
+// Everything at 16+ — including the weak-but-on-topic 20-39 band, a China solar
+// export figure, an EV market piece — goes in.
 //
 // The card (BEXT — Daily News Card) stays curated at 40; only the email goes wide.
-const REPORT_EMAIL_MIN = Number(process.env.REPORT_EMAIL_MIN || 20);
+const REPORT_EMAIL_MIN = Number(process.env.REPORT_EMAIL_MIN || 16);
 
 const REPORT_SELECT = `
 WITH win AS (
