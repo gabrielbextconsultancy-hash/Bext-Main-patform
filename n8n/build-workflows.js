@@ -3499,6 +3499,13 @@ const energy = qualifying.filter(r => !solarUrls.has(r.url)).slice(0, 15);
 
 const shown = solar.length + energy.length;
 
+// The "View more" button opens the full list from the dashboard, gated by a
+// token in the URL. SharePoint could not serve it — anonymous sharing is disabled
+// and an org link needs a Microsoft session the Teams in-app browser lacks — so
+// the list lives on the dashboard, which is where the client asked for it anyway.
+const viewUrl = 'https://bext.dev-environment.site/api/fetched?date=' + day
+  + '&token=' + ($env.FETCH_VIEW_TOKEN || '');
+
 const card = buildNewsCard({
   coverage,
   solar,
@@ -3509,6 +3516,7 @@ const card = buildNewsCard({
     sources_contributing: new Set(rows.map(r => r.source_name)).size,
     sources_monitored: rows[0].sources_monitored,
   },
+  pdfUrl: viewUrl,
   reportUrl: 'https://bext.dev-environment.site/reports',
 });
 
@@ -3527,92 +3535,23 @@ return [{ json: {
 `;
 
 const NEWS_POST_CODE = `
-// The Code sandbox withholds URLSearchParams as a global; it has to be
-// destructured from the url builtin or the form-encoded body throws
-// ReferenceError at runtime -- the same fault as R001.
-const { URLSearchParams } = require('url');
-
-// Render the full list to PDF, file it in the channel's own folder, then post the
-// card with a button pointing at it.
+// Post the card to the channel. The "View more" button already points at the
+// dashboard fetch list (set in the previous node); the list itself was stored to
+// the reports row by the node between, so it is there when the button is clicked.
 //
-// The card is posted even if the PDF fails. A day's news reaching the channel
-// without its appendix is a smaller loss than nothing reaching it at all, and the
-// two failures look identical from the outside unless said explicitly.
-const d = $input.first().json;
+// SharePoint used to host the list as a PDF, and it did not open for the client:
+// the site disables anonymous sharing and an org link needs a Microsoft session
+// the Teams in-app browser does not carry. The dashboard route has neither
+// constraint.
+// Named explicitly: this node runs after the Postgres store, and a Postgres node
+// emits its query result, not the payload. $input here would be the UPDATE's
+// output, with no card in it.
+const d = $('Build card and list').first().json;
 if (d.skip) return [{ json: { ok: true, detail: 'skipped: ' + d.detail } }];
 
 const helpers = this.helpers;
-const notes = [];
-let pdfUrl = null;
-
-// The Daily report channel's folder in the team's document library. Discovered
-// from the site rather than from Teams, which needs a permission we do not hold.
-const DRIVE = '${process.env.TEAMS_DAILY_DRIVE_ID || ''}';
-const FOLDER = 'Daily report';
-
-const graphToken = async () => {
-  // The token endpoint takes a form body, not JSON. Passing an object with
-  // json:true sends JSON and returns AADSTS900144 — "the request body must
-  // contain the following parameter" — which reads as a missing parameter rather
-  // than the wrong encoding. Same shape the meeting and health workflows use.
-  const r = await helpers.httpRequest({
-    method: 'POST',
-    url: 'https://login.microsoftonline.com/' + $env.MS_TENANT_ID + '/oauth2/v2.0/token',
-    json: true, timeout: 30000,
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: $env.MS_CLIENT_ID, client_secret: $env.MS_CLIENT_SECRET,
-      scope: 'https://graph.microsoft.com/.default', grant_type: 'client_credentials',
-    }).toString(),
-  });
-  return r.access_token;
-};
-
-try {
-  if (!DRIVE) throw new Error('TEAMS_DAILY_DRIVE_ID not configured');
-  const pdf = await helpers.httpRequest({
-    method: 'POST', url: 'http://fetcher:8080/pdf', json: true,
-    body: { html: d.listHtml }, encoding: 'arraybuffer', timeout: 120000,
-  });
-  const token = await graphToken();
-  const name = 'Fetched ' + d.report_date + '.pdf';
-  const up = await helpers.httpRequest({
-    method: 'PUT',
-    url: 'https://graph.microsoft.com/v1.0/drives/' + DRIVE + '/root:/'
-       + encodeURI(FOLDER + '/' + name) + ':/content',
-    headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/pdf' },
-    body: Buffer.from(pdf), json: true, timeout: 120000,
-  });
-  // The item's raw webUrl is its canonical path, and clicking it lands on a
-  // sign-in or access-denied wall unless the viewer already holds a live session
-  // for this SharePoint site — which is why "View" did nothing for the client.
-  // An organization-scoped view link resolves to the browser PDF viewer for
-  // anyone in the tenant, which is what a card button needs.
-  try {
-    const link = await helpers.httpRequest({
-      method: 'POST',
-      url: 'https://graph.microsoft.com/v1.0/drives/' + DRIVE + '/items/' + up.id + '/createLink',
-      headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
-      body: { type: 'view', scope: 'organization' }, json: true, timeout: 30000,
-    });
-    pdfUrl = (link && link.link && link.link.webUrl) || up.webUrl || null;
-  } catch (e) {
-    // A sharing link is better, but the raw URL still opens for anyone already
-    // signed in, so fall back rather than dropping the button.
-    pdfUrl = up.webUrl || null;
-  }
-  notes.push('pdf ' + name);
-} catch (e) {
-  notes.push('pdf failed: ' + String(e.message || e).slice(0, 90));
-}
-
-if (pdfUrl) {
-  d.card.actions = [{ type: 'Action.OpenUrl', title: 'View all fetched (PDF)', url: pdfUrl }]
-    .concat(d.card.actions || []);
-}
-
 const hook = $env.TEAMS_DAILY_WEBHOOK_URL;
-if (!hook) return [{ json: { ok: false, detail: 'TEAMS_DAILY_WEBHOOK_URL not set; ' + notes.join('; ') } }];
+if (!hook) return [{ json: { ok: false, detail: 'TEAMS_DAILY_WEBHOOK_URL not set' } }];
 
 await helpers.httpRequest({
   method: 'POST', url: hook, json: true, timeout: 60000,
@@ -3620,8 +3559,8 @@ await helpers.httpRequest({
     { contentType: 'application/vnd.microsoft.card.adaptive', content: d.card } ] },
 });
 
-notes.push(d.counts.solar + ' solar, ' + d.counts.energy + ' energy, ' + d.counts.fetched + ' fetched');
-return [{ json: { ok: true, detail: notes.join(' · ').slice(0, 400) } }];
+return [{ json: { ok: true, detail:
+  d.counts.solar + ' solar, ' + d.counts.energy + ' energy, ' + d.counts.fetched + ' fetched' } }];
 `;
 
 /**
@@ -3686,13 +3625,29 @@ SELECT (SELECT report_date::text FROM day) AS report_date,
       parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: NEWS_CARD_CODE },
     },
     {
+      id: 'store', name: 'Store fetch list', type: 'n8n-nodes-base.postgres',
+      typeVersion: 2.5, position: pos(360, 0),
+      credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+      parameters: {
+        operation: 'executeQuery',
+        // The dashboard route the card links to reads this. Stored before the card
+        // is posted so the list is there the instant someone clicks the button.
+        // json_to_recordset, not queryReplacement: the HTML is full of commas and
+        // queryReplacement splits parameters on them.
+        query: `UPDATE reports SET fetch_list_html = v.html
+FROM (SELECT * FROM json_to_recordset($1::json) AS x(report_date date, html text)) v
+WHERE reports.report_date = v.report_date`,
+        options: { queryReplacement: '={{ JSON.stringify([{ report_date: $json.report_date, html: $json.listHtml }]) }}' },
+      },
+    },
+    {
       id: 'post', name: 'Post to Teams', type: 'n8n-nodes-base.code',
-      typeVersion: 2, position: pos(360, 0),
+      typeVersion: 2, position: pos(600, 0),
       parameters: { mode: 'runOnceForAllItems', language: 'javaScript', jsCode: NEWS_POST_CODE },
     },
     {
       id: 'record', name: 'Record result', type: 'n8n-nodes-base.postgres',
-      typeVersion: 2.5, position: pos(600, 0),
+      typeVersion: 2.5, position: pos(840, 0),
       credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
       parameters: {
         operation: 'executeQuery',
@@ -3706,7 +3661,8 @@ FROM json_to_recordset($1::json) AS x(status text, detail text)`,
   connections: {
     'Daily 05:20 AEST': { main: [[{ node: 'Load the day', type: 'main', index: 0 }]] },
     'Load the day': { main: [[{ node: 'Build card and list', type: 'main', index: 0 }]] },
-    'Build card and list': { main: [[{ node: 'Post to Teams', type: 'main', index: 0 }]] },
+    'Build card and list': { main: [[{ node: 'Store fetch list', type: 'main', index: 0 }]] },
+    'Store fetch list': { main: [[{ node: 'Post to Teams', type: 'main', index: 0 }]] },
     'Post to Teams': { main: [[{ node: 'Record result', type: 'main', index: 0 }]] },
   },
   settings: { executionOrder: 'v1' },

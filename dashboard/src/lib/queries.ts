@@ -128,6 +128,15 @@ export const getReportHtml = async (date: string) => {
   return rows?.[0]?.html ?? null;
 };
 
+/** The day's full fetch list, served to the Teams card's "View more" button. */
+export const getFetchListHtml = async (date: string) => {
+  const rows = await tryQuery<{ fetch_list_html: string | null }>(
+    `SELECT fetch_list_html FROM reports WHERE report_date = $1::date`,
+    [date]
+  );
+  return rows?.[0]?.fetch_list_html ?? null;
+};
+
 /** Pipeline readiness — what the report will have to work with at 05:00. */
 export interface PipelineReadiness {
   articles_24h: number;

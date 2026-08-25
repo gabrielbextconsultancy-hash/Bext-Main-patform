@@ -151,7 +151,7 @@ var buildNewsCard = function (opts) {
   }
 
   var actions = [];
-  if (o.pdfUrl) actions.push({ type: 'Action.OpenUrl', title: 'View more — full list (PDF)', url: o.pdfUrl });
+  if (o.pdfUrl) actions.push({ type: 'Action.OpenUrl', title: 'View more — everything fetched', url: o.pdfUrl });
   if (o.reportUrl) actions.push({ type: 'Action.OpenUrl', title: 'Open the dashboard', url: o.reportUrl });
 
   var card = {

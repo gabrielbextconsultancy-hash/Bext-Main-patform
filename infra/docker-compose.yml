@@ -281,6 +281,8 @@ services:
       PG_DB: bext
       PG_USER: ${PG_USER}
       PG_PASSWORD: ${PG_PASSWORD}
+      # Gates the /api/fetched route the Teams card links to; the card URL carries it.
+      FETCH_VIEW_TOKEN: ${FETCH_VIEW_TOKEN:-}
       ADMIN_USER: ${ADMIN_USER}
       ADMIN_PASS: ${ADMIN_PASS}
       SESSION_SECRET: ${SESSION_SECRET}
