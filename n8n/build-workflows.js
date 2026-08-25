@@ -982,6 +982,18 @@ ranked AS (
     -- as a batch — the Gemini daily quota was exhausted on 25 Aug 2026 — and a
     -- null score must rank last, not vanish from the sheet unremarked.
     AND coalesce(an.relevance_score, 0) >= ${REPORT_EMAIL_MIN}
+    -- Website furniture, not news. Opening the page found no publication date
+    -- anywhere AND the scorer found nothing relevant in it — failing both tests
+    -- at once is what separates "Legal notice and disclaimer", "Subscribe to our
+    -- RSS Feeds" and "Our Executive Leadership Team" from a weak story.
+    --
+    -- Deliberately narrow. A real article that merely scores 0 still goes out,
+    -- because the brief is to include everything published; this removes only
+    -- what was never an article. The link scraper collects a site's navigation
+    -- alongside its news — AEMO contributed a podcast landing page, a
+    -- scholarship and an XML standards page — and that is the fault being
+    -- filtered here, not low relevance.
+    AND NOT (a.date_state = 'none' AND coalesce(an.relevance_score, 0) = 0)
     -- Archive material discovered in bulk is not news of the day. Scraped
     -- listings rarely carry a date, so those articles fall back to fetched_at and
     -- read as published today; that holds while a source trickles and breaks the
