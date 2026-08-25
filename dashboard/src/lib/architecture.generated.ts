@@ -46,9 +46,9 @@ export interface ArchitectureGraph {
 }
 
 export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
-  "generatedAt": "2026-08-25T16:15:13.648Z",
+  "generatedAt": "2026-08-25T16:20:22.351Z",
   "workflowCount": 15,
-  "edgeCount": 42,
+  "edgeCount": 45,
   "workflows": [
     {
       "slug": "BEXT-Article-Analysis",
@@ -915,6 +915,8 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
       },
       "tablesRead": [
         "articles",
+        "report_items",
+        "reports",
         "sources"
       ],
       "tablesWritten": [
@@ -956,7 +958,10 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
           "name": "Save publish dates",
           "type": "n8n-nodes-base.postgres",
           "actor": "system",
-          "reads": [],
+          "reads": [
+            "report_items",
+            "reports"
+          ],
           "writes": [
             "articles"
           ],
@@ -1321,6 +1326,12 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
       "domain": "brief_a"
     },
     {
+      "from": "BEXT-Daily-News-Card",
+      "to": "BEXT-News-Quality",
+      "table": "reports",
+      "domain": "cross_domain"
+    },
+    {
       "from": "BEXT-Daily-Report",
       "to": "BEXT-Article-Analysis",
       "table": "articles",
@@ -1366,6 +1377,18 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
       "from": "BEXT-Daily-Report",
       "to": "BEXT-News-Quality",
       "table": "articles",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-Daily-Report",
+      "to": "BEXT-News-Quality",
+      "table": "report_items",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-Daily-Report",
+      "to": "BEXT-News-Quality",
+      "table": "reports",
       "domain": "cross_domain"
     },
     {

@@ -1948,7 +1948,21 @@ LIMIT 250`,
           // Graph Health once. See R003.
           query: `UPDATE articles a
 SET published_at = coalesce(v.published_at, a.published_at),
-    date_state   = v.date_state::article_date_state
+    date_state   = v.date_state::article_date_state,
+    -- Reading the real date can prove an article is archive material. Hold it
+    -- the moment that becomes known, rather than leaving it to look current
+    -- until someone notices: undated archive pages dated by fetch time are how
+    -- 2022 articles reached a 2026 sheet once already (migration 022).
+    --
+    -- Only ever tightens, and only for something never sent. An article the
+    -- client has already read stays read.
+    report_eligible = CASE
+      WHEN v.published_at IS NOT NULL
+       AND v.published_at::timestamptz < now() - interval '14 days'
+       AND NOT EXISTS (
+         SELECT 1 FROM report_items ri JOIN reports r ON r.id = ri.report_id
+          WHERE ri.article_id = a.id AND r.status = 'sent')
+      THEN false ELSE a.report_eligible END
 FROM (SELECT * FROM json_to_recordset($1::json)
       AS x(id bigint, published_at timestamptz, date_state text)) v
 WHERE a.id = v.id`,

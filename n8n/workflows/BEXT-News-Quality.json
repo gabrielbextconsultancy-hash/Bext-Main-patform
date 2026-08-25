@@ -85,7 +85,7 @@
       "alwaysOutputData": true,
       "parameters": {
         "operation": "executeQuery",
-        "query": "UPDATE articles a\nSET published_at = coalesce(v.published_at, a.published_at),\n    date_state   = v.date_state::article_date_state\nFROM (SELECT * FROM json_to_recordset($1::json)\n      AS x(id bigint, published_at timestamptz, date_state text)) v\nWHERE a.id = v.id",
+        "query": "UPDATE articles a\nSET published_at = coalesce(v.published_at, a.published_at),\n    date_state   = v.date_state::article_date_state,\n    -- Reading the real date can prove an article is archive material. Hold it\n    -- the moment that becomes known, rather than leaving it to look current\n    -- until someone notices: undated archive pages dated by fetch time are how\n    -- 2022 articles reached a 2026 sheet once already (migration 022).\n    --\n    -- Only ever tightens, and only for something never sent. An article the\n    -- client has already read stays read.\n    report_eligible = CASE\n      WHEN v.published_at IS NOT NULL\n       AND v.published_at::timestamptz < now() - interval '14 days'\n       AND NOT EXISTS (\n         SELECT 1 FROM report_items ri JOIN reports r ON r.id = ri.report_id\n          WHERE ri.article_id = a.id AND r.status = 'sent')\n      THEN false ELSE a.report_eligible END\nFROM (SELECT * FROM json_to_recordset($1::json)\n      AS x(id bigint, published_at timestamptz, date_state text)) v\nWHERE a.id = v.id",
         "options": {
           "queryReplacement": "={{ $json.date_updates }}"
         }
