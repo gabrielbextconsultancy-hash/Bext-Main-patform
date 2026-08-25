@@ -186,6 +186,15 @@ async function fetchOne(s) {
   // so the dashboard and the sheet still link somewhere a person can read.
   const target = (s.method === 'rss' || s.method === 'sitemap')
     ? (config.feed_url || s.url) : s.url;
+
+  // Sitemaps are megabytes, and a publisher may have several sections. Three
+  // S&P sitemaps arriving together — about eight megabytes in a few seconds —
+  // earned a 403 on 25 Aug 2026, from a host that serves any one of them
+  // happily. Stagger them so siblings do not arrive as a burst.
+  if (s.method === 'sitemap') {
+    await sleep(2000 + Math.floor(Math.random() * 6000));
+  }
+
   let articles = [], status = 'ok', error = null, seen = 0, via = 'http';
 
   // Every tier logs what it did, whether it ran or not. A checklist that only
@@ -914,9 +923,19 @@ const REPORT_MAX_PER_SECTION = Number(process.env.REPORT_MAX_PER_SECTION || 250)
 // export figure, an EV market piece — goes in.
 //
 // The card (BEXT — Daily News Card) stays curated at 40; only the email goes wide.
-// 0, not 1. Score 0 now means "ranked last", not "discarded" — the operator asked
-// for everything in the two news categories, and a 0 is only 3-17 articles a day.
-const REPORT_EMAIL_MIN = Number(process.env.REPORT_EMAIL_MIN || 0);
+// 1, not 0 — and the distinction is narrow on purpose.
+//
+// Everything with any energy, building or climate bearing goes to the client,
+// however weak: a 1 is kept, and weak-but-on-subject is exactly what the
+// operator asked to stop losing. A 0 means the scorer found no such bearing at
+// all, and opening those pages showed what they really are — "The best father's
+// day gadgets in a cost of living crisis", "Inside Hermes' 2000 square metre
+// maze". Real articles, correctly scored, and not industry news.
+//
+// They are not discarded: they stay in the database, on the dashboard and in
+// the Teams fetch list, so the day's capture remains complete and auditable.
+// This floor governs the client email alone.
+const REPORT_EMAIL_MIN = Number(process.env.REPORT_EMAIL_MIN || 1);
 
 const REPORT_SELECT = `
 WITH win AS (
