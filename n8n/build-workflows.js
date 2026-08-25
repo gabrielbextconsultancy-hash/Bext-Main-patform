@@ -891,11 +891,20 @@ const REPORT_MIN_RELEVANCE = Number(process.env.REPORT_MIN_RELEVANCE || 50);
 // printed, so six relevant pieces were dropped with no trace, including one
 // scoring 60. A cap that bites in normal operation is not a backstop, it is an
 // undocumented second filter.
-const REPORT_MAX_PER_SECTION = Number(process.env.REPORT_MAX_PER_SECTION || 40);
-// Overall ceiling on the emailed sheet. The per-section cap is a backstop against
-// one category flooding the page; this is the length of the sheet itself, which
-// the client set at twenty to thirty.
-const REPORT_MAX_ITEMS = Number(process.env.REPORT_MAX_ITEMS || 30);
+const REPORT_MAX_PER_SECTION = Number(process.env.REPORT_MAX_PER_SECTION || 80);
+
+// The email is now a comprehensive 24-hour digest, not a curated top-30. The
+// client asked for "all of it, with filters" — everything from the covered day
+// that clears the noise line, listed down in full, no upper cap.
+//
+// So it filters at 20, not the card's 40. Below 20 is almost entirely site
+// furniture — AEMO's "Wholesale Electricity Market", "Gas Bulletin Board" and the
+// like, menu pages the scraper picked up as if they were stories — plus foreign,
+// off-topic items. Dropping it costs no real news; keeping the 20-39 band keeps
+// the tangential-but-real (a China solar export figure, an EV market piece).
+//
+// The card (BEXT — Daily News Card) stays curated at 40; only the email goes wide.
+const REPORT_EMAIL_MIN = Number(process.env.REPORT_EMAIL_MIN || 20);
 
 const REPORT_SELECT = `
 WITH win AS (
@@ -935,7 +944,7 @@ ranked AS (
           >= w.day_start
     AND (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')
           <  w.day_start + interval '1 day'
-    AND an.relevance_score >= ${REPORT_MIN_RELEVANCE}
+    AND an.relevance_score >= ${REPORT_EMAIL_MIN}
     -- Archive material discovered in bulk is not news of the day. Scraped
     -- listings rarely carry a date, so those articles fall back to fetched_at and
     -- read as published today; that holds while a source trickles and breaks the
@@ -950,15 +959,11 @@ SELECT id, url, title, image_url, image_state, shown_at, date_is_exact, source_n
        -- second query: how many sources are being pulled right now.
        (SELECT count(*) FROM sources WHERE active) AS sources_monitored
 FROM ranked
+-- The per-section cap is the only ceiling now, and it is a backstop against one
+-- category flooding the page — not a length. The overall top-30 cap was removed
+-- when the email became a comprehensive digest: the client asked for everything
+-- above the filter, listed down, so a busy day is no longer truncated.
 WHERE rn <= ${REPORT_MAX_PER_SECTION}
-  -- And an overall ceiling on the sheet: the strongest items across all sections,
-  -- not the strongest within each. Without this a three-section day carries three
-  -- times the intended length. The client set the sheet at twenty to thirty; the
-  -- rest reaches them through the Teams card and the dashboard.
-  AND id IN (
-    SELECT id FROM ranked ORDER BY relevance_score DESC, shown_at DESC
-     LIMIT ${REPORT_MAX_ITEMS}
-  )
 ORDER BY category, relevance_score DESC, shown_at DESC`;
 
 function dailyReportWorkflow() {
