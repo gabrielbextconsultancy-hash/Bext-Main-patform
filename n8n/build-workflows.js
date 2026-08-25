@@ -3383,8 +3383,13 @@ const newsletterIntakeWorkflow = () => ({
         // UNSEEN only. Marking as read is what stops the same newsletter being
         // reprocessed every poll; newsletter_messages.message_id is the backstop
         // for when a client marks something unread by hand.
+        // forceReconnect at 10 minutes, not the default 60. The node holds an
+        // IMAP IDLE connection open between polls, and iFastNet's server drops an
+        // idle connection well before an hour — which surfaced as "IMAP connection
+        // closed unexpectedly. Will try to reactivate." on a loop. Reconnecting
+        // before the server times the connection out keeps it steady.
         format: 'resolved',
-        options: { customEmailConfig: '["UNSEEN"]', forceReconnect: 60 },
+        options: { customEmailConfig: '["UNSEEN"]', forceReconnect: 10 },
       },
     },
     {

@@ -20,7 +20,7 @@
         "format": "resolved",
         "options": {
           "customEmailConfig": "[\"UNSEEN\"]",
-          "forceReconnect": 60
+          "forceReconnect": 10
         }
       }
     },
