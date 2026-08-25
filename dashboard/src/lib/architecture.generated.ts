@@ -46,9 +46,9 @@ export interface ArchitectureGraph {
 }
 
 export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
-  "generatedAt": "2026-08-25T10:40:30.990Z",
-  "workflowCount": 14,
-  "edgeCount": 32,
+  "generatedAt": "2026-08-25T15:42:02.706Z",
+  "workflowCount": 15,
+  "edgeCount": 42,
   "workflows": [
     {
       "slug": "BEXT-Article-Analysis",
@@ -540,6 +540,7 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
       "tablesRead": [
         "article_analysis",
         "articles",
+        "report_items",
         "reports",
         "sources"
       ],
@@ -567,6 +568,8 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
           "reads": [
             "article_analysis",
             "articles",
+            "report_items",
+            "reports",
             "sources"
           ],
           "writes": [],
@@ -898,6 +901,88 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
           "writes": [
             "meeting_minutes"
           ],
+          "alwaysOutputData": false
+        }
+      ]
+    },
+    {
+      "slug": "BEXT-News-Quality",
+      "name": "BEXT — News Quality",
+      "domain": "ops",
+      "trigger": {
+        "type": "schedule",
+        "label": "Schedule (0 6 * * *)"
+      },
+      "tablesRead": [
+        "articles",
+        "sources"
+      ],
+      "tablesWritten": [
+        "articles",
+        "integration_health"
+      ],
+      "nodes": [
+        {
+          "id": "trigger",
+          "name": "Three times daily AEST",
+          "type": "n8n-nodes-base.scheduleTrigger",
+          "actor": "ai",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "load",
+          "name": "Articles missing a date",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [
+            "articles"
+          ],
+          "writes": [],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "enrich",
+          "name": "Read publish dates",
+          "type": "n8n-nodes-base.code",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "save",
+          "name": "Save publish dates",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [],
+          "writes": [
+            "articles"
+          ],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "coverage",
+          "name": "Record coverage",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [
+            "articles",
+            "sources"
+          ],
+          "writes": [
+            "integration_health"
+          ],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "kuma",
+          "name": "Heartbeat",
+          "type": "n8n-nodes-base.httpRequest",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
           "alwaysOutputData": false
         }
       ]
@@ -1279,6 +1364,12 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
     },
     {
       "from": "BEXT-Daily-Report",
+      "to": "BEXT-News-Quality",
+      "table": "articles",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-Daily-Report",
       "to": "BEXT-Source-Ingest",
       "table": "articles",
       "domain": "brief_a"
@@ -1287,6 +1378,42 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
       "from": "BEXT-Meeting-Intake",
       "to": "BEXT-Graph-Health",
       "table": "meeting_minutes",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-News-Quality",
+      "to": "BEXT-Article-Analysis",
+      "table": "articles",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-News-Quality",
+      "to": "BEXT-Content-Drafts",
+      "table": "articles",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-News-Quality",
+      "to": "BEXT-Content-Topics",
+      "table": "articles",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-News-Quality",
+      "to": "BEXT-Daily-News-Card",
+      "table": "articles",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-News-Quality",
+      "to": "BEXT-Daily-Report",
+      "table": "articles",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-News-Quality",
+      "to": "BEXT-Source-Ingest",
+      "table": "articles",
       "domain": "cross_domain"
     },
     {
@@ -1318,6 +1445,12 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
       "to": "BEXT-Daily-Report",
       "table": "articles",
       "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Newsletter-Intake",
+      "to": "BEXT-News-Quality",
+      "table": "articles",
+      "domain": "cross_domain"
     },
     {
       "from": "BEXT-Newsletter-Intake",
@@ -1384,6 +1517,18 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
       "to": "BEXT-Daily-Report",
       "table": "sources",
       "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Source-Ingest",
+      "to": "BEXT-News-Quality",
+      "table": "articles",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-Source-Ingest",
+      "to": "BEXT-News-Quality",
+      "table": "sources",
+      "domain": "cross_domain"
     },
     {
       "from": "BEXT-Source-Ingest",

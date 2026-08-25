@@ -1,75 +1,80 @@
 #!/usr/bin/env node
 /**
- * Give undated articles their real publication date.
+ * Open articles that have no publication date, and read it from the page.
  *
- * parseIndex reads a listing page and rarely finds a date there, so scraped
- * articles arrive with published_at NULL. The report then falls back to
- * fetched_at, which reads "published today" — fine while a source trickles, and
- * wrong the moment a backlog arrives at once.
+ * The listing parser never opened an article, so every scraped source produced
+ * published_at = null and the pipeline dated those stories by when it happened
+ * to look at the index. Ingest runs hourly, so an evening story was first seen
+ * after midnight and filed under the wrong day — measured at 33% of articles.
+ * That is what the client kept reporting as missing news.
  *
- * It did. Repairing the link scorer on 23 Aug 2026 unlocked forty Clean Energy
- * Council articles in a single run, including items from 2022 and 2023. Undated,
- * every one of them would have appeared in the next morning's sheet as current
- * news in front of the client.
+ *   node sources/backfill-dates.js              the pending backlog, newest first
+ *   node sources/backfill-dates.js --limit 500
+ *   node sources/backfill-dates.js --retry-blocked   revisit rate-limited pages
  *
- * The date is on the article page, which we already fetch for its image, in
- * whichever of half a dozen conventions the publisher uses.
+ * Needs the tunnels: 5433 for Postgres, 8090 for Scrapling.
  *
- *   node sources/backfill-dates.js           200 most recent undated
- *   node sources/backfill-dates.js 500
- *
- * Needs the tunnel:
- *   ssh -i $VPS_SSH_KEY -L 5433:127.0.0.1:5432 -L 8090:127.0.0.1:8090 -N root@$VPS_HOST
+ * The extraction itself lives in n8n/lib/ingest.js so the workflow and this
+ * script cannot drift apart; this file is the batch runner around it.
  */
 'use strict';
 require('dotenv').config();
 const { Pool } = require('pg');
+const { publishedFromHtml, looksLikeArticle } = require('../n8n/lib/ingest.js');
 
+const arg = (name, def) => {
+  const i = process.argv.indexOf(name);
+  return i > -1 ? process.argv[i + 1] : def;
+};
+const LIMIT = Number(arg('--limit', 400));
+const RETRY_BLOCKED = process.argv.includes('--retry-blocked');
 const SCRAPLING = process.env.SCRAPLING_URL || 'http://127.0.0.1:8090/fetch';
-const LIMIT = Number(process.argv[2] || 200);
-const CONCURRENCY = 8;
 
-/** Publication date, in whichever convention the page uses. */
-const pickDate = (html, url) => {
-  const pats = [
-    /<meta[^>]+property=["']article:published_time["'][^>]+content=["']([^"']+)["']/i,
-    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']article:published_time["']/i,
-    /<meta[^>]+name=["'](?:pubdate|publish-date|date|DC\.date\.issued)["'][^>]+content=["']([^"']+)["']/i,
-    /<time[^>]+datetime=["']([^"']+)["']/i,
-    /"datePublished"\s*:\s*"([^"]+)"/i,
-    /"published_at"\s*:\s*"([^"]+)"/i,
-  ];
-  for (const p of pats) {
-    const m = html.match(p);
-    if (m && m[1]) {
-      const t = Date.parse(m[1]);
-      // Reject nonsense: a date before the web or in the future is a parse error,
-      // not a publication date.
-      if (Number.isFinite(t) && t > Date.parse('2000-01-01') && t < Date.now() + 86400000) {
-        return new Date(t).toISOString();
-      }
+// Global concurrency, but never two requests in flight to the same host.
+//
+// A flat pool of eight earned 429s from Renewables Now — 23 of 31 apparently
+// dateless articles on 25 Aug 2026 were in fact rate-limited, and a 429 is
+// indistinguishable from "publishes no date" unless it is handled separately.
+// Our highest-volume sources are also the ones most likely to throttle, so
+// politeness per host matters more than raw parallelism.
+const CONCURRENCY = 8;
+const PER_HOST_DELAY_MS = 1200;
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+const hostOf = (url) => { try { return new URL(url).host; } catch { return url; } };
+
+/** Serialises per host and spaces requests to the same host. */
+const makeHostGate = () => {
+  const busy = new Map();
+  return async (host, fn) => {
+    const prev = busy.get(host) || Promise.resolve();
+    let release;
+    const mine = new Promise((r) => { release = r; });
+    busy.set(host, prev.then(() => mine));
+    await prev;
+    try {
+      return await fn();
+    } finally {
+      await sleep(PER_HOST_DELAY_MS);
+      release();
+      if (busy.get(host) === mine) busy.delete(host);
     }
-  }
-  // Many publishers date the URL: /2023/07/14/slug or /news/2022-05-03-slug
-  const inUrl = url.match(/\/(20\d{2})[/-](\d{1,2})[/-](\d{1,2})(?:\/|-|$)/);
-  if (inUrl) {
-    const t = Date.parse(`${inUrl[1]}-${String(inUrl[2]).padStart(2, '0')}-${String(inUrl[3]).padStart(2, '0')}`);
-    if (Number.isFinite(t) && t < Date.now() + 86400000) return new Date(t).toISOString();
-  }
-  return null;
+  };
 };
 
-const lookup = async (url) => {
-  try {
-    const r = await fetch(SCRAPLING, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, include_html: true, timeout: 25 }),
-    });
-    if (!r.ok) return null;
-    const j = await r.json();
-    if (!j.ok) return null;
-    return pickDate(j.html || '', url);
-  } catch (e) { return null; }
+const fetchPage = async (url) => {
+  const res = await fetch(SCRAPLING, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url, include_html: true, timeout: 25 }),
+  });
+  if (!res.ok) return { state: 'blocked', detail: 'scrapling ' + res.status };
+  const j = await res.json();
+  // 429 and friends mean "ask again later", not "there is no date here".
+  if (j.status === 429 || j.status === 503) return { state: 'blocked', detail: 'http ' + j.status };
+  if (!j.ok || (j.status && j.status >= 400)) return { state: 'blocked', detail: 'http ' + j.status };
+  return { state: 'ok', html: j.html || '' };
 };
 
 (async () => {
@@ -79,37 +84,58 @@ const lookup = async (url) => {
     max: CONCURRENCY + 1,
   });
 
+  const states = RETRY_BLOCKED ? ['pending', 'blocked'] : ['pending'];
   const { rows } = await db.query(
     `SELECT a.id, a.url, s.name AS source
        FROM articles a JOIN sources s ON s.id = a.source_id
       WHERE a.published_at IS NULL
+        AND a.date_state = ANY($1::article_date_state[])
       ORDER BY a.fetched_at DESC
-      LIMIT $1`, [LIMIT]
-  );
-  if (!rows.length) { console.log('nothing undated.'); await db.end(); return; }
-  console.log('dating ' + rows.length + ' articles\n');
+      LIMIT $2`, [states, LIMIT]);
 
-  const queue = [...rows];
-  let dated = 0, unknown = 0, stale = 0;
-  const cutoff = Date.now() - 14 * 86400000;
+  console.log('opening ' + rows.length + ' article pages (concurrency ' + CONCURRENCY
+    + ', ' + PER_HOST_DELAY_MS + 'ms per host)');
 
-  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
-    while (queue.length) {
-      const a = queue.shift();
-      const iso = await lookup(a.url);
-      if (iso) {
-        dated++;
-        if (Date.parse(iso) < cutoff) stale++;
-        await db.query('UPDATE articles SET published_at = $1 WHERE id = $2', [iso, a.id]);
-        process.stdout.write(Date.parse(iso) < cutoff ? 'o' : '.');
-      } else {
-        unknown++;
-        process.stdout.write('?');
+  const gate = makeHostGate();
+  const tally = { found: 0, none: 0, blocked: 0, notArticle: 0 };
+  let i = 0;
+
+  const worker = async () => {
+    while (i < rows.length) {
+      const a = rows[i++];
+      let out = { state: 'none', detail: null }, published = null;
+      try {
+        const got = await gate(hostOf(a.url), () => fetchPage(a.url));
+        if (got.state === 'blocked') {
+          out = { state: 'blocked' };
+        } else {
+          published = publishedFromHtml(got.html, a.url);
+          if (published) out = { state: 'found' };
+          else {
+            // A landing page has no date because it is not a story. Recording
+            // that distinctly stops it being retried forever and keeps it out
+            // of the sheet.
+            out = { state: 'none' };
+            if (looksLikeArticle(got.html) === false) tally.notArticle++;
+          }
+        }
+      } catch (e) {
+        out = { state: 'blocked' };
+      }
+      await db.query(
+        'UPDATE articles SET published_at = coalesce($1::timestamptz, published_at), date_state = $2::article_date_state WHERE id = $3',
+        [published, out.state, a.id]);
+      tally[out.state]++;
+      if ((tally.found + tally.none + tally.blocked) % 25 === 0) {
+        process.stdout.write('\r  ' + (tally.found + tally.none + tally.blocked) + '/' + rows.length + '   ');
       }
     }
-  }));
+  };
 
-  console.log('\n\n  dated    ' + dated + '   of which ' + stale + ' are older than the 14-day report window');
-  console.log('  unknown  ' + unknown + '   no date found; these keep falling back to fetched_at');
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
   await db.end();
-})().catch(e => { console.error('FAILED ' + e.message); process.exitCode = 1; });
+
+  console.log('\n\n  dated   ' + tally.found);
+  console.log('  no date ' + tally.none + '   (of which ' + tally.notArticle + ' are section pages, not articles)');
+  console.log('  blocked ' + tally.blocked + '   (rate-limited or refused — retry with --retry-blocked)');
+})().catch((e) => { console.error('FAILED ' + e.message); process.exitCode = 1; });

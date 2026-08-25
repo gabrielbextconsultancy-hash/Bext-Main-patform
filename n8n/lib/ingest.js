@@ -235,6 +235,65 @@ function titleFromSlug(url) {
  * for one S&P section), and importing that wholesale is precisely the bulk
  * unlock that put 2022 articles into a 2026 report once already.
  */
+/**
+ * The publication date, read from the article page itself.
+ *
+ * The listing parser never opened an article, so seven sources in ten produced
+ * no date at all and the pipeline dated them by when it happened to look. One
+ * article in three then landed in the wrong day. The date is almost always in
+ * the page's own metadata; this reads it.
+ *
+ * Ordered by how much the publisher meant it. article:published_time is a
+ * declaration; a bare <time datetime> may be any date on the page, so it is
+ * tried late, and the path date later still.
+ *
+ * Returns null rather than guessing. A wrong date is worse than no date: no
+ * date is visible as pending and gets retried, a wrong one silently files the
+ * story under the wrong day, which is the fault being fixed.
+ */
+function publishedFromHtml(html, url) {
+  if (!html) return dateFromUrl(url || '');
+  const patterns = [
+    /property=["']article:published_time["'][^>]*content=["']([^"']+)/i,
+    /content=["']([^"']+)["'][^>]*property=["']article:published_time["']/i,
+    /name=["'](?:pubdate|publish-date|date|DC\.date\.issued|dcterms\.date)["'][^>]*content=["']([^"']+)/i,
+    /content=["']([^"']+)["'][^>]*name=["'](?:pubdate|publish-date|date|DC\.date\.issued)["']/i,
+    /"datePublished"\s*:\s*"([^"]+)"/i,
+    /itemprop=["']datePublished["'][^>]*(?:content|datetime)=["']([^"']+)/i,
+    /<time[^>]*datetime=["']([^"']+)/i,
+  ];
+  for (const re of patterns) {
+    const m = html.match(re);
+    if (!m) continue;
+    const t = Date.parse(m[1]);
+    // Reject the epoch-ish and the future. Templates render placeholder dates,
+    // and a 1970 or a next-year stamp is a parse artefact, not a publication.
+    if (Number.isFinite(t) && t > Date.parse('2000-01-01') && t < Date.now() + 864e5) {
+      return new Date(t).toISOString();
+    }
+  }
+  return dateFromUrl(url || '');
+}
+
+/**
+ * Does this page look like an article rather than a section index?
+ *
+ * The link scraper captures whatever the listing links to, which includes
+ * landing pages: industry.gov.au/future-made-in-australia arrived as an
+ * "article" and would never date, because it is not one. og:type is the
+ * publisher's own answer where they give it.
+ *
+ * Deliberately conservative — it only reports what the page says about itself,
+ * and the caller decides. Guessing "not an article" wrongly loses real news.
+ */
+function looksLikeArticle(html) {
+  if (!html) return null;
+  const og = (html.match(/property=["']og:type["'][^>]*content=["']([^"']+)/i) || [])[1];
+  if (og) return /article|news/i.test(og);
+  if (/"@type"\s*:\s*"(?:News|Blog)?Article"/i.test(html)) return true;
+  return null;
+}
+
 function parseSitemap(xml, baseUrl, { maxAgeDays = 3, limit = 60 } = {}) {
   const cutoff = Date.now() - maxAgeDays * 864e5;
   const out = [];
@@ -392,4 +451,4 @@ function normalise(raw, source) {
     }));
 }
 
-module.exports = { parseFeed, parseIndex, normalise, contentHash, passesFilter, strip, absolute, cleanSyndicatedTitle, dateFromUrl, parseSitemap };
+module.exports = { parseFeed, parseIndex, normalise, contentHash, passesFilter, strip, absolute, cleanSyndicatedTitle, dateFromUrl, parseSitemap, publishedFromHtml, looksLikeArticle };

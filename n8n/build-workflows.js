@@ -914,7 +914,9 @@ const REPORT_MAX_PER_SECTION = Number(process.env.REPORT_MAX_PER_SECTION || 250)
 // export figure, an EV market piece — goes in.
 //
 // The card (BEXT — Daily News Card) stays curated at 40; only the email goes wide.
-const REPORT_EMAIL_MIN = Number(process.env.REPORT_EMAIL_MIN || 1);
+// 0, not 1. Score 0 now means "ranked last", not "discarded" — the operator asked
+// for everything in the two news categories, and a 0 is only 3-17 articles a day.
+const REPORT_EMAIL_MIN = Number(process.env.REPORT_EMAIL_MIN || 0);
 
 const REPORT_SELECT = `
 WITH win AS (
@@ -937,7 +939,11 @@ ranked AS (
          an.relevance_score,
          row_number() OVER (
            PARTITION BY s.category
-           ORDER BY an.relevance_score DESC, a.published_at DESC NULLS LAST
+           -- Ordered by what the sheet prints. Ranking by published_at while
+           -- displaying shown_at meant the per-section cap, when it bites, drops
+           -- rows by a column a third of them are null on.
+           ORDER BY coalesce(an.relevance_score, 0) DESC,
+                    coalesce(a.published_at, a.fetched_at) DESC
          ) AS rn
   FROM articles a
   JOIN sources s          ON s.id = a.source_id
@@ -972,7 +978,10 @@ ranked AS (
         JOIN reports r ON r.id = ri.report_id
        WHERE ri.article_id = a.id AND r.status = 'sent'
     )
-    AND an.relevance_score >= ${REPORT_EMAIL_MIN}
+    -- coalesce, because any comparison against NULL is false. Scoring can fail
+    -- as a batch — the Gemini daily quota was exhausted on 25 Aug 2026 — and a
+    -- null score must rank last, not vanish from the sheet unremarked.
+    AND coalesce(an.relevance_score, 0) >= ${REPORT_EMAIL_MIN}
     -- Archive material discovered in bulk is not news of the day. Scraped
     -- listings rarely carry a date, so those articles fall back to fetched_at and
     -- read as published today; that holds while a source trickles and breaks the
@@ -1762,6 +1771,211 @@ const detail = results.map(r => \`\${r.ok ? 'ok' : 'FAIL'} \${r.name}: \${r.deta
 return [{ json: { ok: failures.length === 0, detail,
                   failures: failures.map(f => f.name) } }];
 `;
+
+
+// ─── Workflow: News Quality ──────────────────────────────────────────────────
+//
+// Enrich, review, monitor — the three jobs that keep the sheet honest, on one
+// clock and in one execution so a bad night is read in one place.
+//
+// Deliberately NOT folded into Source Ingest or Daily Report. Ingest runs hourly
+// and the report at 05:00; this runs three times a day. More importantly the
+// 05:00 send is the client deliverable, and a diagnostic that throws must not be
+// able to take it down — four consecutive scheduled runs were lost that way once
+// already. Separate workflow, separate blast radius.
+//
+// 06:00 / 12:00 / 23:00 Melbourne — start, middle, and the final hour of the day.
+// The 23:00 pass matters most: it completes the day before the day closes, so the
+// 05:00 report reads finished data instead of racing it.
+
+const NEWS_QUALITY_CODE = `
+${INGEST_SRC}
+
+// --- enrichment ------------------------------------------------------------
+// The listing page never carried a date, so the pipeline dated articles by when
+// it happened to look. Measured on 25 Aug 2026: one article in three landed in
+// the wrong day, which is what the client reported as missing news. Open the
+// article and read the date the publisher actually published.
+const { URL } = require('url');
+const SCRAPLING = 'http://scrapling:8090/fetch';
+
+const rows = $input.all().map(i => i.json).filter(r => r && r.url);
+const helpers = this.helpers;
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// A budget, not an estimate. Three passes a day over ~100 articles is small, but
+// a hung fetcher must not hold an execution open indefinitely.
+const DEADLINE = Date.now() + 240000;
+
+// Never two requests in flight to the same host. A flat pool earned 429s from
+// Renewables Now, and a 429 is indistinguishable from "publishes no date" unless
+// it is handled apart — 23 of 31 apparently dateless articles were really
+// rate-limited. Politeness per host beats raw parallelism here.
+const PER_HOST_MS = 1200;
+const lastHit = {};
+const hostOf = (u) => { try { return new URL(u).host; } catch (e) { return u; } };
+
+const updates = [];
+const queue = rows.slice(0, 250);
+let idx = 0;
+
+const worker = async () => {
+  while (idx < queue.length && Date.now() < DEADLINE) {
+    const a = queue[idx++];
+    const host = hostOf(a.url);
+    const wait = (lastHit[host] || 0) + PER_HOST_MS - Date.now();
+    if (wait > 0) await sleep(wait);
+    lastHit[host] = Date.now();
+
+    let state = 'none';
+    let published = null;
+    try {
+      const r = await helpers.httpRequest({
+        method: 'POST', url: SCRAPLING, json: true, timeout: 30000,
+        body: { url: a.url, include_html: true, timeout: 20 },
+      });
+      if (!r || r.status === 429 || r.status === 503 || !r.ok) {
+        state = 'blocked';
+      } else {
+        published = publishedFromHtml(r.html || '', a.url);
+        state = published ? 'found' : 'none';
+      }
+    } catch (e) {
+      state = 'blocked';
+    }
+    updates.push({ id: Number(a.id), published_at: published, date_state: state });
+  }
+};
+
+const lanes = Math.min(6, Math.max(1, queue.length));
+await Promise.all(Array.from({ length: lanes }, worker));
+
+const found = updates.filter(u => u.date_state === 'found').length;
+const blocked = updates.filter(u => u.date_state === 'blocked').length;
+
+return [{ json: {
+  date_updates: JSON.stringify(updates),
+  considered: queue.length,
+  resolved: found,
+  blocked: blocked,
+  detail: 'dated ' + found + ', blocked ' + blocked + ', of ' + queue.length + ' opened',
+} }];
+`;
+
+function newsQualityWorkflow() {
+  return {
+    name: 'BEXT — News Quality',
+    settings: { executionOrder: 'v1', timezone: 'Australia/Melbourne' },
+    nodes: [
+      {
+        // Start of day, middle, and the final hour before it closes.
+        id: 'trigger', name: 'Three times daily AEST', type: 'n8n-nodes-base.scheduleTrigger',
+        typeVersion: 1.2, position: pos(-320, 0),
+        parameters: {
+          rule: {
+            interval: [
+              { field: 'cronExpression', expression: '0 6 * * *' },
+              { field: 'cronExpression', expression: '0 12 * * *' },
+              { field: 'cronExpression', expression: '0 23 * * *' },
+            ],
+          },
+        },
+      },
+      {
+        id: 'load', name: 'Articles missing a date', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(-100, 0),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        // alwaysOutputData so a pass with nothing to do still reaches the
+        // heartbeat instead of stalling the branch. See R015.
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          query: `SELECT a.id, a.url
+FROM articles a
+WHERE a.published_at IS NULL
+  AND (a.date_state = 'pending' OR a.date_state = 'blocked')
+  -- Bounded to what could still reach a report. The archive is not worth
+  -- opening: a 2022 article gains nothing from an accurate date now.
+  AND a.fetched_at > now() - interval '5 days'
+ORDER BY a.fetched_at DESC
+LIMIT 250`,
+        },
+      },
+      {
+        id: 'enrich', name: 'Read publish dates', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(120, 0),
+        parameters: { jsCode: NEWS_QUALITY_CODE },
+      },
+      {
+        id: 'save', name: 'Save publish dates', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(340, 0),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          // The enum needs an explicit cast; an uncast text-to-enum is what broke
+          // Graph Health once. See R003.
+          query: `UPDATE articles a
+SET published_at = coalesce(v.published_at, a.published_at),
+    date_state   = v.date_state::article_date_state
+FROM (SELECT * FROM json_to_recordset($1::json)
+      AS x(id bigint, published_at timestamptz, date_state text)) v
+WHERE a.id = v.id`,
+          options: { queryReplacement: '={{ $json.date_updates }}' },
+        },
+      },
+      {
+        id: 'coverage', name: 'Record coverage', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(560, 0),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          // The number to quote when asked "how many articles were affected".
+          // Measured every pass rather than reconstructed after a complaint.
+          query: `INSERT INTO integration_health (service, status, detail)
+SELECT 'news_quality',
+       CASE WHEN c.quiet > 0 OR c.undated > 20 THEN 'degraded' ELSE 'up' END,
+       'fetched 24h ' || c.fetched || ' · dated ' || c.dated || ' · undated ' || c.undated
+         || ' · wrong-day corrected ' || c.corrected || ' · quiet sources ' || c.quiet
+FROM (
+  SELECT
+    (SELECT count(*) FROM articles WHERE fetched_at > now() - interval '24 hours') AS fetched,
+    (SELECT count(*) FROM articles WHERE fetched_at > now() - interval '24 hours'
+       AND published_at IS NOT NULL) AS dated,
+    (SELECT count(*) FROM articles WHERE fetched_at > now() - interval '24 hours'
+       AND published_at IS NULL) AS undated,
+    -- Articles whose real publication day differs from the day we first saw
+    -- them: precisely the ones that would have gone into the wrong report.
+    (SELECT count(*) FROM articles
+      WHERE fetched_at > now() - interval '24 hours' AND published_at IS NOT NULL
+        AND (published_at AT TIME ZONE 'Australia/Melbourne')::date
+         <> (fetched_at   AT TIME ZONE 'Australia/Melbourne')::date) AS corrected,
+    -- A source that runs clean and returns nothing is invisible to Self Heal,
+    -- which only ever sees executions that error. This is that blind spot.
+    -- email_authoritative sources legitimately fetch nothing when the newsletter
+    -- already delivered, so they are excluded rather than paged on nightly.
+    (SELECT count(*) FROM sources s
+      WHERE s.active AND NOT coalesce(s.email_authoritative, false)
+        AND s.last_fetch_at > now() - interval '25 hours'
+        AND NOT EXISTS (
+          SELECT 1 FROM fetch_attempts fa
+           WHERE fa.source_id = s.id AND fa.run_at > now() - interval '24 hours'
+             AND fa.articles_found > 0)) AS quiet
+) c`,
+        },
+      },
+      heartbeat('KUMA_PUSH_NEWS_QUALITY', 780, 0),
+    ],
+    connections: {
+      'Three times daily AEST': { main: [[{ node: 'Articles missing a date', type: 'main', index: 0 }]] },
+      'Articles missing a date': { main: [[{ node: 'Read publish dates', type: 'main', index: 0 }]] },
+      'Read publish dates': { main: [[{ node: 'Save publish dates', type: 'main', index: 0 }]] },
+      'Save publish dates': { main: [[{ node: 'Record coverage', type: 'main', index: 0 }]] },
+      'Record coverage': { main: [[{ node: 'Heartbeat', type: 'main', index: 0 }]] },
+    },
+  };
+}
 
 function graphHealthWorkflow() {
   return {
@@ -4725,6 +4939,7 @@ return items.map(j => ({ json: j }));`,
   if (!SMTP_CRED) console.error('N8N_SMTP_CREDENTIAL_ID not set — skipping the daily report and Graph health.');
   else {
     await deploy(dailyReportWorkflow());
+    await deploy(newsQualityWorkflow());
     await deploy(graphHealthWorkflow());
     const meetingId = await deploy(meetingIntakeWorkflow());
 
