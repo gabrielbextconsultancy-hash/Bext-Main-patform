@@ -1,0 +1,165 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>BEXT Daily Report — Methodology v2 &amp; Source Solutions</title>
+<style>
+ @page { size: A4; margin: 14mm; }
+ body { font: 10px/1.5 'Segoe UI', system-ui, sans-serif; color:#111827; margin:0; }
+ h1 { font-size:21px; margin:0 0 2px; } h2 { font-size:14px; margin:20px 0 6px; border-bottom:2px solid #0f766e; padding-bottom:3px; }
+ h3 { font-size:11.5px; margin:13px 0 4px; }
+ .sub { color:#6b7280; margin-bottom:12px; }
+ table { width:100%; border-collapse:collapse; margin:6px 0 10px; }
+ th { text-align:left; font-size:8.5px; text-transform:uppercase; letter-spacing:.04em; color:#6b7280; border-bottom:1px solid #d1d5db; padding:3px 5px; }
+ td { border-bottom:1px solid #f3f4f6; padding:4px 5px; vertical-align:top; font-size:9.3px; }
+ .ok { color:#166534; font-weight:600; } .no { color:#991b1b; font-weight:600; } .part { color:#854d0e; font-weight:600; }
+ .badge { font-weight:600; font-size:8.5px; padding:1px 6px; border-radius:8px; white-space:nowrap; }
+ .solved { color:#166534; background:#dcfce7; } .action { color:#1e40af; background:#dbeafe; }
+ .open { color:#991b1b; background:#fee2e2; } .watch { color:#854d0e; background:#fef9c3; }
+ .box { border:1px solid #e5e7eb; border-left:4px solid #0f766e; border-radius:4px; padding:8px 10px; margin:8px 0; }
+ .warn { border-left-color:#b45309; } .crit { border-left-color:#b91c1c; }
+ ul { margin:4px 0 8px 16px; padding:0; } li { margin:2.5px 0; }
+ .small { font-size:9px; color:#374151; }
+ .pagebreak { page-break-before: always; }
+ code { background:#f3f4f6; padding:0 3px; border-radius:3px; font-size:9px; }
+</style></head><body>
+
+<h1>Industry Daily Report — Methodology v2 &amp; Source Solutions</h1>
+<div class="sub">Supersedes the 25 Aug methodology. Pipeline as deployed 26 Aug 2026, plus a solution
+evaluated for every link that has ever failed — with the option that wins, and why.</div>
+
+<h2>Part 1 — How the report is produced now</h2>
+
+<h3>The clock</h3>
+<table>
+<tr><th>When (AEST)</th><th>What runs</th><th>What it does</th></tr>
+<tr><td>Every hour</td><td>Source Ingest</td><td>Every active source, down a five-tier ladder; every tier attempt logged per run, so "tried and failed" is never confused with "never tried"</td></tr>
+<tr><td>Every 30 min</td><td>Article Analysis</td><td>Scores new articles 0–100 (exits instantly when there is nothing new, so the cadence costs nothing)</td></tr>
+<tr><td>06:00 · 12:00 · 23:00</td><td>News Quality</td><td>Opens undated articles and reads the publisher's own date; judges news from standing pages; writes the coverage line. The 23:00 pass completes the day before it closes</td></tr>
+<tr><td>05:00</td><td>Daily Report</td><td>Assembles the finished prior day and sends via Microsoft Graph</td></tr>
+</table>
+
+<h3>The retrieval ladder — cheapest tier that works, per source, per run</h3>
+<table>
+<tr><th>Tier</th><th>Route</th><th>What it defeats</th><th>Evidence</th></tr>
+<tr><td>0</td><td>Email — newsletters into the intake mailbox</td><td>Account walls no fetcher can pass</td><td>79 newsletters received; see Part 2 for the one step still broken</td></tr>
+<tr><td>1</td><td>Scrapling — Chrome TLS fingerprint</td><td>Fingerprint 403s</td><td>DCCEEW, S&amp;P, EcoGeneration, NABERS: 403 → 200</td></tr>
+<tr><td>1b</td><td>Sitemap — the publisher's XML, read as a feed</td><td>Client-rendered listings behind an edge block</td><td>S&amp;P: 21 articles on day one, incl. every story the client flagged</td></tr>
+<tr><td>2</td><td>Chromium render</td><td>Ordinary JavaScript pages</td><td>Standing fallback</td></tr>
+<tr><td>3</td><td>Authenticated browser session</td><td>Member portals</td><td>Built for the CEC portal; awaiting the credential</td></tr>
+<tr><td>4</td><td>Hermes (local 8B model) reads the page</td><td>Markup no parser recognises</td><td>Last resort, bounded</td></tr>
+</table>
+
+<h3>Dating — the fix for "missing" articles that were never missing</h3>
+<div class="box">Seven sources in ten publish no machine-readable date, so articles were dated by
+when we happened to fetch them — and one in three landed in the wrong day, falling between two
+reports. Now: the date is read from the URL path at ingest, then from the article page itself
+(<code>article:published_time</code>, JSON-LD, <code>&lt;time&gt;</code>) by the quality passes,
+politely per host — because fetching too fast earns a 429 that is indistinguishable from "no date"
+(23 of 31 "dateless" articles were really rate-limited). Every page is visited once
+(<code>date_state</code>), a 429 is retried, a genuine no-date is not. An article whose resolved
+date proves it old is held automatically, so archive material can never masquerade as today's news
+again (484 were caught doing exactly that).</div>
+
+<h3>Judgement — three verdicts per article</h3>
+<ul class="small">
+<li><b>Relevance 0–100.</b> Everything with any energy, building or climate bearing goes to the client (floor 1). A 0 means the wrong subject entirely — father's-day gadget guides — and stays in the database, dashboard and Teams list, never the email.</li>
+<li><b>News or reference.</b> Hermes separates stories from standing pages ("Integrated System Plan", "Gas Retail Markets", a scholarship). Ten of ten correct on live titles; 33 pages held so far. Anything it will not commit on ships anyway — dropping a real story is the failure being fixed.</li>
+<li><b>Furniture.</b> No date anywhere on the page <i>and</i> nothing relevant in it ("Legal notice and disclaimer") — never an article, excluded.</li>
+</ul>
+
+<h3>Assembly, sending, and the guarantees</h3>
+<div class="box">The window runs on the <b>real publication date</b>, from two days back to now — wider
+than a day on purpose, because the ledger (<code>report_items</code> against sent reports) guarantees
+nothing repeats and nothing is lost to midnight. Verified: 0 duplicates. Send is Microsoft Graph from
+the tenant mailbox (Microsoft-signed; the old SMTP path failed DKIM and Gmail discarded it silently).
+Any non-202 <b>throws</b>, so a failed send can never be recorded as sent — this guard caught the one
+send failure since (a recipient-format bug, fixed same day). Every quality pass writes a coverage line:
+fetched · dated · undated · wrong-day-corrected · sources returning zero.</div>
+
+<div class="pagebreak"></div>
+<h2>Part 2 — Every failing link, every option, and the winner</h2>
+
+<div class="box crit"><b>The one finding that changes the priority list:</b> the newsletter route is
+90% working and 0% delivering. 79 newsletters have arrived — Reuters (five briefings), The Australian,
+The Conversation — senders map correctly and links are extracted (107 in one Conversation issue, 102 in
+one Australian issue). But <b>articles kept: zero, on every message</b>. Cause found in the keep step:
+newsletter links are tracking-wrapped (they point at the mail domain, e.g. <code>e.theaustralian.com.au</code>,
+not the publisher), and the judge filters to same-host links before unwrapping — so every real story is
+discarded as "not the publisher's". The fix is to unwrap the tracking redirect <i>before</i> judging.
+One code change; it unlocks Reuters and The Australian at a stroke.</div>
+
+<h3>Solved — no further spend or effort needed</h3>
+<table>
+<tr><th>Link / source</th><th>Fault</th><th>Options weighed</th><th>Winner</th></tr>
+<tr><td><b>DCCEEW</b> · dcceew.gov.au</td><td>403 to every ordinary fetch</td><td>Scrapling ✓ · paid proxy (unneeded) · Oxylabs (unneeded)</td><td><span class="badge solved">SOLVED</span> Scrapling TLS impersonation — 28 articles/wk</td></tr>
+<tr><td><b>EcoGeneration</b></td><td>Same 403 class</td><td>Scrapling ✓ + native RSS ✓</td><td><span class="badge solved">SOLVED</span> RSS primary — 11/wk</td></tr>
+<tr><td><b>NABERS</b></td><td>403 + program pages captured as news</td><td>Scrapling ✓ + Hermes judge ✓</td><td><span class="badge solved">SOLVED</span> both — 34/wk, furniture held</td></tr>
+<tr><td><b>S&amp;P latest-news &amp; crude-oil</b></td><td>Client-rendered listing + edge 403 to Chromium — <i>no fetcher could ever work</i></td><td>Scrapling ✗ (empty shell) · Chromium ✗ (403) · Oxylabs render (would work, paid) · <b>sitemap ✓ (free)</b></td><td><span class="badge solved">SOLVED</span> XML sitemaps — 21 articles day one, incl. the flagged stories</td></tr>
+<tr><td><b>Renewables Now</b></td><td>429 rate-limit under parallel fetch; no dates in markup</td><td>Per-host politeness ✓ · proxy rotation (unneeded, impolite)</td><td><span class="badge solved">SOLVED</span> politeness + article-page dates — 167/wk, top source</td></tr>
+<tr><td><b>AEMO / GEMS / AER pages</b></td><td>Navigation and explainers captured as news</td><td>Regex rules ✗ (defeated) · <b>Hermes judge ✓</b></td><td><span class="badge solved">SOLVED</span> the model — 10/10 on live titles</td></tr>
+</table>
+
+<h3>One fix away — the highest-value actions, all free</h3>
+<table>
+<tr><th>Link / source</th><th>Fault</th><th>Options weighed</th><th>Winner &amp; action</th></tr>
+<tr><td><b>Reuters</b> · reuters.com</td><td>Login (401). No fetcher, proxy or rendering service passes a genuine login — Oxylabs and Firecrawl included</td><td>Scraping ✗ · Oxylabs ✗ (login) · <b>newsletter ✓ arriving</b> (5 briefings, 149 links found)</td><td><span class="badge action">FIX KEEP STEP</span> unwrap tracking links before the judge</td></tr>
+<tr><td><b>The Australian</b></td><td>Subscription site</td><td>Scraping ✗ · <b>newsletter ✓ arriving</b> (102 links/issue)</td><td><span class="badge action">FIX KEEP STEP</span> same one change</td></tr>
+<tr><td><b>IEA</b> · iea.org</td><td>Login (403). Retired at 527 straight failures — visible, not hidden</td><td>Scraping ✗ · Oxylabs ✗ · <b>newsletter — not yet arriving</b> (absent from senders)</td><td><span class="badge action">SUBSCRIBE</span> confirm the IEA newsletter into the intake mailbox</td></tr>
+<tr><td><b>AFR</b> article bodies</td><td>Listing scrapes fine (38/wk); bodies paywalled</td><td>Oxylabs ✗ (paywall) · newsletter (partial) · <b>tier-3 session ✓</b> — the operator holds a login</td><td><span class="badge action">TIER-3 CREDENTIAL</span> use the existing session-fetch route</td></tr>
+<tr><td><b>The Conversation</b> foreign editions</td><td>FR/ES/US/global newsletters arriving as noise beside a working AU scrape</td><td>Keep ✗ (noise) · <b>filter to AU ✓</b></td><td><span class="badge action">UNSUBSCRIBE / FILTER</span> non-AU editions</td></tr>
+<tr><td><b>CEC member portal</b></td><td>Member-only content (Monday Megawatt)</td><td><b>Tier-3 login ✓ built</b> · nothing else reaches it</td><td><span class="badge action">CREDENTIAL PENDING</span> + check licensing before client use</td></tr>
+</table>
+
+<h3>Genuinely open — and what each would cost to close</h3>
+<table>
+<tr><th>Link / source</th><th>Fault</th><th>Options, in cost order</th><th>Recommendation</th></tr>
+<tr><td><b>vic-premier</b> · premier.vic.gov.au</td><td>Articles load by in-page XHR; HTML carries no links. 428+ visible failures</td><td>1. <b>Capture the JSON endpoint</b> in browser dev-tools — free, ~30–60 min, then it is just another feed<br>2. Firecrawl self-host pilot — free software, one more container<br>3. Oxylabs render — paid</td><td><span class="badge open">OPEN</span> option 1 first; it is the entire fix if the endpoint is stable</td></tr>
+<tr><td><b>aer-registers</b> · aer.gov.au</td><td>Same class: client-rendered register, no feed</td><td>Same three, same order</td><td><span class="badge open">OPEN</span> same session as vic-premier</td></tr>
+<tr><td><b>S&amp;P natural-gas</b></td><td>Sitemap fetches (1.1&nbsp;MB) but yields nothing recent</td><td>1. Verify it is the right sitemap (minutes)<br>2. Register electric-power / LNG sections the proven way</td><td><span class="badge watch">VERIFY</span> quiet vs wrong file — not yet proven either way, and said so</td></tr>
+</table>
+
+<div class="pagebreak"></div>
+<h2>Part 3 — The platforms, measured against what is actually left</h2>
+
+<h3>Oxylabs (dashboard.oxylabs.io) — does it solve these?</h3>
+<div class="box warn"><b>Mostly no, because most of it is already solved — and the rest it cannot solve.</b>
+Oxylabs sells proxies, a scraper API and headless rendering. Against this pipeline's history:
+TLS-fingerprint 403s — solved free by Scrapling. Rate limits — solved free by politeness (and rotating
+IPs to evade a publisher's rate limit is the impolite version of the same thing). Client-rendered pages —
+its rendering <i>would</i> work, but that class is down to <b>two endpoints</b>, each likely a one-hour
+manual capture. Logins and paywalls (Reuters, IEA, AFR, The Australian) — <b>no scraping service passes a
+genuine login</b>; the newsletter and session routes are the lawful answer and are nearly done. Dating,
+judgement, send, monitoring — pipeline problems no scraper vendor touches.
+<br><br><b>Verdict: not now.</b> A subscription would buy convenience for a two-endpoint problem. Revisit
+only if the source list grows to many JS-heavy sites at once — and pilot self-hosted Firecrawl (free)
+before paying for the same capability.</div>
+
+<h3>Where each tool is the right tool</h3>
+<table>
+<tr><th>Tool</th><th>Best at (proven here)</th><th>Wrong for</th><th>Cost</th></tr>
+<tr><td><b>Scrapling</b> (running)</td><td>TLS-fingerprint blocks; fast polite page fetches — the workhorse of every tier-1 fetch and every date read</td><td>JavaScript rendering; logins</td><td>Free, self-hosted, already deployed</td></tr>
+<tr><td><b>Sitemap reading</b> (running)</td><td>Client-rendered sites whose XML is served openly — better dates than the listing ever had</td><td>Sites without sitemaps</td><td>Free</td></tr>
+<tr><td><b>Hermes agent</b> (running)</td><td><b>Editorial judgement</b>: news vs reference (10/10), article-link extraction from unrecognised markup, the newsletter keep decision</td><td>Bulk work — 7.5 tokens/sec means per-article use risks the 05:00 deadline; batches above 5 drift out of format</td><td>Free, local</td></tr>
+<tr><td><b>Newsletters</b> (tier 0)</td><td>The only lawful route past a login — Reuters, IEA, The Australian</td><td>Completeness (a daily issue carries a fraction of the day)</td><td>Free; one keep-step fix outstanding</td></tr>
+<tr><td><b>Firecrawl</b> (pilot candidate)</td><td>JS rendering + crawl for the XHR class, self-hosted</td><td>Replacing the working stack; logins</td><td>Free software; ~1–2&nbsp;GB RAM on a VPS already running an 8B model — check headroom</td></tr>
+<tr><td><b>Oxylabs</b> (deferred)</td><td>Scale: many JS-heavy or geo-blocked sources at once</td><td>Logins/paywalls; problems already solved free</td><td>Paid subscription</td></tr>
+</table>
+
+<h3>The decision rule the pipeline follows</h3>
+<div class="box">For any link: <b>the cheapest tier that demonstrably works, verified by evidence, visible
+when it fails.</b> Email beats scraping where a login stands. A sitemap beats a browser where one is served.
+A parser beats a model where markup is regular; the model earns its place only where the call is editorial.
+A paid service earns its place only when the free options are exhausted — and after a week of failures,
+none of the free options is exhausted anywhere except two Victorian XHR endpoints.</div>
+
+<h3>Priority order, by articles gained per hour of work</h3>
+<ul class="small">
+<li><b>1. Fix the newsletter keep step</b> (unwrap tracking links before judging) — unlocks Reuters and The Australian in one change; the mail is already arriving.</li>
+<li><b>2. Subscribe the IEA newsletter</b> — the one walled source with no mail arriving at all.</li>
+<li><b>3. Capture the two XHR endpoints</b> (vic-premier, aer-registers) — closes the only class no current tier reaches.</li>
+<li><b>4. Verify S&amp;P natural-gas and register electric-power / LNG</b> — extends a proven route.</li>
+<li><b>5. AFR tier-3 session + CEC portal credential</b> — full bodies and member content.</li>
+<li><b>6. Wire the quiet-source count to Teams</b> — the next silent failure pages us, not the client.</li>
+</ul>
+
+<div class="sub" style="margin-top:14px">BEXT Consultancy · automation stack · 26 Aug 2026 ·
+companion to BEXT-Source-Checklist.pdf · sources of truth: registry, live database, fetch_attempts, newsletter_messages</div>
+</body></html>
