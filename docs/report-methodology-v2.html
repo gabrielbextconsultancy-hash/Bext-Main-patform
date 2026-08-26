@@ -160,6 +160,75 @@ none of the free options is exhausted anywhere except two Victorian XHR endpoint
 <li><b>6. Wire the quiet-source count to Teams</b> — the next silent failure pages us, not the client.</li>
 </ul>
 
+<div class="pagebreak"></div>
+<h2>Part 4 — The playbook: one source showing all four faults</h2>
+
+<div class="box">The four faults of the 25 Aug diagnosis are no longer things a person fixes per
+source — three of the four are now <b>structural</b>: the machinery fires for every source
+automatically, old and new alike. What follows is what fires on its own, what a person can force
+when they will not wait for the schedule, and the escalation when the automatic answer is not enough.</div>
+
+<h3>Fault 1 — articles undated, or filed under the wrong day</h3>
+<table>
+<tr><th>Automatic (already firing)</th><th>Force it now, by hand</th><th>Escalate when</th></tr>
+<tr><td>At ingest, the date is read from the URL path. What is still undated is opened by the quality
+passes (06:00/12:00/23:00) — the article page is fetched politely via Scrapling and
+<code>article:published_time</code> / JSON-LD read. A 429 is marked <code>blocked</code> and retried;
+each page is visited once (<code>date_state</code>).</td>
+<td><code>node sources/backfill-dates.js</code> — the same logic, immediately, over the backlog.
+Or execute <b>BEXT — News Quality</b> in n8n.</td>
+<td>The page truly carries no date (CEC, NABERS style). Then the <b>judge</b> decides what it is;
+a real story stays, dated by first-seen, and the coverage line counts it honestly.</td></tr>
+</table>
+
+<h3>Fault 2 — the midnight drift</h3>
+<table>
+<tr><th>Automatic</th><th>Force</th><th>Escalate</th></tr>
+<tr><td>Nothing to do per source — this fix is entirely structural. The window runs on the real
+publication date, two days back to now; the ledger guarantees an article appears exactly once and can
+never fall between two reports; the 23:00 pass closes the day before the report reads it.</td>
+<td>Nothing to force. (Verified: 0 duplicates, 0 losses since deployment.)</td>
+<td>Never — there is no per-source version of this fault any more.</td></tr>
+</table>
+
+<h3>Fault 3 — captures that are not articles</h3>
+<table>
+<tr><th>Automatic</th><th>Force</th><th>Escalate</th></tr>
+<tr><td>Three gates before the sheet: the furniture rule (no date anywhere <i>and</i> relevance 0);
+the <b>Hermes judge</b> (news vs standing page — 10/10 on live titles, undecided ships); the stale-hold
+(a resolved date older than 14 days holds the article the moment it is known).</td>
+<td><code>node sources/classify-kind.js --days 5</code> — judge the current window immediately.</td>
+<td>The judge keeps abstaining on a source's pages → tighten that source's link scoring in the parser
+(the permanent fix), using the held/abstained lists as the worked examples.</td></tr>
+</table>
+
+<h3>Fault 4 — the source goes quiet and nobody is told</h3>
+<table>
+<tr><th>Automatic today</th><th>Force</th><th>Escalate — the diagnosis ladder</th></tr>
+<tr><td>Every tier of every fetch is logged per run; the coverage line counts sources that ran clean
+and returned zero; the dashboard shows the tier strip and "exhausted every route".
+<b>The remaining gap:</b> no Teams page yet — priority 6 in Part 3.</td>
+<td>Execute <b>BEXT — Source Ingest</b> in n8n (the force-fetch — all tiers, logged), then read
+<code>fetch_attempts</code> for that source.</td>
+<td>What the attempt log says decides the tool — this is the S&amp;P procedure, generalised:<br>
+· <b>403 / TLS refusal</b> → Scrapling tier 1 (automatic)<br>
+· <b>200 but zero links</b> → client-rendered: check <code>robots.txt</code> for a sitemap → register
+<code>method: sitemap</code> (proven on S&amp;P)<br>
+· <b>Login wall</b> → newsletter (tier 0) or session login (tier 3) — no scraper or proxy service passes
+a genuine login<br>
+· <b>Markup no parser reads</b> → <b>Hermes</b> tier 4 extracts the links (its judgement job, not bulk)<br>
+· <b>Still nothing</b> → capture the XHR endpoint by hand, or the Firecrawl pilot — the last free rungs
+before any paid service</td></tr>
+</table>
+
+<h3>Which model does what — the division of labour</h3>
+<div class="box"><b>Gemini</b> (cloud, quota-bound) does the one big-volume judgement: relevance scoring,
+in batches, every 30 minutes. <b>Hermes</b> (local, free, slow) does the small editorial judgements where
+rules fail: is this link an article, is this page news or reference, is this newsletter item worth keeping.
+Neither model fetches anything — retrieval is deterministic ladder code, because the failure being
+engineered out is <i>invisible</i> failure, and a model deciding what to fetch is unauditable. The agent
+judges; the ladder fetches; the log remembers; the coverage line tells on both.</div>
+
 <div class="sub" style="margin-top:14px">BEXT Consultancy · automation stack · 26 Aug 2026 ·
 companion to BEXT-Source-Checklist.pdf · sources of truth: registry, live database, fetch_attempts, newsletter_messages</div>
 </body></html>
