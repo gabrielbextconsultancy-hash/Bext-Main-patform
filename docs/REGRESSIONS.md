@@ -577,3 +577,21 @@ across 14 workflows. Maintaining hand-drawn maps leads to inaccurate architectur
 
 **Guard:** R033 — asserts the generated TypeScript file strictly matches the exported workflows.
 
+---
+
+## R034 — newsletter tracking links discarded before unwrapping
+
+**Cost:** zero articles kept from 79 received newsletters (Reuters, The Australian, The Conversation),
+despite newsletters arriving with 100+ links per issue.
+
+**Cause:** `hermesExtract` filtered candidate links against the sender's exact subdomain (`email.reuters.com`,
+`newsletters.news.com.au`), while article links pointed to redirect wrappers (`link.reuters.com`) or target
+domains (`www.reuters.com`). Tracking redirects were only unwrapped *after* the model extraction, so all real
+stories were dropped upfront as "off-host".
+
+**Fix:** unwrap redirect tracking parameters (`url`, `target`, `dest`, `redirect`) inside `candidates()`
+*before* filtering, and match candidate URLs against the apex domain (`getApexDomain`).
+
+**Guard:** R034 — asserts `hermes-extract.js` unwraps tracking URLs during candidate extraction and resolves apex domains.
+
+

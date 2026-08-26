@@ -679,6 +679,23 @@ check('R033', 'architecture graph is in sync with exported workflows', () => {
   return { ok: true, detail: `${freshGraph.workflowCount} workflows, ${freshGraph.edgeCount} edges in sync` };
 });
 
+// ── R034 ─ newsletter tracking links unwrapped before model filter ───────────
+check('R034', 'newsletter candidate extraction unwraps tracking URLs and matches apex domain', () => {
+  const { candidates, unwrap, getApexDomain } = require('./lib/hermes-extract.js');
+  if (typeof unwrap !== 'function' || typeof getApexDomain !== 'function') {
+    return { ok: false, detail: 'unwrap or getApexDomain not exported from hermes-extract.js' };
+  }
+  if (getApexDomain('email.reuters.com') !== 'reuters.com') {
+    return { ok: false, detail: 'getApexDomain failed for email.reuters.com' };
+  }
+  const sample = '<a href="https://link.reuters.com/click/1?url=https%3A%2F%2Fwww.reuters.com%2Fenergy-solar-story">Australia Solar Energy Growth Surges</a>';
+  const cands = candidates(sample, 'https://email.reuters.com');
+  if (!cands.length || cands[0].url !== 'https://www.reuters.com/energy-solar-story') {
+    return { ok: false, detail: 'tracking redirect not unwrapped in candidates()' };
+  }
+  return { ok: true, detail: 'tracking links unwrapped and apex domains mapped' };
+});
+
 check('R012', 'required env is set locally', () => {
   const need = ['MS_TENANT_ID', 'MS_CLIENT_ID', 'MS_CLIENT_SECRET', 'MS_SENDER_UPN',
                 'MEETING_HOSTS', 'TEAMS_MEETING_WEBHOOK_URL', 'N8N_WEBHOOK_CREDENTIAL_ID'];

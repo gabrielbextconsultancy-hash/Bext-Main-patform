@@ -26,6 +26,39 @@
 const MAX_CANDIDATES = 60;
 const MIN_TEXT = 18;
 
+/**
+ * Tracking wrappers are the norm in newsletters, and the real URL is usually a
+ * parameter inside them. Resolving them before ranking ensures off-subdomain
+ * redirect links (e.g. link.reuters.com -> reuters.com) survive candidate filtering.
+ */
+const unwrap = (u) => {
+  try {
+    const parsed = new URL(u);
+    for (const key of ['url', 'u', 'target', 'redirect', 'link', 'dest']) {
+      const inner = parsed.searchParams.get(key);
+      if (inner && /^https?:\/\//i.test(inner)) return unwrap(inner);
+    }
+    for (const junk of ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'mc_cid', 'mc_eid']) {
+      parsed.searchParams.delete(junk);
+    }
+    return parsed.toString().split('#')[0];
+  } catch (e) {
+    return u;
+  }
+};
+
+const getApexDomain = (hostname) => {
+  if (!hostname) return '';
+  const parts = String(hostname).toLowerCase().split('.').filter(Boolean);
+  if (parts.length <= 2) return parts.join('.');
+  const secondLast = parts[parts.length - 2];
+  const last = parts[parts.length - 1];
+  if (['com', 'gov', 'edu', 'org', 'net', 'co'].includes(secondLast) && last.length <= 3) {
+    return parts.slice(-3).join('.');
+  }
+  return parts.slice(-2).join('.');
+};
+
 /** Anchors that could plausibly be articles, as {url, text}. */
 const candidates = (html, baseUrl) => {
   const out = [];
@@ -42,10 +75,11 @@ const candidates = (html, baseUrl) => {
       .replace(/\s+/g, ' ').trim();
     if (text.length < MIN_TEXT) continue;
     if (/^(#|mailto:|tel:|javascript:)/i.test(url)) continue;
-    // Navigation, legal and social links are never the article.
-    if (/\/(tag|category|author|search|login|privacy|terms|contact|about|subscribe)\b/i.test(url)) continue;
-    if (/^(home|menu|search|login|sign in|subscribe|read more|learn more|view all|next|previous)$/i.test(text)) continue;
+    // Navigation, legal, unsubscribe and social links are never the article.
+    if (/\/(tag|category|author|search|login|privacy|terms|contact|about|subscribe|unsubscribe|preference)\b/i.test(url)) continue;
+    if (/^(home|menu|search|login|sign in|subscribe|read more|learn more|view all|next|previous|unsubscribe|preferences)$/i.test(text)) continue;
     try { url = new URL(url, baseUrl).toString(); } catch (e) { continue; }
+    url = unwrap(url);
     const key = url.split('#')[0];
     if (seen.has(key)) continue;
     seen.add(key);
@@ -70,13 +104,29 @@ const hermesExtract = async (opts) => {
   const all = candidates(html, baseUrl);
   if (!all.length) return { articles: [], considered: 0, reason: 'no candidate links in the page' };
 
-  // Same-host links first: an index page is mostly its own articles, and the rest
-  // is usually syndication and social.
+  // Same-host or same-apex links first: an index page or newsletter is mostly its own articles,
+  // and unwrapping upfront allows tracking redirect domains to match the apex domain.
   let host = '';
   try { host = new URL(baseUrl).host; } catch (e) { host = ''; }
-  const ranked = all
-    .filter(c => !host || c.url.indexOf(host) > -1)
-    .slice(0, MAX_CANDIDATES);
+  const fromApex = getApexDomain(host);
+
+  const isSameHostOrApex = (cUrl) => {
+    if (!host) return true;
+    try {
+      const uHost = new URL(cUrl).host;
+      if (uHost.indexOf(host) > -1) return true;
+      if (fromApex) {
+        if (getApexDomain(uHost) === fromApex) return true;
+        if (fromApex.includes('news.com.au') && uHost.includes('theaustralian.com.au')) return true;
+      }
+      return false;
+    } catch (e) {
+      return false;
+    }
+  };
+
+  const sameHostCandidates = all.filter(c => isSameHostOrApex(c.url));
+  const ranked = (sameHostCandidates.length ? sameHostCandidates : all).slice(0, MAX_CANDIDATES);
   if (!ranked.length) return { articles: [], considered: all.length, reason: 'no same-host links' };
 
   const listing = ranked.map((c, i) => (i + 1) + '. ' + c.text + '  ->  ' + c.url).join('\n');
@@ -127,4 +177,4 @@ const hermesExtract = async (opts) => {
   return { articles: articles, considered: ranked.length, reason: '' };
 };
 
-module.exports = { hermesExtract, candidates };
+module.exports = { hermesExtract, candidates, unwrap, getApexDomain };

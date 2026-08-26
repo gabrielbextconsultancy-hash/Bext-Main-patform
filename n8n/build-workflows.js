@@ -3854,24 +3854,6 @@ const helpers = this.helpers;
 // spending forty seconds of model time discovering it.
 const NOT_NEWS = /^(re|fwd|out of office|undeliverable|delivery status|password|verify your|confirm your|receipt|invoice|your order)\\b/i;
 
-// Tracking wrappers are the norm in newsletters, and the real URL is usually a
-// parameter inside them. Storing the wrapper would defeat deduplication, since
-// the same article arrives with a different tracking id every time.
-const unwrap = (u) => {
-  try {
-    const parsed = new URL(u);
-    for (const key of ['url', 'u', 'target', 'redirect', 'link', 'dest']) {
-      const inner = parsed.searchParams.get(key);
-      if (inner && /^https?:\\/\\//i.test(inner)) return inner.split('#')[0];
-    }
-    // Strip the campaign parameters so two sends of one article agree.
-    for (const junk of ['utm_source','utm_medium','utm_campaign','utm_term','utm_content','mc_cid','mc_eid']) {
-      parsed.searchParams.delete(junk);
-    }
-    return parsed.toString().split('#')[0];
-  } catch (e) { return u; }
-};
-
 const rows = [];
 const messages = [];
 
