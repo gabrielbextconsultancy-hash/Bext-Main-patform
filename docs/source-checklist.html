@@ -1,0 +1,204 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>BEXT Source Checklist</title>
+<style>
+ @page { size: A4; margin: 14mm; }
+ body { font: 10px/1.45 'Segoe UI', system-ui, sans-serif; color:#111827; margin:0; }
+ h1 { font-size:21px; margin:0 0 2px; } h2 { font-size:14px; margin:22px 0 6px; border-bottom:2px solid #0f766e; padding-bottom:3px; }
+ h3 { font-size:11.5px; margin:14px 0 4px; }
+ .sub { color:#6b7280; margin-bottom:14px; }
+ .tiles { display:flex; gap:8px; margin:12px 0; }
+ .tile { flex:1; border:1px solid #e5e7eb; border-radius:6px; padding:8px 10px; }
+ .tile b { font-size:16px; display:block; }
+ table { width:100%; border-collapse:collapse; margin:6px 0 10px; }
+ th { text-align:left; font-size:8.5px; text-transform:uppercase; letter-spacing:.04em; color:#6b7280; border-bottom:1px solid #d1d5db; padding:3px 5px; }
+ td { border-bottom:1px solid #f3f4f6; padding:4px 5px; vertical-align:top; }
+ .u { color:#6b7280; font-size:8.5px; } .m { color:#374151; } .n { white-space:nowrap; }
+ .badge { font-weight:600; font-size:8.5px; padding:1px 6px; border-radius:8px; white-space:nowrap; }
+ .err { color:#991b1b; font-size:9px; } .note { color:#374151; font-size:9px; }
+ .box { border:1px solid #e5e7eb; border-left:4px solid #0f766e; border-radius:4px; padding:8px 10px; margin:8px 0; }
+ .warn { border-left-color:#b45309; }
+ ul { margin:4px 0 8px 16px; padding:0; } li { margin:2px 0; }
+ .small { font-size:9px; color:#374151; }
+ .pagebreak { page-break-before: always; }
+</style></head><body>
+
+<h1>Industry Daily Report — Source Checklist &amp; Diagnosis</h1>
+<div class="sub">Against the Project Brief of 28 Jul 2026 (66 embedded links) · live pipeline state as of 26 August 2026</div>
+
+<div class="tiles">
+ <div class="tile"><b>66</b>links in the client brief</div>
+ <div class="tile"><b>73</b>sources registered (68 active)</div>
+ <div class="tile"><b>49</b>working — delivering articles</div>
+ <div class="tile"><b>16</b>working but quiet this week</div>
+ <div class="tile"><b>3</b>failing (visible, tracked)</div>
+ <div class="tile"><b>5</b>off — walled or pending</div>
+</div>
+<div class="tiles">
+ <div class="tile"><b>108</b>articles captured, last 24 h</div>
+ <div class="tile"><b>853</b>articles captured, last 7 days</div>
+ <div class="tile"><b>05:00</b>report send (AEST), reads the finished prior day</div>
+ <div class="tile"><b>3×/day</b>quality passes: 06:00 · 12:00 · 23:00</div>
+</div>
+
+<div class="box">Every link in the brief maps to a registered source below — 66 of 66. The registry carries
+seven more than the brief because several brief links share a publisher (split into sections) and the
+newsletter intake adds sources of its own. A source marked QUIET fetched successfully and found the
+publisher had released nothing; that state is recorded and watched, never hidden behind an "ok".</div>
+
+<h2>Australian News</h2>
+<table><tr><th>Source</th><th>Method</th><th>Status</th><th>Articles 7d/24h</th><th>Last article</th><th>Error</th><th>Reason / remedy</th></tr>
+<tr><td><b>ABC News — Climate Change</b><br><span class="u">abc.net.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">8 / 0</td><td class="n">2026-08-24</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>ABC News — Energy</b><br><span class="u">abc.net.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">7 / 0</td><td class="n">2026-08-25</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>Australian Financial Review — Energy</b><br><span class="u">afr.com</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">38 / 6</td><td class="n">2026-08-25</td><td class="err"></td><td class="note">Listing scrapes cleanly; article bodies are paywalled, so summaries come from the listing. Most items carry no machine-readable date - the article-page date reader now fills them in.</td></tr>
+<tr><td><b>Newsletter — unrecognised sender</b><br><span class="u"></span></td><td class="m">email</td><td><span class="badge" style="color:#374151;background:#e5e7eb">OFF — pending</span></td><td class="n">0 / 0</td><td class="n">—</td><td class="err"></td><td class="note">Catch-all for newsletters from senders not yet mapped to a source. Fills only when such mail arrives.</td></tr>
+<tr><td><b>The Australian — Mining &amp; Energy</b><br><span class="u">theaustralian.com.au</span></td><td class="m">email</td><td><span class="badge" style="color:#374151;background:#e5e7eb">OFF — account</span></td><td class="n">0 / 0</td><td class="n">—</td><td class="err">login required</td><td class="note">Subscription site. Newsletter subscribed to the intake mailbox; articles arrive by email (tier 0), not by scraping.</td></tr>
+<tr><td><b>The Conversation AU — Environment &amp; Energy</b><br><span class="u">theconversation.com</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">15 / 2</td><td class="n">2026-08-26</td><td class="err"></td><td class="note">Healthy scrape; some articles carry no meta date, filled by the article-page reader.</td></tr></table>
+
+<h2>Industry Updates</h2>
+<table><tr><th>Source</th><th>Method</th><th>Status</th><th>Articles 7d/24h</th><th>Last article</th><th>Error</th><th>Reason / remedy</th></tr>
+<tr><td><b>AER — Registers Status</b><br><span class="u">aer.gov.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#991b1b;background:#fee2e2">FAILING</span></td><td class="n">0 / 0</td><td class="n">—</td><td class="err">empty ×494</td><td class="note">Same class as vic-premier: client-rendered register, no feed, no links in the HTML. Unsolved and visibly failing (494+ consecutive).</td></tr>
+<tr><td><b>Victorian Premier — Energy &amp; Climate Media</b><br><span class="u">premier.vic.gov.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#991b1b;background:#fee2e2">FAILING</span></td><td class="n">0 / 0</td><td class="n">2026-08-01</td><td class="err">empty ×428</td><td class="note">Articles load by in-page XHR; the listing HTML carries no links for any parser. Unsolved - needs its JSON endpoint captured. Fails visibly (428+ consecutive) rather than pretending health.</td></tr>
+<tr><td><b>ACCC — Energy</b><br><span class="u">accc.gov.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">5 / 0</td><td class="n">2026-08-23</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>AEMC — News Centre</b><br><span class="u">aemc.gov.au</span></td><td class="m">rss</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">3 / 0</td><td class="n">2026-08-21</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>AEMC — Rule Changes / Registers</b><br><span class="u">aemc.gov.au</span></td><td class="m">rss</td><td><span class="badge" style="color:#854d0e;background:#fef9c3">QUIET</span></td><td class="n">0 / 0</td><td class="n">2026-08-05</td><td class="err"></td><td class="note">Rule-change register; publishes in bursts around determinations. Quiet weeks are normal.</td></tr>
+<tr><td><b>AEMO</b><br><span class="u">aemo.com.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">52 / 0</td><td class="n">2026-08-24</td><td class="err"></td><td class="note">Fetches heavily but the newsroom links site navigation alongside stories - a podcast page, a scholarship, market explainers. The news-vs-reference judge now holds those out of the sheet.</td></tr>
+<tr><td><b>AER — News</b><br><span class="u">aer.gov.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">53 / 0</td><td class="n">2026-08-23</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>ARENA — Knowledge Bank</b><br><span class="u">arena.gov.au</span></td><td class="m">rss</td><td><span class="badge" style="color:#854d0e;background:#fef9c3">QUIET</span></td><td class="n">0 / 0</td><td class="n">2026-08-11</td><td class="err"></td><td class="note">Fetch succeeds; the publisher has simply released nothing in the window. Quiet is watched, not hidden.</td></tr>
+<tr><td><b>ARENA — News</b><br><span class="u">arena.gov.au</span></td><td class="m">rss</td><td><span class="badge" style="color:#854d0e;background:#fef9c3">QUIET</span></td><td class="n">0 / 0</td><td class="n">2026-08-04</td><td class="err"></td><td class="note">Fetch succeeds; the publisher has simply released nothing in the window. Quiet is watched, not hidden.</td></tr>
+<tr><td><b>Australian Alliance for Energy Productivity (AIDC)</b><br><span class="u">aidc.org.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#854d0e;background:#fef9c3">QUIET</span></td><td class="n">0 / 0</td><td class="n">2026-07-31</td><td class="err"></td><td class="note">Fetch succeeds; the publisher has simply released nothing in the window. Quiet is watched, not hidden.</td></tr>
+<tr><td><b>Australian Building Codes Board</b><br><span class="u">abcb.gov.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#854d0e;background:#fef9c3">QUIET</span></td><td class="n">0 / 0</td><td class="n">2026-08-06</td><td class="err"></td><td class="note">Fetch succeeds; the publisher has simply released nothing in the window. Quiet is watched, not hidden.</td></tr>
+<tr><td><b>Australian Energy Council</b><br><span class="u">energycouncil.com.au</span></td><td class="m">rss</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">3 / 0</td><td class="n">2026-08-25</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>Australian Hydrogen Council</b><br><span class="u">aidc.org.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#854d0e;background:#fef9c3">QUIET</span></td><td class="n">0 / 0</td><td class="n">—</td><td class="err"></td><td class="note">Fetch succeeds; the publisher has simply released nothing in the window. Quiet is watched, not hidden.</td></tr>
+<tr><td><b>CEFC — Insights</b><br><span class="u">cefc.com.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#854d0e;background:#fef9c3">QUIET</span></td><td class="n">0 / 0</td><td class="n">2026-08-13</td><td class="err"></td><td class="note">Fetch succeeds; the publisher has simply released nothing in the window. Quiet is watched, not hidden.</td></tr>
+<tr><td><b>CEFC — Media</b><br><span class="u">cefc.com.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">4 / 0</td><td class="n">2026-08-25</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>Clean Energy Council</b><br><span class="u">cleanenergycouncil.org.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">40 / 0</td><td class="n">2026-08-23</td><td class="err"></td><td class="note">Every story was once lost to a "Find out more" link text (scored as too short); fixed via slug-derived titles. Publishes no date in its markup; member-portal login (tier 3) is available for the Monday Megawatt.</td></tr>
+<tr><td><b>Clean Energy Regulator — Media Releases</b><br><span class="u">cer.gov.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#854d0e;background:#fef9c3">QUIET</span></td><td class="n">0 / 0</td><td class="n">2026-07-31</td><td class="err"></td><td class="note">Fetch succeeds; the publisher has simply released nothing in the window. Quiet is watched, not hidden.</td></tr>
+<tr><td><b>Clean Energy Regulator — News</b><br><span class="u">cer.gov.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">2 / 1</td><td class="n">2026-08-25</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>Clean Energy Regulator — NGER</b><br><span class="u">cer.gov.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#854d0e;background:#fef9c3">QUIET</span></td><td class="n">0 / 0</td><td class="n">—</td><td class="err"></td><td class="note">Fetch succeeds; the publisher has simply released nothing in the window. Quiet is watched, not hidden.</td></tr>
+<tr><td><b>Climate Change Authority</b><br><span class="u">climatechangeauthority.gov.au</span></td><td class="m">rss</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">1 / 0</td><td class="n">2026-08-20</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>Climate Works Centre</b><br><span class="u">climateworkscentre.org</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">1 / 1</td><td class="n">2026-08-25</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>Commercial Building Disclosure</b><br><span class="u">cbd.gov.au</span></td><td class="m">rss</td><td><span class="badge" style="color:#854d0e;background:#fef9c3">QUIET</span></td><td class="n">0 / 0</td><td class="n">2026-08-17</td><td class="err"></td><td class="note">Fetch succeeds; the publisher has simply released nothing in the window. Quiet is watched, not hidden.</td></tr>
+<tr><td><b>CSIRO — Energy News</b><br><span class="u">csiro.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">3 / 0</td><td class="n">2026-08-23</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>DCCEEW</b><br><span class="u">dcceew.gov.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">28 / 1</td><td class="n">2026-08-25</td><td class="err"></td><td class="note">Every article was once dropped because /about/news/ paths were mistaken for chrome; fixed. 28 articles / 7d since.</td></tr>
+<tr><td><b>DEECA — Energy News</b><br><span class="u">energy.vic.gov.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#854d0e;background:#fef9c3">QUIET</span></td><td class="n">0 / 0</td><td class="n">—</td><td class="err"></td><td class="note">Fetch succeeds; the publisher has simply released nothing in the window. Quiet is watched, not hidden.</td></tr>
+<tr><td><b>DISR</b><br><span class="u">industry.gov.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">52 / 3</td><td class="n">2026-08-25</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>Eco Generation</b><br><span class="u">ecogeneration.com.au</span></td><td class="m">rss</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">11 / 3</td><td class="n">2026-08-26</td><td class="err"></td><td class="note">TLS-fingerprint 403 until the Scrapling fetcher; now healthy on RSS (11 / 7d). Flagged by the client on 21 Aug - the miss predates the fix.</td></tr>
+<tr><td><b>Energy Efficiency Council</b><br><span class="u">eec.org.au</span></td><td class="m">rss</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">1 / 1</td><td class="n">2026-08-25</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>Energy Magazine</b><br><span class="u">energymagazine.com.au</span></td><td class="m">rss</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">7 / 0</td><td class="n">2026-08-25</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>Energy Rating / GEMS</b><br><span class="u">energyrating.gov.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">44 / 0</td><td class="n">2026-08-23</td><td class="err"></td><td class="note">Parser found nothing for 71 consecutive fetches until the markup fix; 44 articles / 7d since. Captured pages are often program/registry pages - judged before the sheet.</td></tr>
+<tr><td><b>Energy Users Association of Australia</b><br><span class="u">euaa.com.au</span></td><td class="m">rss</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">2 / 1</td><td class="n">2026-08-25</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>Energy.gov.au — News</b><br><span class="u">energy.gov.au</span></td><td class="m">rss</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">5 / 0</td><td class="n">2026-08-24</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>Essential Services Commission — Media</b><br><span class="u">esc.vic.gov.au</span></td><td class="m">rss</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">1 / 0</td><td class="n">2026-08-25</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>Facility Management Association</b><br><span class="u">fma.com.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">1 / 0</td><td class="n">2026-08-24</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>Green Building Council of Australia</b><br><span class="u">new.gbca.org.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">4 / 1</td><td class="n">2026-08-25</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>Infrastructure Magazine — Facilities Management</b><br><span class="u">infrastructuremagazine.com.au</span></td><td class="m">rss</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">18 / 5</td><td class="n">2026-08-26</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>Investor Group on Climate Change</b><br><span class="u">igcc.org.au</span></td><td class="m">rss</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">1 / 0</td><td class="n">2026-08-20</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>Minister Bowen — Media Releases</b><br><span class="u">minister.dcceew.gov.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">16 / 0</td><td class="n">2026-08-25</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>NABERS</b><br><span class="u">nabers.gov.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">34 / 0</td><td class="n">2026-08-25</td><td class="err"></td><td class="note">TLS-fingerprint 403 solved by Scrapling. Publishes no dates; several captured pages are program pages, which the judge now separates from news.</td></tr>
+<tr><td><b>Parliament of Australia — Bills &amp; Legislation</b><br><span class="u">aph.gov.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">8 / 0</td><td class="n">2026-08-20</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>Property Council of Australia</b><br><span class="u">propertycouncil.com.au</span></td><td class="m">rss</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">12 / 5</td><td class="n">2026-08-25</td><td class="err"></td><td class="note">Parser silent for 527 consecutive fetches until fixed; now 12 / 7d on RSS.</td></tr>
+<tr><td><b>PV Magazine Australia</b><br><span class="u">pv-magazine-australia.com</span></td><td class="m">rss</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">24 / 5</td><td class="n">2026-08-26</td><td class="err"></td><td class="note">Flagged by the client on 21 Aug; now RSS plus newsletter (24 / 7d).</td></tr>
+<tr><td><b>RACE for 2030</b><br><span class="u">racefor2030.com.au</span></td><td class="m">rss</td><td><span class="badge" style="color:#854d0e;background:#fef9c3">QUIET</span></td><td class="n">0 / 0</td><td class="n">—</td><td class="err"></td><td class="note">Fetch succeeds; the publisher has simply released nothing in the window. Quiet is watched, not hidden.</td></tr>
+<tr><td><b>RenewEconomy</b><br><span class="u">reneweconomy.com.au</span></td><td class="m">rss</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">51 / 12</td><td class="n">2026-08-26</td><td class="err"></td><td class="note">Flagged by the client on 21 Aug; now RSS plus the daily newsletter into the intake mailbox (51 / 7d).</td></tr>
+<tr><td><b>RenewEconomy — David Leitch</b><br><span class="u">reneweconomy.com.au</span></td><td class="m">rss</td><td><span class="badge" style="color:#854d0e;background:#fef9c3">QUIET</span></td><td class="n">0 / 0</td><td class="n">2026-08-11</td><td class="err"></td><td class="note">Fetch succeeds; the publisher has simply released nothing in the window. Quiet is watched, not hidden.</td></tr>
+<tr><td><b>SEC Victoria</b><br><span class="u">secvictoria.com.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">9 / 0</td><td class="n">2026-08-23</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>Smart Energy Council</b><br><span class="u">smartenergy.org.au</span></td><td class="m">rss</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">7 / 1</td><td class="n">2026-08-26</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>Solar Victoria</b><br><span class="u">solar.vic.gov.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#854d0e;background:#fef9c3">QUIET</span></td><td class="n">0 / 0</td><td class="n">2026-07-31</td><td class="err"></td><td class="note">Quiet since 31 Jul. Publishes rarely; worth a manual glance if it stays silent past mid-September.</td></tr>
+<tr><td><b>The Fifth Estate</b><br><span class="u">thefifthestate.com.au</span></td><td class="m">rss</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">9 / 0</td><td class="n">2026-08-24</td><td class="err"></td><td class="note">Flagged by the client on 21 Aug; now healthy on RSS (9 / 7d).</td></tr>
+<tr><td><b>VicGrid</b><br><span class="u">vicgrid.com.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">1 / 0</td><td class="n">2026-08-23</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>Victorian Energy Upgrades — News</b><br><span class="u">energy.vic.gov.au</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">8 / 0</td><td class="n">2026-08-23</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>Victorian Energy Upgrades — Program Updates</b><br><span class="u">esc.vic.gov.au</span></td><td class="m">rss</td><td><span class="badge" style="color:#854d0e;background:#fef9c3">QUIET</span></td><td class="n">0 / 0</td><td class="n">2026-08-03</td><td class="err"></td><td class="note">Feed publishes rarely; last item 3 Aug. Quiet, not broken.</td></tr></table>
+
+<h2>International Industry Updates</h2>
+<table><tr><th>Source</th><th>Method</th><th>Status</th><th>Articles 7d/24h</th><th>Last article</th><th>Error</th><th>Reason / remedy</th></tr>
+<tr><td><b>S&amp;P Global — Natural Gas</b><br><span class="u">spglobal.com</span></td><td class="m">sitemap</td><td><span class="badge" style="color:#991b1b;background:#fee2e2">FAILING</span></td><td class="n">0 / 0</td><td class="n">—</td><td class="err">empty ×12</td><td class="note">Sitemap fetches (1.1 MB) but yields no recent articles. Under watch: either the section is quiet or the sitemap is the wrong one - not yet proven either way.</td></tr>
+<tr><td><b>Energy Tracker Asia</b><br><span class="u">energytracker.asia</span></td><td class="m">rss</td><td><span class="badge" style="color:#854d0e;background:#fef9c3">QUIET</span></td><td class="n">0 / 0</td><td class="n">2026-08-03</td><td class="err"></td><td class="note">Fetch succeeds; the publisher has simply released nothing in the window. Quiet is watched, not hidden.</td></tr>
+<tr><td><b>European Commission — Energy</b><br><span class="u">energy.ec.europa.eu</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">1 / 0</td><td class="n">2026-08-19</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>IEA</b><br><span class="u">iea.org</span></td><td class="m">scrape</td><td><span class="badge" style="color:#374151;background:#e5e7eb">OFF — account</span></td><td class="n">0 / 0</td><td class="n">—</td><td class="err">login required</td><td class="note">Account wall (HTTP 403 to every fetcher). Replaced by newsletter intake; the old scrape source is retired at 527 consecutive failures.</td></tr>
+<tr><td><b>IEA — Energy Efficiency</b><br><span class="u">iea.org</span></td><td class="m">scrape</td><td><span class="badge" style="color:#374151;background:#e5e7eb">OFF — pending</span></td><td class="n">0 / 0</td><td class="n">—</td><td class="err"></td><td class="note">Successor to the IEA scrape, awaiting the newsletter route. Never run yet.</td></tr>
+<tr><td><b>IEEFA</b><br><span class="u">ieefa.org</span></td><td class="m">rss</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">14 / 4</td><td class="n">2026-08-25</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>IRENA</b><br><span class="u">irena.org</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">1 / 0</td><td class="n">2026-08-19</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>NZ Herald — Energy</b><br><span class="u">nzherald.co.nz</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">7 / 1</td><td class="n">2026-08-25</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>Renewables Now</b><br><span class="u">renewablesnow.com</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">167 / 33</td><td class="n">2026-08-25</td><td class="err"></td><td class="note">Highest-volume source (167 articles / 7d). Rate-limits (HTTP 429) under parallel fetching - per-host politeness is mandatory. No date in its markup; dates are read from each article page.</td></tr>
+<tr><td><b>Reuters — Carbon Markets</b><br><span class="u">reuters.com</span></td><td class="m">scrape</td><td><span class="badge" style="color:#374151;background:#e5e7eb">OFF — account</span></td><td class="n">0 / 0</td><td class="n">—</td><td class="err">login required</td><td class="note">Account wall (HTTP 401). A genuine login, not a fingerprint block. Route is the free Reuters newsletter into the intake mailbox; inactive until that lands so it cannot report false health.</td></tr>
+<tr><td><b>S&amp;P Global — Crude Oil</b><br><span class="u">spglobal.com</span></td><td class="m">sitemap</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">7 / 7</td><td class="n">2026-08-26</td><td class="err"></td><td class="note">Same block as the parent section; read from its own sitemap. Working since 26 Aug (7 articles, including the exact stories the client flagged missing).</td></tr>
+<tr><td><b>S&amp;P Global — Energy Transition</b><br><span class="u">spglobal.com</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">44 / 0</td><td class="n">2026-08-24</td><td class="err"></td><td class="note">Older scrape source. TLS-fingerprint 403 solved by the Scrapling fetcher; captures the newsroom listing, which yields little and no dates.</td></tr>
+<tr><td><b>S&amp;P Global — Latest News</b><br><span class="u">spglobal.com</span></td><td class="m">sitemap</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">14 / 14</td><td class="n">2026-08-26</td><td class="err"></td><td class="note">Listing is client-rendered and the edge refuses a headless browser (403), so neither ordinary tier can work. Read from its XML sitemap instead - working since 26 Aug (14 articles first day).</td></tr>
+<tr><td><b>UNFCCC</b><br><span class="u">unfccc.int</span></td><td class="m">scrape</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">4 / 1</td><td class="n">2026-08-25</td><td class="err"></td><td class="note">Fetches and parses cleanly on schedule.</td></tr>
+<tr><td><b>US Department of Energy</b><br><span class="u">energy.gov</span></td><td class="m">rss</td><td><span class="badge" style="color:#166534;background:#dcfce7">WORKING</span></td><td class="n">5 / 0</td><td class="n">2026-08-24</td><td class="err"></td><td class="note">The energy.gov miss of 21 Aug; now healthy on RSS (5 / 7d).</td></tr></table>
+
+<div class="pagebreak"></div>
+<h2>The errors that occur, and what each one means</h2>
+<table>
+<tr><th>Error class</th><th>How it shows</th><th>Real examples</th><th>Remedy in place</th></tr>
+<tr><td><b>TLS-fingerprint block</b></td><td>HTTP 403 to plain fetch and to headless Chromium alike</td><td>DCCEEW, S&amp;P Global, EcoGeneration, NABERS</td><td>Scrapling fetcher impersonates Chrome's TLS handshake; all four now return 200</td></tr>
+<tr><td><b>Client-rendered listing</b></td><td>HTTP 200 but the HTML contains no article links</td><td>S&amp;P Global sections, vic-premier, aer-registers</td><td>S&amp;P read from its XML sitemaps; the two XHR registers remain open items and fail visibly</td></tr>
+<tr><td><b>Account wall</b></td><td>401/403 that no fetcher can pass — a genuine login</td><td>Reuters, IEA, The Australian, AFR article bodies</td><td>Newsletters subscribed into the intake mailbox (tier 0); CEC member portal has a tier-3 login</td></tr>
+<tr><td><b>Rate limiting</b></td><td>HTTP 429 when a host is hit in parallel — looks identical to "no data" if unhandled</td><td>Renewables Now (23 of 31 "dateless" articles were really 429s); S&amp;P sitemaps fetched as a burst</td><td>Per-host serialisation with delay; sitemap fetches staggered; 429 recorded as blocked and retried, never written off</td></tr>
+<tr><td><b>No publication date in markup</b></td><td>Article captured but dated by fetch time — lands in the wrong day's report</td><td>7 sources in 10; measured: one article in three mis-filed</td><td>Article pages opened and article:published_time / JSON-LD read; three quality passes daily; the 23:00 pass closes the day</td></tr>
+<tr><td><b>Unrecognised markup</b></td><td>Fetch reports "ok" while the parser finds nothing, for weeks</td><td>PCA (527 straight), Energy Rating/GEMS (71), CEC ("Find out more" links)</td><td>Parser fixes plus per-tier attempt logging, so "ok but empty" is visible per run</td></tr>
+<tr><td><b>Navigation captured as news</b></td><td>Site furniture enters the corpus and scores well</td><td>AEMO podcast page, "IT change &amp; release management", DWGM/ISP explainers, "Legal notice"</td><td>Model judge (news vs reference) holds standing pages out of the sheet; undecided ships</td></tr>
+<tr><td><b>Archive unlock flood</b></td><td>A parser fix suddenly makes years-old pages look like today's news</td><td>40 CEC articles from 2022 (23 Aug); 484 stale-dated found on 26 Aug</td><td>report_eligible hold, applied automatically the moment a resolved date proves an article old</td></tr>
+<tr><td><b>Scoring outage</b></td><td>LLM quota exhausted; unscored articles would silently vanish from the sheet</td><td>Gemini daily quota, 25 Aug</td><td>Score coalesced to 0 (ranked last, not dropped); backlog scored when quota returns</td></tr>
+<tr><td><b>Send failure</b></td><td>Report renders but the mail does not arrive</td><td>DKIM failure silently discarded by Gmail (to 24 Aug); Graph 400 on semicolon recipients (26 Aug)</td><td>Send moved to Microsoft Graph (Microsoft-signed); non-202 throws so a failed send can never be recorded as sent</td></tr>
+</table>
+
+<h2>The two missing-article reports, diagnosed</h2>
+
+<h3>21 August — the first complaint (~20 URLs)</h3>
+<div class="box">Root causes, each since fixed: <b>unrecognised markup</b> (DCCEEW chrome filter, CEC link text,
+PCA and GEMS parsers — sources reported "ok" while returning nothing), <b>TLS blocks</b> (EcoGeneration and
+others, solved by the Scrapling fetcher), <b>account walls</b> (IEA, energy.gov then unregistered, AFR bodies —
+newsletter routes and new RSS sources), and <b>listing roll-off</b> on high-volume sites between hourly fetches
+(RenewEconomy, PV Magazine, Fifth Estate, Renewables Now — all now on RSS/newsletter and healthy: 51, 24, 9
+and 167 articles this week respectively).</div>
+
+<h3>25 August — the second complaint (26 URLs)</h3>
+<div class="box">Checked one by one against the database: <b>21 of 26 had been fetched all along.</b> They were
+invisible for different reasons: <b>11</b> dated by fetch time into the wrong day (the date-drift fault, one in
+three articles), <b>3</b> cut by one point at the then-floor of 16, <b>2</b> scored 0 by an over-tight rule
+(since softened), <b>1</b> a physics explainer, correctly absent. The <b>4 S&amp;P stories were genuinely never
+fetched</b> — we monitored a different S&amp;P section, and the right one is double-blocked (client-rendered
++ edge 403). Its sitemaps are now registered and delivering; the exact flagged stories were captured on the
+first working run.</div>
+
+<h2>What is read before each daily report</h2>
+<div class="box">Hourly, every source is fetched down a five-tier ladder (email → direct → browser → login →
+model) with every attempt logged. Every 30 minutes new articles are scored (the scorer exits instantly when
+there is nothing new). Three times a day — 06:00, 12:00 and 23:00 — the quality pass opens undated articles to
+read their true publication date, judges news from standing pages, and writes a coverage line: fetched, dated,
+undated, wrong-day-corrected, and sources that ran clean but returned nothing. The 23:00 pass completes the
+day before it closes. At 05:00 the report queries the finished prior day — floor 1, no reference pages, no
+stale-dated items, minus everything already sent (the ledger guarantees nothing is lost to midnight and
+nothing repeats). Current volume: ~90–190 items per morning across the three brief categories.</div>
+
+<div class="pagebreak"></div>
+<h2>How to capture more, and the two libraries asked about</h2>
+
+<h3>github.com/D4Vinci/Scrapling — already integrated</h3>
+<div class="box">This is not a proposal; it is running. The <b>bext-scrapling</b> container on the VPS is built
+on exactly this library — it is what impersonates Chrome's TLS fingerprint and turned the DCCEEW, S&amp;P,
+EcoGeneration and NABERS 403s into 200s, and it fetches every article page the date-reader opens. It is tier 1
+of the retrieval ladder.</div>
+
+<h3>github.com/firecrawl/firecrawl — worth a pilot, for a narrow job</h3>
+<div class="box warn">Firecrawl self-hosts as a crawl-and-extract service with real JavaScript rendering and
+LLM-assisted extraction. Honest assessment: <b>most of what it offers, the pipeline now already does</b> —
+fetching, link discovery, per-page metadata, model fallback. Its genuine advantage is executing a page's
+JavaScript and waiting for XHR content, which is precisely the one unsolved class: <b>vic-premier</b> and
+<b>aer-registers</b>, and proving whether S&amp;P natural-gas is quiet or wrong. Recommendation: pilot it
+self-hosted against those two or three sources as an additional ladder tier, rather than replacing a working
+stack wholesale. Cost: one more container (~1–2 GB RAM) on a VPS that also runs an 8B model — check headroom
+before committing. If the pilot solves the XHR pair, keep it for that tier alone.</div>
+
+<h3>Beyond the two libraries — the levers that add the most articles next</h3>
+<ul class="small">
+<li><b>Land the newsletters.</b> Reuters, IEA and The Australian content only arrives by mail; the intake workflow exists — finishing the subscriptions is the cheapest coverage gain left.</li>
+<li><b>Capture the two XHR endpoints</b> (vic-premier, aer-registers) — by hand in browser dev-tools, or by the Firecrawl pilot.</li>
+<li><b>Resolve S&amp;P natural-gas</b>: confirm quiet vs wrong sitemap, and register further S&amp;P sections (electric-power, LNG) the same proven way.</li>
+<li><b>Wire the quiet-source alert to Teams.</b> The coverage line already counts sources that ran clean and returned nothing; nobody is paged yet. This turns the next silent failure into a same-day fix instead of a client complaint.</li>
+<li><b>CEC member portal (tier 3)</b> is built and awaiting the credential — unlocks member-only content, licensing permitting.</li>
+</ul>
+
+<div class="sub" style="margin-top:16px">BEXT Consultancy · automation stack · generated 26 August 2026 · sources of truth: sources/registry.yaml, live database, fetch_attempts log</div>
+</body></html>
