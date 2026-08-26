@@ -230,7 +230,8 @@ sources:
   - slug: aer-registers
     name: AER — Registers Status
     category: Industry Updates
-    url: "https://www.aer.gov.au/industry/registers"
+    url: "https://www.aer.gov.au/industry/registers/decisions"
+    firecrawl: true
     method: scrape
     filter:
       path_contains:
@@ -373,6 +374,7 @@ sources:
     name: "Victorian Premier — Energy & Climate Media"
     category: Industry Updates
     url: "https://www.premier.vic.gov.au/media-centre?portfolio=Climate+Action&portfolio=Energy+and+Resources&portfolio=Industry+and+Innovation&portfolio=Resources&portfolio=Small+Business&portfolio=State+Electricity+Commission"
+    firecrawl: true
     method: scrape
     requires_browser: true
   - slug: nabers

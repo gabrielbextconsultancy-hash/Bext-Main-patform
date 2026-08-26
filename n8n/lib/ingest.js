@@ -294,6 +294,30 @@ function looksLikeArticle(html) {
   return null;
 }
 
+/**
+ * Markdown [headline](url) pairs, as plain anchors parseIndex can read.
+ *
+ * Firecrawl's html capture can be the pre-hydration shell even when the render
+ * succeeded — observed on vic-premier: three anchors in the html, nine media
+ * releases in the markdown. The markdown is built from the finished DOM, so its
+ * link pairs are the ground truth for client-rendered listings.
+ *
+ * Lives here rather than in the workflow builder because this file is
+ * interpolated as a value, which keeps regex escapes intact; the same regex
+ * written inline in the builder's template literal was cooked into an invalid
+ * pattern and failed to parse at all.
+ */
+function anchorsFromMarkdown(md) {
+  const out = [];
+  const re = /\[([^\]]{10,200})\]\((https?:\/\/[^\s)]+)\)/g;
+  let m;
+  while ((m = re.exec(String(md || ''))) !== null) {
+    const title = m[1].replace(/\s+/g, ' ').trim();
+    out.push('<a href="' + m[2] + '">' + title + '</a>');
+  }
+  return out.join('\n');
+}
+
 function parseSitemap(xml, baseUrl, { maxAgeDays = 3, limit = 60 } = {}) {
   const cutoff = Date.now() - maxAgeDays * 864e5;
   const out = [];
@@ -451,4 +475,4 @@ function normalise(raw, source) {
     }));
 }
 
-module.exports = { parseFeed, parseIndex, normalise, contentHash, passesFilter, strip, absolute, cleanSyndicatedTitle, dateFromUrl, parseSitemap, publishedFromHtml, looksLikeArticle };
+module.exports = { parseFeed, parseIndex, normalise, contentHash, passesFilter, strip, absolute, cleanSyndicatedTitle, dateFromUrl, parseSitemap, publishedFromHtml, looksLikeArticle, anchorsFromMarkdown };

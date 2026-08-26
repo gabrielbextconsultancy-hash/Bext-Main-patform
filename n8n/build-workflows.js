@@ -298,20 +298,76 @@ async function fetchOne(s) {
       return r.html || '';
     };
 
+    const viaFirecrawl = async () => {
+      // The hosted renderer, for the two sources whose articles exist only after
+      // client-side JavaScript runs — vic-premier and the AER registers. Scrapling
+      // sees an empty shell there and our own Chromium is refused or times out;
+      // Firecrawl's browser cluster returned 9 real media releases from a page
+      // that had yielded zero links through 428 consecutive local attempts.
+      const key = $env.FIRECRAWL_API_KEY;
+      if (!key) throw new Error('FIRECRAWL_API_KEY not set');
+      const r = await helpers.httpRequest({
+        method: 'POST', url: 'https://api.firecrawl.dev/v2/scrape',
+        json: true, timeout: 150000,
+        headers: { Authorization: 'Bearer ' + key },
+        body: {
+          url: target, formats: ['markdown', 'html'], waitFor: 8000,
+          // The listings hydrate in stages; a scroll forces the lazy batch.
+          actions: [
+            { type: 'wait', milliseconds: 5000 },
+            { type: 'scroll', direction: 'down' },
+            { type: 'wait', milliseconds: 3000 },
+          ],
+        },
+      });
+      if (!r || !r.success || !r.data) {
+        throw new Error('firecrawl: ' + String((r && r.error) || 'no data').slice(0, 120));
+      }
+      // The html capture can be the pre-hydration shell even when the render
+      // succeeded — observed on vic-premier: three anchors in the html, nine
+      // media releases in the markdown. The markdown is built from the finished
+      // DOM, so its [headline](url) pairs are the ground truth. Turn them into
+      // plain anchors and append: parseIndex dedupes by URL and keeps the longer
+      // title, so when both carry a story nothing doubles.
+      return (r.data.html || '') + String.fromCharCode(10) + anchorsFromMarkdown(r.data.markdown);
+    };
+
+    // Firecrawl is metered per render, so flagged sources are fetched four times
+    // a day rather than hourly: morning, midday, evening, and 22:00 to catch the
+    // late releases before the day closes. Media offices publish a handful of
+    // items a day at most — hourly renders would spend 24 credits to learn the
+    // page had not changed 20 times.
+    const melHour = Number(new Date().toLocaleString('en-AU', {
+      timeZone: 'Australia/Melbourne', hour: '2-digit', hour12: false, hourCycle: 'h23',
+    }));
+    const fcWindow = [4, 10, 16, 22].indexOf(melHour) > -1;
+
     let raw = null;
 
     // The tiers, in escalation order. Each says what it costs and when it applies,
     // so the loop below stays a loop rather than a chain of special cases.
     const TIERS = [
-      { n: 1, name: 'scrapling', run: viaScrapling, when: () => true },
-      { n: 2, name: 'browser',   run: viaBrowser,   when: () => true },
+      { n: 1, name: 'scrapling', run: viaScrapling, when: () => true,
+        skip: '' },
+      // For a firecrawl-flagged source the hosted renderer IS the browser tier:
+      // our own Chromium has already proven unable to reach these pages, and six
+      // two-minute retries against a known refusal is not diligence, it is delay.
+      { n: 2, name: 'firecrawl', run: viaFirecrawl,
+        when: () => !!config.firecrawl && fcWindow,
+        skip: config.firecrawl ? 'outside the firecrawl window (04/10/16/22 Melbourne)' : '' },
+      { n: 2, name: 'browser',   run: viaBrowser,   when: () => !config.firecrawl,
+        skip: 'firecrawl replaces the local browser for this source' },
       // Only where a login recipe is configured; otherwise this tier is a
       // guaranteed failure and logging it as one would be noise, not signal.
-      { n: 3, name: 'session',   run: viaSession,   when: () => !!config.session_site },
+      { n: 3, name: 'session',   run: viaSession,   when: () => !!config.session_site,
+        skip: 'no login configured' },
     ];
 
     for (const tier of TIERS) {
-      if (!tier.when()) { record(tier.n, 'skipped', 0, 'no login configured'); continue; }
+      if (!tier.when()) {
+        if (tier.skip) record(tier.n, 'skipped', 0, tier.skip);
+        continue;
+      }
 
       const started = Date.now();
       let got;

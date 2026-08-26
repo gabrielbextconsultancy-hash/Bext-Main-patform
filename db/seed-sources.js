@@ -39,6 +39,9 @@ const client = new Client({
     const config = {};
     if (s.feed_url) config.feed_url = s.feed_url;
     if (s.requires_browser) config.requires_browser = true;
+    // Firecrawl renders this source's client-side JavaScript. Carried explicitly:
+    // the seeder drops unknown keys, which is how feed_url once vanished.
+    if (s.firecrawl) config.firecrawl = true;
     if (s.filter) config.filter = s.filter;
     if (s.note) config.note = s.note;
     if (s.selectors) config.selectors = s.selectors;

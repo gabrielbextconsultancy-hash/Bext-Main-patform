@@ -147,6 +147,13 @@ services:
       # Read by the analysis workflow's Code node as $env.GEMINI_API_KEY.
       GEMINI_API_KEY: ${GEMINI_API_KEY}
 
+      # Read by Source Ingest's ladder as $env.FIRECRAWL_API_KEY — the hosted
+      # renderer for the two client-side sources (vic-premier, aer-registers)
+      # that no local tier can read. Must be declared here: this service takes
+      # an explicit environment list, so a key added only to .env never reaches
+      # the container — which is exactly how this one silently failed to load.
+      FIRECRAWL_API_KEY: ${FIRECRAWL_API_KEY}
+
       # Read by the daily report's render node and the SMTP send node.
       REPORT_SENDER: ${REPORT_SENDER}
       REPORT_RECIPIENT: ${REPORT_RECIPIENT}
