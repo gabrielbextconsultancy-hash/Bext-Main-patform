@@ -1593,8 +1593,13 @@ if (!TENANT || !CLIENT || !SECRET || !FROM) {
   throw new Error('Graph send needs MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET and MS_SENDER_UPN');
 }
 
-// One address per recipient. REPORT_RECIPIENT is a comma-separated list.
-const rcpts = String(R.recipient || '').split(',').map(function (s) { return s.trim(); })
+// One address per recipient. Split on both separators: REPORT_RECIPIENT is
+// written comma-separated, but the renderer joins the list with '; ' and it is
+// the rendered value that arrives here. Splitting on commas alone handed Graph
+// the whole string as a single address, which it rejected with a 400 — the
+// 26 Aug 2026 report rendered 174 items and never sent. SMTP had tolerated the
+// semicolon, so the fault only appeared when the send moved to Graph.
+const rcpts = String(R.recipient || '').split(/[;,]/).map(function (s) { return s.trim(); })
   .filter(Boolean).map(function (a) { return { emailAddress: { address: a } }; });
 if (!rcpts.length) throw new Error('no recipients on the rendered report');
 
