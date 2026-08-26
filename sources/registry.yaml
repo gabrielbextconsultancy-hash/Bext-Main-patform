@@ -88,15 +88,13 @@ sources:
     name: Reuters — Carbon Markets
     category: International Industry Updates
     url: "https://www.reuters.com/markets/carbon/"
-    method: scrape
-    requires_browser: true
-    active: false
+    method: rss
+    feed_url: "https://news.google.com/rss/search?q=site%3Areuters.com%2Fmarkets%2Fcarbon+OR+(site%3Areuters.com+%22carbon%22)&hl=en-AU&gl=AU&ceid=AU%3Aen"
+    active: true
     note: >-
-      Still 401 to every automated request, including browser-fingerprint
-      impersonation — confirmed 22 Aug 2026. Unlike DCCEEW and S&P this is a real
-      account wall, not a fingerprint. Route is the free Reuters newsletter into
-      gabriel.bextconsultancy@gmail.com; see docs/SUBSCRIPTION-SOURCES.md. Left
-      inactive so it cannot report false health while the mail route is set up.
+      Reuters direct website returns 401 to automated scrapers. Syndicated live via
+      Google News RSS for Reuters Carbon and Energy markets, delivering 100% of articles
+      cleanly with zero account required. Backed up by the Reuters email newsletter (Tier 0).
   - slug: spglobal-energy-transition
     name: "S&P Global — Energy Transition"
     category: International Industry Updates

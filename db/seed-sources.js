@@ -42,6 +42,7 @@ const client = new Client({
     // Firecrawl renders this source's client-side JavaScript. Carried explicitly:
     // the seeder drops unknown keys, which is how feed_url once vanished.
     if (s.firecrawl) config.firecrawl = true;
+    if (s.session_site) config.session_site = s.session_site;
     if (s.filter) config.filter = s.filter;
     if (s.note) config.note = s.note;
     if (s.selectors) config.selectors = s.selectors;
