@@ -42,6 +42,28 @@ const RECIPES = {
     verify: /Monday Megawatt|Latest News/i,
     deniedBy: /\/account\/forgotpassword|name=["']password["']/i,
   },
+  'afr': {
+    name: 'Australian Financial Review',
+    loginUrl: 'https://www.afr.com/login',
+    userSelector: 'input[type="email"], input[name="username"], input[name="email"], #email',
+    passSelector: 'input[type="password"], input[name="password"], #password',
+    submitSelector: 'button[type="submit"], input[type="submit"]',
+    userEnv: 'AFR_USER',
+    passEnv: 'AFR_PASS',
+    verify: /Sign out|My Account|Log out|Subscriber/i,
+    deniedBy: /Sign in to your account|name=["']password["']/i,
+  },
+  'the-australian': {
+    name: 'The Australian',
+    loginUrl: 'https://www.theaustralian.com.au/login',
+    userSelector: 'input[type="email"], input[name="username"], input[name="email"], #email',
+    passSelector: 'input[type="password"], input[name="password"], #password',
+    submitSelector: 'button[type="submit"], input[type="submit"]',
+    userEnv: 'THE_AUSTRALIAN_USER',
+    passEnv: 'THE_AUSTRALIAN_PASS',
+    verify: /Sign out|My Account|Log out|Subscriber/i,
+    deniedBy: /Log in to The Australian|name=["']password["']/i,
+  },
 };
 
 const listRecipes = () => Object.keys(RECIPES);
@@ -52,13 +74,35 @@ const listRecipes = () => Object.keys(RECIPES);
  */
 const contexts = new Map();
 
-const newContext = (browser) => browser.newContext({
-  userAgent:
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-  locale: 'en-AU',
-  timezoneId: 'Australia/Melbourne',
-  viewport: { width: 1440, height: 900 },
-});
+const newContext = async (browser, site) => {
+  const context = await browser.newContext({
+    userAgent:
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    locale: 'en-AU',
+    timezoneId: 'Australia/Melbourne',
+    viewport: { width: 1440, height: 900 },
+  });
+
+  // Inject standing cookies from SOURCE_COOKIES if available
+  try {
+    const rawCookies = process.env.SOURCE_COOKIES ? JSON.parse(process.env.SOURCE_COOKIES) : null;
+    if (rawCookies) {
+      for (const [host, cData] of Object.entries(rawCookies)) {
+        const cookieList = Array.isArray(cData)
+          ? cData
+          : Object.entries(cData).map(([name, value]) => ({
+              name,
+              value: String(value),
+              domain: host.startsWith('.') ? host : '.' + host,
+              path: '/',
+            }));
+        await context.addCookies(cookieList);
+      }
+    }
+  } catch (e) {}
+
+  return context;
+};
 
 async function signIn(browser, site) {
   const r = RECIPES[site];

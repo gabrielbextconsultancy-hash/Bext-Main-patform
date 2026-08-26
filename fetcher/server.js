@@ -62,6 +62,28 @@ async function render(url, { waitFor = 'domcontentloaded', timeout = NAV_TIMEOUT
     extraHTTPHeaders: { 'Accept-Language': 'en-AU,en;q=0.9' },
   });
 
+  // Inject standing session cookies from SOURCE_COOKIES if available
+  try {
+    const rawCookies = process.env.SOURCE_COOKIES ? JSON.parse(process.env.SOURCE_COOKIES) : null;
+    if (rawCookies) {
+      const uHost = new URL(url).hostname;
+      const hostCookies = rawCookies[uHost] || rawCookies[uHost.replace(/^www\./, '')];
+      if (hostCookies) {
+        const cookieList = Array.isArray(hostCookies)
+          ? hostCookies
+          : Object.entries(hostCookies).map(([name, value]) => ({
+              name,
+              value: String(value),
+              domain: uHost.startsWith('.') ? uHost : '.' + uHost,
+              path: '/',
+            }));
+        await context.addCookies(cookieList);
+      }
+    }
+  } catch (e) {
+    // Ignore invalid cookie JSON
+  }
+
   // navigator.webdriver is the single most common bot tell.
   await context.addInitScript(() => {
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined });

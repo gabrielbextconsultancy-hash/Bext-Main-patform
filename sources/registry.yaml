@@ -65,15 +65,11 @@ sources:
     category: Australian News
     url: "https://www.afr.com/companies/energy"
     method: scrape
+    session_site: afr
     note: >-
-      The index page is readable and headlines are collected from it, but article
-      bodies are behind a subscriber wall ("already a subscriber"), so scoring
-      sees only the headline and standfirst. AFR retired its RSS feeds — the
-      /newsfeed/about page now offers only subscribe links. Two ways to deepen
-      this: the free AFR newsletters into the ingest mailbox, or a session cookie
-      from a logged-in subscriber in SOURCE_COOKIES. See
-      docs/SUBSCRIPTION-SOURCES.md. Several articles the client flagged as
-      missing on 21 Aug 2026 were AFR ones.
+      The index page is readable and headlines are collected from it. With session_site: afr,
+      authenticated Tier 3 session fetch passes credentials or standing cookies to retrieve
+      full article bodies past the subscriber wall.
   - slug: conversation-au
     name: "The Conversation AU — Environment & Energy"
     category: Australian News
