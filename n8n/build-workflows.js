@@ -34,7 +34,12 @@ const INGEST_SRC = fs
 // to keep a site's standing pages out of a daily briefing.
 const CLASSIFY_SRC = fs
   .readFileSync(path.join(__dirname, 'lib', 'classify-kind.js'), 'utf8')
-  .replace(/^module\.exports\s*=.*$/m, '');
+  .replace(/^module\.exports\s*=.*$/m, '')
+  // The pragma must not survive inlining: as the first statement of a Code node
+  // it puts the whole script in strict mode, where the unbound call n8n makes
+  // leaves top-level `this` undefined — and this.helpers with it. Two quality
+  // passes died on exactly that before anyone saw a coverage row.
+  .replace(/^'use strict';$/m, '');
 
 // The model-backed fallback reader, minus its export line. Runs only when the
 // ordinary parser finds nothing, so a broken source degrades instead of dying.
