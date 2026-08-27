@@ -462,7 +462,7 @@ sources:
   - slug: a2ep-aidc
     name: Australian Alliance for Energy Productivity (AIDC)
     category: Industry Updates
-    url: "https://aidc.org.au/aidc-media-releases/"
+    url: "https://www.a2ep.org.au/news"
     method: scrape
     note: Australian Alliance for Energy Productivity now trades as AIDC; the brief link already points at aidc.org.au.
   - slug: ahc

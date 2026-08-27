@@ -46,9 +46,9 @@ export interface ArchitectureGraph {
 }
 
 export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
-  "generatedAt": "2026-08-27T10:33:38.906Z",
+  "generatedAt": "2026-08-27T10:56:42.179Z",
   "workflowCount": 15,
-  "edgeCount": 45,
+  "edgeCount": 47,
   "workflows": [
     {
       "slug": "BEXT-Article-Analysis",
@@ -915,12 +915,14 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
       },
       "tablesRead": [
         "articles",
+        "incidents",
         "report_items",
         "reports",
         "sources"
       ],
       "tablesWritten": [
         "articles",
+        "incidents",
         "integration_health"
       ],
       "nodes": [
@@ -1011,6 +1013,50 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
           "writes": [
             "integration_health"
           ],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "quiet",
+          "name": "Quiet sources",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [
+            "articles",
+            "incidents",
+            "sources"
+          ],
+          "writes": [],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "doctor",
+          "name": "Diagnose quiet sources",
+          "type": "n8n-nodes-base.code",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "incid",
+          "name": "Record incidents",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [
+            "incidents"
+          ],
+          "writes": [
+            "incidents"
+          ],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "page",
+          "name": "Page Teams",
+          "type": "n8n-nodes-base.code",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
           "alwaysOutputData": true
         },
         {
@@ -1467,6 +1513,12 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
     },
     {
       "from": "BEXT-News-Quality",
+      "to": "BEXT-Self-Heal",
+      "table": "incidents",
+      "domain": "ops"
+    },
+    {
+      "from": "BEXT-News-Quality",
       "to": "BEXT-Source-Ingest",
       "table": "articles",
       "domain": "cross_domain"
@@ -1518,6 +1570,12 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
       "to": "BEXT-Source-Ingest",
       "table": "newsletter_messages",
       "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Self-Heal",
+      "to": "BEXT-News-Quality",
+      "table": "incidents",
+      "domain": "ops"
     },
     {
       "from": "BEXT-Source-Ingest",

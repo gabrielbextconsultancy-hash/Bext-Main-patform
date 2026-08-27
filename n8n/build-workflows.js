@@ -1647,6 +1647,11 @@ ON CONFLICT (report_id, article_id) DO NOTHING`,
         typeVersion: 2, position: pos(720, 0),
         parameters: {
           jsCode: `
+// The sandbox withholds the url globals; an unrequired URLSearchParams would
+// have failed tomorrow's send with a third, different error. Preflight R001
+// caught it tonight instead of the 05:00 run.
+const { URLSearchParams } = require('url');
+
 const R = $('Render HTML').first().json;
 const TENANT = $env.MS_TENANT_ID, CLIENT = $env.MS_CLIENT_ID, SECRET = $env.MS_CLIENT_SECRET;
 const FROM = $env.MS_SENDER_UPN;
@@ -2011,6 +2016,172 @@ return [{ json: {
 } }];
 `;
 
+
+// The Source Doctor — the automated version of the diagnosis run by hand on
+// S&P: probe the listing, read the evidence, check robots.txt for a sitemap,
+// verify it carries recent news, and hand a person the exact remedy. It
+// proposes, never rewrites: the registry stays the source of truth, and a
+// machine editing it invisibly is how a pipeline starts lying about itself.
+const DOCTOR_CODE = `
+const { URL } = require('url');
+${INGEST_SRC}
+
+const helpers = this.helpers;
+const SCRAPLING = 'http://scrapling:8090/fetch';
+const rows = $input.all().map(i => i.json).filter(r => r && r.slug);
+
+// Three sources a pass, two and a half minutes total. Diagnosis is a background
+// duty of a quality pass, not its job; a hung probe must not eat the run.
+const DEADLINE = Date.now() + 150000;
+
+const fetchPage = async (u) => {
+  const r = await helpers.httpRequest({
+    method: 'POST', url: SCRAPLING, json: true, timeout: 45000,
+    body: { url: u, include_html: true, timeout: 30 },
+  });
+  return { status: (r && r.status) || 0, html: (r && r.html) || '' };
+};
+
+const findings = [];
+
+for (const s of rows) {
+  if (Date.now() > DEADLINE) break;
+  const target = (s.feed_url && s.method !== 'scrape') ? s.feed_url : s.url;
+  let verdict = 'unknown', remedy = '', evidence = [];
+
+  try {
+    const page = await fetchPage(target);
+    evidence.push('probe ' + page.status + ', ' + Math.round(page.html.length / 1024) + ' KB');
+
+    if (page.status >= 400) {
+      // A refusal is a class, and the class decides the remedy. No scraping
+      // service passes a genuine login, so 401/403 points at the mail route.
+      verdict = 'refused (' + page.status + ')';
+      remedy = page.status === 401 || page.status === 403
+        ? 'A wall. If a login: subscribe its newsletter into the intake mailbox (tier 0). If a fingerprint: it should have passed Scrapling - check the URL is still right.'
+        : 'The page is gone or erroring. Check the URL in sources/registry.yaml.';
+    } else {
+      const parsed = s.method === 'rss' ? parseFeed(page.html, target)
+        : s.method === 'sitemap' ? parseSitemap(page.html, target, { maxAgeDays: 7 })
+        : parseIndex(page.html, target);
+      evidence.push('parser found ' + parsed.length + ' items');
+
+      if (parsed.length > 0) {
+        verdict = 'working - publisher quiet';
+        remedy = 'The fetch and parse both work; the publisher has released nothing new. No action.';
+      } else {
+        // 200 with nothing parseable is the client-rendered signature. The
+        // remedy that worked on S&P: find the sitemap the publisher serves
+        // openly, prove it carries recent items, and propose the registry line.
+        verdict = 'listing yields nothing';
+        remedy = 'Client-rendered or unrecognised markup.';
+        let origin = '';
+        try { origin = new URL(target).origin; } catch (e) {}
+        if (origin && Date.now() < DEADLINE) {
+          const robots = await fetchPage(origin + '/robots.txt');
+          const maps = [];
+          for (const line of String(robots.html || '').split(String.fromCharCode(10))) {
+            const t = line.trim();
+            if (t.toLowerCase().indexOf('sitemap:') === 0) maps.push(t.slice(8).trim());
+          }
+          evidence.push(maps.length + ' sitemaps in robots.txt');
+          // Prefer the sitemap that names this source's own path segments.
+          const tokens = target.toLowerCase().split('/').filter(function (x) { return x.length > 3; });
+          maps.sort(function (a, b) {
+            const score = function (m) {
+              let n = 0; const ml = m.toLowerCase();
+              for (const tk of tokens) if (ml.indexOf(tk) > -1) n += 2;
+              if (ml.indexOf('news') > -1) n += 1;
+              return n;
+            };
+            return score(b) - score(a);
+          });
+          if (maps.length && Date.now() < DEADLINE) {
+            const sm = await fetchPage(maps[0]);
+            const items = parseSitemap(sm.html || '', maps[0], { maxAgeDays: 7 });
+            evidence.push('best sitemap: ' + maps[0].slice(0, 90) + ' -> ' + items.length + ' recent items');
+            if (items.length > 0) {
+              verdict = 'sitemap available';
+              remedy = 'Proven route. Paste into sources/registry.yaml under this source:'
+                + String.fromCharCode(10) + '    method: sitemap'
+                + String.fromCharCode(10) + '    feed_url: "' + maps[0] + '"'
+                + String.fromCharCode(10) + 'then node db/seed-sources.js and node n8n/build-workflows.js.';
+            } else {
+              remedy = 'No sitemap carries recent items. Try the firecrawl flag (firecrawl: true) - it solved this class on vic-premier - or capture the page XHR endpoint.';
+            }
+          } else if (!maps.length) {
+            remedy = 'No sitemap declared. Try the firecrawl flag (firecrawl: true), or capture the XHR endpoint in browser dev-tools.';
+          }
+        }
+      }
+    }
+  } catch (e) {
+    verdict = 'probe failed';
+    remedy = String(e.message || e).slice(0, 140);
+    evidence.push('exception during probe');
+  }
+
+  findings.push({
+    slug: s.slug, name: s.name, verdict: verdict, remedy: remedy,
+    evidence: evidence.join(' | '),
+    signature: 'doctor:' + s.slug,
+    // A working source whose publisher is simply quiet needs nobody woken:
+    // paging a person with "no action" is how alerts get ignored. It is still
+    // counted, still re-probed next pass, and pages the moment that changes.
+    actionable: verdict !== 'working - publisher quiet',
+    detail: (s.name + ': ' + verdict + '. ' + evidence.join(' | ') + '. ' + remedy).slice(0, 900),
+  });
+}
+
+const actionable = findings.filter(function (f) { return f.actionable; });
+return [{ json: {
+  incident_rows: JSON.stringify(actionable.map(function (f) {
+    return { signature: f.signature, detail: f.detail };
+  })),
+  findings: actionable,
+  all_findings: findings,
+  diagnosed: findings.length,
+  detail: findings.length + ' diagnosed, ' + actionable.length + ' actionable',
+} }];
+`;
+
+const DOCTOR_PAGE_CODE = `
+// One Teams post per pass, only when there is something to say. The exact
+// posting shape Self-Heal has used successfully all along.
+const https = require('https');
+const { URL } = require('url');
+const d = $('Diagnose quiet sources').first().json;
+const findings = d.findings || [];
+if (!findings.length) return [{ json: { posted: 0 } }];
+
+const hook = $env.TEAMS_DAILY_WEBHOOK_URL;
+if (!hook) return [{ json: { posted: 0, note: 'no Teams webhook configured' } }];
+
+const lines = findings.map(function (f) {
+  return '**' + f.name + '** - ' + f.verdict
+    + String.fromCharCode(10) + '  Evidence: ' + f.evidence
+    + String.fromCharCode(10) + '  Remedy: ' + f.remedy;
+});
+
+const body = JSON.stringify({
+  title: 'Source Doctor: ' + findings.length + ' quiet source' + (findings.length > 1 ? 's' : '') + ' diagnosed',
+  text: lines.join(String.fromCharCode(10) + String.fromCharCode(10)),
+});
+
+await new Promise(function (resolve, reject) {
+  const u = new URL(hook);
+  const req = https.request({
+    hostname: u.hostname, path: u.pathname + u.search, method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+  }, function (res) { res.resume(); res.on('end', resolve); });
+  req.on('error', reject);
+  req.write(body);
+  req.end();
+});
+
+return [{ json: { posted: findings.length } }];
+`;
+
 function newsQualityWorkflow() {
   return {
     name: 'BEXT — News Quality',
@@ -2169,6 +2340,70 @@ WHERE a.id = v.id`,
           options: { queryReplacement: '={{ $json.kind_updates }}' },
         },
       },
+      {
+        id: 'quiet', name: 'Quiet sources', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(560, 320),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          // "Went quiet" means: used to deliver, has delivered nothing for three
+          // days, and is still being fetched. A slow publisher that has never
+          // delivered is not an incident, and paging on every 24-hour lull would
+          // cry wolf sixteen times a day - measured, that is how many sources
+          // are legitimately quiet in any given week. One open incident per
+          // source: no re-page until a person resolves the last one.
+          query: `SELECT s.id, s.slug, s.name, s.url, s.method::text AS method,
+       s.config->>'feed_url' AS feed_url
+FROM sources s
+WHERE s.active
+  AND NOT coalesce(s.email_authoritative, false)
+  AND s.last_fetch_at > now() - interval '26 hours'
+  AND NOT EXISTS (
+    SELECT 1 FROM articles a
+     WHERE a.source_id = s.id AND a.fetched_at > now() - interval '3 days')
+  AND EXISTS (
+    SELECT 1 FROM articles a
+     WHERE a.source_id = s.id
+       AND a.fetched_at BETWEEN now() - interval '30 days' AND now() - interval '3 days')
+  AND NOT EXISTS (
+    SELECT 1 FROM incidents i
+     WHERE i.signature = 'doctor:' || s.slug AND i.resolved_at IS NULL)
+ORDER BY s.slug
+LIMIT 3`,
+        },
+      },
+      {
+        id: 'doctor', name: 'Diagnose quiet sources', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(780, 320),
+        parameters: { jsCode: DOCTOR_CODE },
+      },
+      {
+        id: 'incid', name: 'Record incidents', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(1000, 320),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          // rule_id stays NULL - these are not execution-error rules, and a
+          // foreign key to heal_rules would misfile them. The signature is the
+          // dedupe key: one open incident per source until a person resolves it.
+          query: `INSERT INTO incidents (workflow, signature, action, outcome, detail, escalated_at)
+SELECT 'BEXT — News Quality', x.signature,
+       'escalate'::heal_action, 'escalated'::incident_outcome, x.detail, now()
+FROM json_to_recordset($1::json) AS x(signature text, detail text)
+WHERE NOT EXISTS (
+  SELECT 1 FROM incidents i WHERE i.signature = x.signature AND i.resolved_at IS NULL)`,
+          options: { queryReplacement: '={{ $json.incident_rows }}' },
+        },
+      },
+      {
+        id: 'page', name: 'Page Teams', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(1220, 320),
+        onError: 'continueRegularOutput',
+        alwaysOutputData: true,
+        parameters: { jsCode: DOCTOR_PAGE_CODE },
+      },
       heartbeat('KUMA_PUSH_NEWS_QUALITY', 780, 0),
     ],
     connections: {
@@ -2179,7 +2414,11 @@ WHERE a.id = v.id`,
       'Undated pages to judge': { main: [[{ node: 'News or reference', type: 'main', index: 0 }]] },
       'News or reference': { main: [[{ node: 'Save the verdict', type: 'main', index: 0 }]] },
       'Save the verdict': { main: [[{ node: 'Record coverage', type: 'main', index: 0 }]] },
-      'Record coverage': { main: [[{ node: 'Heartbeat', type: 'main', index: 0 }]] },
+      'Record coverage': { main: [[{ node: 'Quiet sources', type: 'main', index: 0 }]] },
+      'Quiet sources': { main: [[{ node: 'Diagnose quiet sources', type: 'main', index: 0 }]] },
+      'Diagnose quiet sources': { main: [[{ node: 'Record incidents', type: 'main', index: 0 }]] },
+      'Record incidents': { main: [[{ node: 'Page Teams', type: 'main', index: 0 }]] },
+      'Page Teams': { main: [[{ node: 'Heartbeat', type: 'main', index: 0 }]] },
     },
   };
 }
