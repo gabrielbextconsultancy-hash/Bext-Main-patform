@@ -12,7 +12,7 @@ https://www.energy.gov/search?page=0&sort_by=date&f%5B0%5D=article_type%3A1&f%5B
 https://www.nzherald.co.nz/business/companies/energy/
 https://ieefa.org/newsroom?keys=&content_type%5B3%5D=3&tid%5B302%5D=302
 https://energytracker.asia/
-https://renewablesnow.com/regions/latin-america/
+https://renewablesnow.com/news/
 https://www.aemo.com.au/newsroom/news-updates
 https://www.aer.gov.au/news/articles
 https://www.aer.gov.au/industry/registers
@@ -51,6 +51,7 @@ https://cleanenergycouncil.org.au/news-resources
 https://energycouncil.com.au/media/
 https://new.gbca.org.au/news/
 https://www.propertycouncil.com.au/news-research/viewallnews
+https://www.a2ep.org.au/news
 https://aidc.org.au/aidc-media-releases/
 https://smartenergy.org.au/news/sec-news/
 https://euaa.com.au/media-hub/
