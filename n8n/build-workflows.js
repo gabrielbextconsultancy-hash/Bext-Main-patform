@@ -1434,9 +1434,24 @@ const art = (a, h) => (a.image_url
        object-fit:cover;border-radius:5px 5px 0 0;background:#e5e7eb"></a>\`
   : artPanel(a));
 
+// The relevance score, colour-banded to the scoring rubric, on every card.
+// The client asked to see it: the sheet is ranked by this number, and showing
+// it lets a reader judge the ranking instead of trusting it.
+const scoreChip = (a) => {
+  const n = Number(a.relevance_score);
+  if (!Number.isFinite(n)) return '';
+  const band = n >= 80 ? ['#166534', '#dcfce7']
+    : n >= 55 ? ['#0f766e', '#ccfbf1']
+    : n >= 20 ? ['#854d0e', '#fef9c3']
+    : ['#4b5563', '#e5e7eb'];
+  return \`<span style="display:inline-block;font:700 10px/1 Arial,sans-serif;
+    color:\${band[0]};background:\${band[1]};padding:3px 7px;border-radius:9px;
+    vertical-align:middle;margin-right:6px">\${n}</span>\`;
+};
+
 const meta = (a) => \`
   <div style="font:11px/1.4 Arial,sans-serif;color:#9ca3af;margin:6px 0 7px">
-    \${esc(a.source_name)} · \${esc(itemDate(a))}
+    \${scoreChip(a)}\${esc(a.source_name)} · \${esc(itemDate(a))}
   </div>\`;
 
 const headline = (a, size) => \`
