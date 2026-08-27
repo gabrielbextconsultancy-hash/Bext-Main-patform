@@ -4,20 +4,20 @@
   "source": "https://excalidraw.com",
   "elements": [
     {
-      "id": "wf-BEXT-Daily-Report-title",
+      "id": "wf-BEXT-News-Quality-title",
       "type": "text",
       "x": 40,
       "y": 30,
       "width": 600,
       "height": 32,
-      "strokeColor": "#14b8a6",
+      "strokeColor": "#38bdf8",
       "backgroundColor": "transparent",
-      "text": "BEXT — Daily Report",
+      "text": "BEXT — News Quality",
       "fontSize": 22,
       "fontFamily": 1
     },
     {
-      "id": "wf-BEXT-Daily-Report-trigger",
+      "id": "wf-BEXT-News-Quality-trigger",
       "type": "text",
       "x": 40,
       "y": 68,
@@ -25,12 +25,12 @@
       "height": 20,
       "strokeColor": "#94a3b8",
       "backgroundColor": "transparent",
-      "text": "Trigger: Schedule (0 5 * * *) | Domain: BRIEF_A | Tables Read: [article_analysis, articles, report_items, reports, sources] | Tables Written: [articles, integration_health, report_items, reports]",
+      "text": "Trigger: Schedule (0 6 * * *) | Domain: OPS | Tables Read: [articles, report_items, reports, sources] | Tables Written: [articles, integration_health]",
       "fontSize": 13,
       "fontFamily": 1
     },
     {
-      "id": "node-BEXT-Daily-Report-0-box",
+      "id": "node-BEXT-News-Quality-0-box",
       "type": "rectangle",
       "x": 40,
       "y": 120,
@@ -45,7 +45,7 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-0"
+        "node-BEXT-News-Quality-0"
       ],
       "roundness": {
         "type": 3
@@ -57,12 +57,12 @@
       "boundElements": [
         {
           "type": "text",
-          "id": "node-BEXT-Daily-Report-0-text"
+          "id": "node-BEXT-News-Quality-0-text"
         }
       ]
     },
     {
-      "id": "node-BEXT-Daily-Report-0-text",
+      "id": "node-BEXT-News-Quality-0-text",
       "type": "text",
       "x": 48,
       "y": 130,
@@ -77,22 +77,22 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-0"
+        "node-BEXT-News-Quality-0"
       ],
       "roundness": null,
       "seed": 1002,
       "version": 1,
       "versionNonce": 1,
       "isDeleted": false,
-      "text": "Daily 05:00 AEST",
+      "text": "Three times daily AEST",
       "fontSize": 14,
       "fontFamily": 1,
       "textAlign": "center",
       "verticalAlign": "middle",
-      "containerId": "node-BEXT-Daily-Report-0-box"
+      "containerId": "node-BEXT-News-Quality-0-box"
     },
     {
-      "id": "node-BEXT-Daily-Report-0-subtext",
+      "id": "node-BEXT-News-Quality-0-subtext",
       "type": "text",
       "x": 48,
       "y": 169,
@@ -107,7 +107,7 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-0"
+        "node-BEXT-News-Quality-0"
       ],
       "roundness": null,
       "seed": 1003,
@@ -121,7 +121,7 @@
       "verticalAlign": "middle"
     },
     {
-      "id": "arrow-BEXT-Daily-Report-0-arrow",
+      "id": "arrow-BEXT-News-Quality-0-arrow",
       "type": "arrow",
       "x": 240,
       "y": 157.5,
@@ -156,7 +156,7 @@
       "endArrowhead": "arrow"
     },
     {
-      "id": "node-BEXT-Daily-Report-1-box",
+      "id": "node-BEXT-News-Quality-1-box",
       "type": "rectangle",
       "x": 290,
       "y": 120,
@@ -171,7 +171,7 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-1"
+        "node-BEXT-News-Quality-1"
       ],
       "roundness": {
         "type": 3
@@ -183,12 +183,12 @@
       "boundElements": [
         {
           "type": "text",
-          "id": "node-BEXT-Daily-Report-1-text"
+          "id": "node-BEXT-News-Quality-1-text"
         }
       ]
     },
     {
-      "id": "node-BEXT-Daily-Report-1-text",
+      "id": "node-BEXT-News-Quality-1-text",
       "type": "text",
       "x": 298,
       "y": 130,
@@ -203,22 +203,22 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-1"
+        "node-BEXT-News-Quality-1"
       ],
       "roundness": null,
       "seed": 1002,
       "version": 1,
       "versionNonce": 1,
       "isDeleted": false,
-      "text": "Top articles, prior day",
+      "text": "Articles missing a date",
       "fontSize": 14,
       "fontFamily": 1,
       "textAlign": "center",
       "verticalAlign": "middle",
-      "containerId": "node-BEXT-Daily-Report-1-box"
+      "containerId": "node-BEXT-News-Quality-1-box"
     },
     {
-      "id": "node-BEXT-Daily-Report-1-subtext",
+      "id": "node-BEXT-News-Quality-1-subtext",
       "type": "text",
       "x": 298,
       "y": 169,
@@ -233,7 +233,7 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-1"
+        "node-BEXT-News-Quality-1"
       ],
       "roundness": null,
       "seed": 1003,
@@ -247,7 +247,7 @@
       "verticalAlign": "middle"
     },
     {
-      "id": "arrow-BEXT-Daily-Report-1-arrow",
+      "id": "arrow-BEXT-News-Quality-1-arrow",
       "type": "arrow",
       "x": 490,
       "y": 157.5,
@@ -282,14 +282,14 @@
       "endArrowhead": "arrow"
     },
     {
-      "id": "node-BEXT-Daily-Report-2-box",
+      "id": "node-BEXT-News-Quality-2-box",
       "type": "rectangle",
       "x": 540,
       "y": 120,
       "width": 200,
       "height": 75,
       "angle": 0,
-      "strokeColor": "#f43f5e",
+      "strokeColor": "#94a3b8",
       "backgroundColor": "#0f172a",
       "fillStyle": "solid",
       "strokeWidth": 2,
@@ -297,7 +297,7 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-2"
+        "node-BEXT-News-Quality-2"
       ],
       "roundness": {
         "type": 3
@@ -309,12 +309,12 @@
       "boundElements": [
         {
           "type": "text",
-          "id": "node-BEXT-Daily-Report-2-text"
+          "id": "node-BEXT-News-Quality-2-text"
         }
       ]
     },
     {
-      "id": "node-BEXT-Daily-Report-2-text",
+      "id": "node-BEXT-News-Quality-2-text",
       "type": "text",
       "x": 548,
       "y": 130,
@@ -329,29 +329,29 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-2"
+        "node-BEXT-News-Quality-2"
       ],
       "roundness": null,
       "seed": 1002,
       "version": 1,
       "versionNonce": 1,
       "isDeleted": false,
-      "text": "Hermes writes the brief",
+      "text": "Read publish dates",
       "fontSize": 14,
       "fontFamily": 1,
       "textAlign": "center",
       "verticalAlign": "middle",
-      "containerId": "node-BEXT-Daily-Report-2-box"
+      "containerId": "node-BEXT-News-Quality-2-box"
     },
     {
-      "id": "node-BEXT-Daily-Report-2-subtext",
+      "id": "node-BEXT-News-Quality-2-subtext",
       "type": "text",
       "x": 548,
       "y": 169,
       "width": 184,
       "height": 18,
       "angle": 0,
-      "strokeColor": "#f43f5e",
+      "strokeColor": "#cbd5e1",
       "backgroundColor": "transparent",
       "fillStyle": "solid",
       "strokeWidth": 1,
@@ -359,21 +359,21 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-2"
+        "node-BEXT-News-Quality-2"
       ],
       "roundness": null,
       "seed": 1003,
       "version": 1,
       "versionNonce": 1,
       "isDeleted": false,
-      "text": "🤖 AI Model",
+      "text": "⚙️ System Node",
       "fontSize": 11,
       "fontFamily": 1,
       "textAlign": "center",
       "verticalAlign": "middle"
     },
     {
-      "id": "arrow-BEXT-Daily-Report-2-arrow",
+      "id": "arrow-BEXT-News-Quality-2-arrow",
       "type": "arrow",
       "x": 740,
       "y": 157.5,
@@ -408,7 +408,7 @@
       "endArrowhead": "arrow"
     },
     {
-      "id": "node-BEXT-Daily-Report-3-box",
+      "id": "node-BEXT-News-Quality-3-box",
       "type": "rectangle",
       "x": 790,
       "y": 120,
@@ -423,7 +423,7 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-3"
+        "node-BEXT-News-Quality-3"
       ],
       "roundness": {
         "type": 3
@@ -435,12 +435,12 @@
       "boundElements": [
         {
           "type": "text",
-          "id": "node-BEXT-Daily-Report-3-text"
+          "id": "node-BEXT-News-Quality-3-text"
         }
       ]
     },
     {
-      "id": "node-BEXT-Daily-Report-3-text",
+      "id": "node-BEXT-News-Quality-3-text",
       "type": "text",
       "x": 798,
       "y": 130,
@@ -455,22 +455,22 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-3"
+        "node-BEXT-News-Quality-3"
       ],
       "roundness": null,
       "seed": 1002,
       "version": 1,
       "versionNonce": 1,
       "isDeleted": false,
-      "text": "Check deliverability",
+      "text": "Save publish dates",
       "fontSize": 14,
       "fontFamily": 1,
       "textAlign": "center",
       "verticalAlign": "middle",
-      "containerId": "node-BEXT-Daily-Report-3-box"
+      "containerId": "node-BEXT-News-Quality-3-box"
     },
     {
-      "id": "node-BEXT-Daily-Report-3-subtext",
+      "id": "node-BEXT-News-Quality-3-subtext",
       "type": "text",
       "x": 798,
       "y": 169,
@@ -485,7 +485,7 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-3"
+        "node-BEXT-News-Quality-3"
       ],
       "roundness": null,
       "seed": 1003,
@@ -499,7 +499,7 @@
       "verticalAlign": "middle"
     },
     {
-      "id": "arrow-BEXT-Daily-Report-3-arrow",
+      "id": "arrow-BEXT-News-Quality-3-arrow",
       "type": "arrow",
       "x": 990,
       "y": 157.5,
@@ -534,7 +534,7 @@
       "endArrowhead": "arrow"
     },
     {
-      "id": "node-BEXT-Daily-Report-4-box",
+      "id": "node-BEXT-News-Quality-4-box",
       "type": "rectangle",
       "x": 1040,
       "y": 120,
@@ -549,7 +549,7 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-4"
+        "node-BEXT-News-Quality-4"
       ],
       "roundness": {
         "type": 3
@@ -561,12 +561,12 @@
       "boundElements": [
         {
           "type": "text",
-          "id": "node-BEXT-Daily-Report-4-text"
+          "id": "node-BEXT-News-Quality-4-text"
         }
       ]
     },
     {
-      "id": "node-BEXT-Daily-Report-4-text",
+      "id": "node-BEXT-News-Quality-4-text",
       "type": "text",
       "x": 1048,
       "y": 130,
@@ -581,22 +581,22 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-4"
+        "node-BEXT-News-Quality-4"
       ],
       "roundness": null,
       "seed": 1002,
       "version": 1,
       "versionNonce": 1,
       "isDeleted": false,
-      "text": "Fetch article images",
+      "text": "Undated pages to judge",
       "fontSize": 14,
       "fontFamily": 1,
       "textAlign": "center",
       "verticalAlign": "middle",
-      "containerId": "node-BEXT-Daily-Report-4-box"
+      "containerId": "node-BEXT-News-Quality-4-box"
     },
     {
-      "id": "node-BEXT-Daily-Report-4-subtext",
+      "id": "node-BEXT-News-Quality-4-subtext",
       "type": "text",
       "x": 1048,
       "y": 169,
@@ -611,7 +611,7 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-4"
+        "node-BEXT-News-Quality-4"
       ],
       "roundness": null,
       "seed": 1003,
@@ -625,7 +625,7 @@
       "verticalAlign": "middle"
     },
     {
-      "id": "arrow-BEXT-Daily-Report-4-arrow",
+      "id": "arrow-BEXT-News-Quality-4-arrow",
       "type": "arrow",
       "x": 1140,
       "y": 195,
@@ -660,14 +660,14 @@
       "endArrowhead": "arrow"
     },
     {
-      "id": "node-BEXT-Daily-Report-5-box",
+      "id": "node-BEXT-News-Quality-5-box",
       "type": "rectangle",
       "x": 40,
       "y": 245,
       "width": 200,
       "height": 75,
       "angle": 0,
-      "strokeColor": "#94a3b8",
+      "strokeColor": "#f43f5e",
       "backgroundColor": "#0f172a",
       "fillStyle": "solid",
       "strokeWidth": 2,
@@ -675,7 +675,7 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-5"
+        "node-BEXT-News-Quality-5"
       ],
       "roundness": {
         "type": 3
@@ -687,12 +687,12 @@
       "boundElements": [
         {
           "type": "text",
-          "id": "node-BEXT-Daily-Report-5-text"
+          "id": "node-BEXT-News-Quality-5-text"
         }
       ]
     },
     {
-      "id": "node-BEXT-Daily-Report-5-text",
+      "id": "node-BEXT-News-Quality-5-text",
       "type": "text",
       "x": 48,
       "y": 255,
@@ -707,29 +707,29 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-5"
+        "node-BEXT-News-Quality-5"
       ],
       "roundness": null,
       "seed": 1002,
       "version": 1,
       "versionNonce": 1,
       "isDeleted": false,
-      "text": "Save article images",
+      "text": "News or reference",
       "fontSize": 14,
       "fontFamily": 1,
       "textAlign": "center",
       "verticalAlign": "middle",
-      "containerId": "node-BEXT-Daily-Report-5-box"
+      "containerId": "node-BEXT-News-Quality-5-box"
     },
     {
-      "id": "node-BEXT-Daily-Report-5-subtext",
+      "id": "node-BEXT-News-Quality-5-subtext",
       "type": "text",
       "x": 48,
       "y": 294,
       "width": 184,
       "height": 18,
       "angle": 0,
-      "strokeColor": "#cbd5e1",
+      "strokeColor": "#f43f5e",
       "backgroundColor": "transparent",
       "fillStyle": "solid",
       "strokeWidth": 1,
@@ -737,21 +737,21 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-5"
+        "node-BEXT-News-Quality-5"
       ],
       "roundness": null,
       "seed": 1003,
       "version": 1,
       "versionNonce": 1,
       "isDeleted": false,
-      "text": "⚙️ System Node",
+      "text": "🤖 AI Model",
       "fontSize": 11,
       "fontFamily": 1,
       "textAlign": "center",
       "verticalAlign": "middle"
     },
     {
-      "id": "arrow-BEXT-Daily-Report-5-arrow",
+      "id": "arrow-BEXT-News-Quality-5-arrow",
       "type": "arrow",
       "x": 240,
       "y": 282.5,
@@ -786,7 +786,7 @@
       "endArrowhead": "arrow"
     },
     {
-      "id": "node-BEXT-Daily-Report-6-box",
+      "id": "node-BEXT-News-Quality-6-box",
       "type": "rectangle",
       "x": 290,
       "y": 245,
@@ -801,7 +801,7 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-6"
+        "node-BEXT-News-Quality-6"
       ],
       "roundness": {
         "type": 3
@@ -813,12 +813,12 @@
       "boundElements": [
         {
           "type": "text",
-          "id": "node-BEXT-Daily-Report-6-text"
+          "id": "node-BEXT-News-Quality-6-text"
         }
       ]
     },
     {
-      "id": "node-BEXT-Daily-Report-6-text",
+      "id": "node-BEXT-News-Quality-6-text",
       "type": "text",
       "x": 298,
       "y": 255,
@@ -833,22 +833,22 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-6"
+        "node-BEXT-News-Quality-6"
       ],
       "roundness": null,
       "seed": 1002,
       "version": 1,
       "versionNonce": 1,
       "isDeleted": false,
-      "text": "Render HTML",
+      "text": "Save the verdict",
       "fontSize": 14,
       "fontFamily": 1,
       "textAlign": "center",
       "verticalAlign": "middle",
-      "containerId": "node-BEXT-Daily-Report-6-box"
+      "containerId": "node-BEXT-News-Quality-6-box"
     },
     {
-      "id": "node-BEXT-Daily-Report-6-subtext",
+      "id": "node-BEXT-News-Quality-6-subtext",
       "type": "text",
       "x": 298,
       "y": 294,
@@ -863,7 +863,7 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-6"
+        "node-BEXT-News-Quality-6"
       ],
       "roundness": null,
       "seed": 1003,
@@ -877,7 +877,7 @@
       "verticalAlign": "middle"
     },
     {
-      "id": "arrow-BEXT-Daily-Report-6-arrow",
+      "id": "arrow-BEXT-News-Quality-6-arrow",
       "type": "arrow",
       "x": 490,
       "y": 282.5,
@@ -912,7 +912,7 @@
       "endArrowhead": "arrow"
     },
     {
-      "id": "node-BEXT-Daily-Report-7-box",
+      "id": "node-BEXT-News-Quality-7-box",
       "type": "rectangle",
       "x": 540,
       "y": 245,
@@ -927,7 +927,7 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-7"
+        "node-BEXT-News-Quality-7"
       ],
       "roundness": {
         "type": 3
@@ -939,12 +939,12 @@
       "boundElements": [
         {
           "type": "text",
-          "id": "node-BEXT-Daily-Report-7-text"
+          "id": "node-BEXT-News-Quality-7-text"
         }
       ]
     },
     {
-      "id": "node-BEXT-Daily-Report-7-text",
+      "id": "node-BEXT-News-Quality-7-text",
       "type": "text",
       "x": 548,
       "y": 255,
@@ -959,22 +959,22 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-7"
+        "node-BEXT-News-Quality-7"
       ],
       "roundness": null,
       "seed": 1002,
       "version": 1,
       "versionNonce": 1,
       "isDeleted": false,
-      "text": "Save report",
+      "text": "Record coverage",
       "fontSize": 14,
       "fontFamily": 1,
       "textAlign": "center",
       "verticalAlign": "middle",
-      "containerId": "node-BEXT-Daily-Report-7-box"
+      "containerId": "node-BEXT-News-Quality-7-box"
     },
     {
-      "id": "node-BEXT-Daily-Report-7-subtext",
+      "id": "node-BEXT-News-Quality-7-subtext",
       "type": "text",
       "x": 548,
       "y": 294,
@@ -989,7 +989,7 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-7"
+        "node-BEXT-News-Quality-7"
       ],
       "roundness": null,
       "seed": 1003,
@@ -1003,7 +1003,7 @@
       "verticalAlign": "middle"
     },
     {
-      "id": "arrow-BEXT-Daily-Report-7-arrow",
+      "id": "arrow-BEXT-News-Quality-7-arrow",
       "type": "arrow",
       "x": 740,
       "y": 282.5,
@@ -1038,7 +1038,7 @@
       "endArrowhead": "arrow"
     },
     {
-      "id": "node-BEXT-Daily-Report-8-box",
+      "id": "node-BEXT-News-Quality-8-box",
       "type": "rectangle",
       "x": 790,
       "y": 245,
@@ -1053,7 +1053,7 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-8"
+        "node-BEXT-News-Quality-8"
       ],
       "roundness": {
         "type": 3
@@ -1065,12 +1065,12 @@
       "boundElements": [
         {
           "type": "text",
-          "id": "node-BEXT-Daily-Report-8-text"
+          "id": "node-BEXT-News-Quality-8-text"
         }
       ]
     },
     {
-      "id": "node-BEXT-Daily-Report-8-text",
+      "id": "node-BEXT-News-Quality-8-text",
       "type": "text",
       "x": 798,
       "y": 255,
@@ -1085,511 +1085,7 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-8"
-      ],
-      "roundness": null,
-      "seed": 1002,
-      "version": 1,
-      "versionNonce": 1,
-      "isDeleted": false,
-      "text": "Record items sent",
-      "fontSize": 14,
-      "fontFamily": 1,
-      "textAlign": "center",
-      "verticalAlign": "middle",
-      "containerId": "node-BEXT-Daily-Report-8-box"
-    },
-    {
-      "id": "node-BEXT-Daily-Report-8-subtext",
-      "type": "text",
-      "x": 798,
-      "y": 294,
-      "width": 184,
-      "height": 18,
-      "angle": 0,
-      "strokeColor": "#cbd5e1",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [
-        "node-BEXT-Daily-Report-8"
-      ],
-      "roundness": null,
-      "seed": 1003,
-      "version": 1,
-      "versionNonce": 1,
-      "isDeleted": false,
-      "text": "⚙️ System Node",
-      "fontSize": 11,
-      "fontFamily": 1,
-      "textAlign": "center",
-      "verticalAlign": "middle"
-    },
-    {
-      "id": "arrow-BEXT-Daily-Report-8-arrow",
-      "type": "arrow",
-      "x": 990,
-      "y": 282.5,
-      "width": 50,
-      "height": 0,
-      "angle": 0,
-      "strokeColor": "#64748b",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 2,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [],
-      "roundness": {
-        "type": 2
-      },
-      "seed": 2001,
-      "version": 1,
-      "versionNonce": 1,
-      "isDeleted": false,
-      "points": [
-        [
-          0,
-          0
-        ],
-        [
-          50,
-          0
-        ]
-      ],
-      "endArrowhead": "arrow"
-    },
-    {
-      "id": "node-BEXT-Daily-Report-9-box",
-      "type": "rectangle",
-      "x": 1040,
-      "y": 245,
-      "width": 200,
-      "height": 75,
-      "angle": 0,
-      "strokeColor": "#94a3b8",
-      "backgroundColor": "#0f172a",
-      "fillStyle": "solid",
-      "strokeWidth": 2,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [
-        "node-BEXT-Daily-Report-9"
-      ],
-      "roundness": {
-        "type": 3
-      },
-      "seed": 1001,
-      "version": 1,
-      "versionNonce": 1,
-      "isDeleted": false,
-      "boundElements": [
-        {
-          "type": "text",
-          "id": "node-BEXT-Daily-Report-9-text"
-        }
-      ]
-    },
-    {
-      "id": "node-BEXT-Daily-Report-9-text",
-      "type": "text",
-      "x": 1048,
-      "y": 255,
-      "width": 184,
-      "height": 24,
-      "angle": 0,
-      "strokeColor": "#f8fafc",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [
-        "node-BEXT-Daily-Report-9"
-      ],
-      "roundness": null,
-      "seed": 1002,
-      "version": 1,
-      "versionNonce": 1,
-      "isDeleted": false,
-      "text": "Send via Graph",
-      "fontSize": 14,
-      "fontFamily": 1,
-      "textAlign": "center",
-      "verticalAlign": "middle",
-      "containerId": "node-BEXT-Daily-Report-9-box"
-    },
-    {
-      "id": "node-BEXT-Daily-Report-9-subtext",
-      "type": "text",
-      "x": 1048,
-      "y": 294,
-      "width": 184,
-      "height": 18,
-      "angle": 0,
-      "strokeColor": "#cbd5e1",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [
-        "node-BEXT-Daily-Report-9"
-      ],
-      "roundness": null,
-      "seed": 1003,
-      "version": 1,
-      "versionNonce": 1,
-      "isDeleted": false,
-      "text": "⚙️ System Node",
-      "fontSize": 11,
-      "fontFamily": 1,
-      "textAlign": "center",
-      "verticalAlign": "middle"
-    },
-    {
-      "id": "arrow-BEXT-Daily-Report-9-arrow",
-      "type": "arrow",
-      "x": 1140,
-      "y": 320,
-      "width": 1000,
-      "height": 50,
-      "angle": 0,
-      "strokeColor": "#64748b",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 2,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [],
-      "roundness": {
-        "type": 2
-      },
-      "seed": 2001,
-      "version": 1,
-      "versionNonce": 1,
-      "isDeleted": false,
-      "points": [
-        [
-          0,
-          0
-        ],
-        [
-          -1000,
-          50
-        ]
-      ],
-      "endArrowhead": "arrow"
-    },
-    {
-      "id": "node-BEXT-Daily-Report-10-box",
-      "type": "rectangle",
-      "x": 40,
-      "y": 370,
-      "width": 200,
-      "height": 75,
-      "angle": 0,
-      "strokeColor": "#94a3b8",
-      "backgroundColor": "#0f172a",
-      "fillStyle": "solid",
-      "strokeWidth": 2,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [
-        "node-BEXT-Daily-Report-10"
-      ],
-      "roundness": {
-        "type": 3
-      },
-      "seed": 1001,
-      "version": 1,
-      "versionNonce": 1,
-      "isDeleted": false,
-      "boundElements": [
-        {
-          "type": "text",
-          "id": "node-BEXT-Daily-Report-10-text"
-        }
-      ]
-    },
-    {
-      "id": "node-BEXT-Daily-Report-10-text",
-      "type": "text",
-      "x": 48,
-      "y": 380,
-      "width": 184,
-      "height": 24,
-      "angle": 0,
-      "strokeColor": "#f8fafc",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [
-        "node-BEXT-Daily-Report-10"
-      ],
-      "roundness": null,
-      "seed": 1002,
-      "version": 1,
-      "versionNonce": 1,
-      "isDeleted": false,
-      "text": "Mark sent",
-      "fontSize": 14,
-      "fontFamily": 1,
-      "textAlign": "center",
-      "verticalAlign": "middle",
-      "containerId": "node-BEXT-Daily-Report-10-box"
-    },
-    {
-      "id": "node-BEXT-Daily-Report-10-subtext",
-      "type": "text",
-      "x": 48,
-      "y": 419,
-      "width": 184,
-      "height": 18,
-      "angle": 0,
-      "strokeColor": "#cbd5e1",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [
-        "node-BEXT-Daily-Report-10"
-      ],
-      "roundness": null,
-      "seed": 1003,
-      "version": 1,
-      "versionNonce": 1,
-      "isDeleted": false,
-      "text": "⚙️ System Node",
-      "fontSize": 11,
-      "fontFamily": 1,
-      "textAlign": "center",
-      "verticalAlign": "middle"
-    },
-    {
-      "id": "arrow-BEXT-Daily-Report-10-arrow",
-      "type": "arrow",
-      "x": 240,
-      "y": 407.5,
-      "width": 50,
-      "height": 0,
-      "angle": 0,
-      "strokeColor": "#64748b",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 2,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [],
-      "roundness": {
-        "type": 2
-      },
-      "seed": 2001,
-      "version": 1,
-      "versionNonce": 1,
-      "isDeleted": false,
-      "points": [
-        [
-          0,
-          0
-        ],
-        [
-          50,
-          0
-        ]
-      ],
-      "endArrowhead": "arrow"
-    },
-    {
-      "id": "node-BEXT-Daily-Report-11-box",
-      "type": "rectangle",
-      "x": 290,
-      "y": 370,
-      "width": 200,
-      "height": 75,
-      "angle": 0,
-      "strokeColor": "#94a3b8",
-      "backgroundColor": "#0f172a",
-      "fillStyle": "solid",
-      "strokeWidth": 2,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [
-        "node-BEXT-Daily-Report-11"
-      ],
-      "roundness": {
-        "type": 3
-      },
-      "seed": 1001,
-      "version": 1,
-      "versionNonce": 1,
-      "isDeleted": false,
-      "boundElements": [
-        {
-          "type": "text",
-          "id": "node-BEXT-Daily-Report-11-text"
-        }
-      ]
-    },
-    {
-      "id": "node-BEXT-Daily-Report-11-text",
-      "type": "text",
-      "x": 298,
-      "y": 380,
-      "width": 184,
-      "height": 24,
-      "angle": 0,
-      "strokeColor": "#f8fafc",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [
-        "node-BEXT-Daily-Report-11"
-      ],
-      "roundness": null,
-      "seed": 1002,
-      "version": 1,
-      "versionNonce": 1,
-      "isDeleted": false,
-      "text": "Record result",
-      "fontSize": 14,
-      "fontFamily": 1,
-      "textAlign": "center",
-      "verticalAlign": "middle",
-      "containerId": "node-BEXT-Daily-Report-11-box"
-    },
-    {
-      "id": "node-BEXT-Daily-Report-11-subtext",
-      "type": "text",
-      "x": 298,
-      "y": 419,
-      "width": 184,
-      "height": 18,
-      "angle": 0,
-      "strokeColor": "#cbd5e1",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [
-        "node-BEXT-Daily-Report-11"
-      ],
-      "roundness": null,
-      "seed": 1003,
-      "version": 1,
-      "versionNonce": 1,
-      "isDeleted": false,
-      "text": "⚙️ System Node",
-      "fontSize": 11,
-      "fontFamily": 1,
-      "textAlign": "center",
-      "verticalAlign": "middle"
-    },
-    {
-      "id": "arrow-BEXT-Daily-Report-11-arrow",
-      "type": "arrow",
-      "x": 490,
-      "y": 407.5,
-      "width": 50,
-      "height": 0,
-      "angle": 0,
-      "strokeColor": "#64748b",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 2,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [],
-      "roundness": {
-        "type": 2
-      },
-      "seed": 2001,
-      "version": 1,
-      "versionNonce": 1,
-      "isDeleted": false,
-      "points": [
-        [
-          0,
-          0
-        ],
-        [
-          50,
-          0
-        ]
-      ],
-      "endArrowhead": "arrow"
-    },
-    {
-      "id": "node-BEXT-Daily-Report-12-box",
-      "type": "rectangle",
-      "x": 540,
-      "y": 370,
-      "width": 200,
-      "height": 75,
-      "angle": 0,
-      "strokeColor": "#94a3b8",
-      "backgroundColor": "#0f172a",
-      "fillStyle": "solid",
-      "strokeWidth": 2,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [
-        "node-BEXT-Daily-Report-12"
-      ],
-      "roundness": {
-        "type": 3
-      },
-      "seed": 1001,
-      "version": 1,
-      "versionNonce": 1,
-      "isDeleted": false,
-      "boundElements": [
-        {
-          "type": "text",
-          "id": "node-BEXT-Daily-Report-12-text"
-        }
-      ]
-    },
-    {
-      "id": "node-BEXT-Daily-Report-12-text",
-      "type": "text",
-      "x": 548,
-      "y": 380,
-      "width": 184,
-      "height": 24,
-      "angle": 0,
-      "strokeColor": "#f8fafc",
-      "backgroundColor": "transparent",
-      "fillStyle": "solid",
-      "strokeWidth": 1,
-      "strokeStyle": "solid",
-      "roughness": 0,
-      "opacity": 100,
-      "groupIds": [
-        "node-BEXT-Daily-Report-12"
+        "node-BEXT-News-Quality-8"
       ],
       "roundness": null,
       "seed": 1002,
@@ -1601,13 +1097,13 @@
       "fontFamily": 1,
       "textAlign": "center",
       "verticalAlign": "middle",
-      "containerId": "node-BEXT-Daily-Report-12-box"
+      "containerId": "node-BEXT-News-Quality-8-box"
     },
     {
-      "id": "node-BEXT-Daily-Report-12-subtext",
+      "id": "node-BEXT-News-Quality-8-subtext",
       "type": "text",
-      "x": 548,
-      "y": 419,
+      "x": 798,
+      "y": 294,
       "width": 184,
       "height": 18,
       "angle": 0,
@@ -1619,7 +1115,7 @@
       "roughness": 0,
       "opacity": 100,
       "groupIds": [
-        "node-BEXT-Daily-Report-12"
+        "node-BEXT-News-Quality-8"
       ],
       "roundness": null,
       "seed": 1003,

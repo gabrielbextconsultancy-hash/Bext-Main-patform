@@ -1,0 +1,150 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>BEXT Daily Report — Pipeline Structure v3</title>
+<style>
+ @page { size: A4; margin: 14mm; }
+ body { font: 10px/1.5 'Segoe UI', system-ui, sans-serif; color:#111827; margin:0; }
+ h1 { font-size:21px; margin:0 0 2px; } h2 { font-size:14px; margin:20px 0 6px; border-bottom:2px solid #0f766e; padding-bottom:3px; }
+ h3 { font-size:11.5px; margin:13px 0 4px; }
+ .sub { color:#6b7280; margin-bottom:12px; }
+ table { width:100%; border-collapse:collapse; margin:6px 0 10px; }
+ th { text-align:left; font-size:8.5px; text-transform:uppercase; letter-spacing:.04em; color:#6b7280; border-bottom:1px solid #d1d5db; padding:3px 5px; }
+ td { border-bottom:1px solid #f3f4f6; padding:4px 5px; vertical-align:top; font-size:9.3px; }
+ .badge { font-weight:600; font-size:8.5px; padding:1px 6px; border-radius:8px; white-space:nowrap; }
+ .fixed { color:#166534; background:#dcfce7; } .partial { color:#854d0e; background:#fef9c3; } .open { color:#991b1b; background:#fee2e2; }
+ .box { border:1px solid #e5e7eb; border-left:4px solid #0f766e; border-radius:4px; padding:8px 10px; margin:8px 0; }
+ .warn { border-left-color:#b45309; }
+ .flow { font-family: Consolas, monospace; font-size:9px; background:#f8fafc; border:1px solid #e5e7eb; border-radius:4px; padding:8px 10px; margin:6px 0; white-space:pre; overflow-x:auto; }
+ ul { margin:4px 0 8px 16px; padding:0; } li { margin:2.5px 0; }
+ .small { font-size:9px; color:#374151; }
+ .pagebreak { page-break-before: always; }
+ code { background:#f3f4f6; padding:0 3px; border-radius:3px; font-size:9px; }
+</style></head><body>
+
+<h1>Industry Daily Report — Pipeline Structure v3</h1>
+<div class="sub">The system as deployed and verified, 27 Aug 2026 · every number below is read from the
+live database, not estimated · companion to Methodology&nbsp;v2 and the Source Checklist</div>
+
+<h2>1 · The structure now — five workflows, one clock each</h2>
+
+<div class="flow">                         ┌──────────────────────────────────────────────────────────────┐
+  every hour   :00      │ SOURCE INGEST     68 sources → 5-tier ladder → articles table │
+                         └──────────────┬───────────────────────────────────────────────┘
+  as mail arrives        NEWSLETTER INTAKE   mailbox → headline rules → same table
+                                        │
+  every 30 min           ARTICLE ANALYSIS    new rows → Gemini scores 0-100 (exits if none)
+                                        │
+  06:00 · 12:00 · 23:00  NEWS QUALITY        enrich dates → judge news/reference → coverage line
+                                        │
+  05:00                  DAILY REPORT        window+ledger → 4 gates → render → Graph send
+                                        └──►  Teams card 05:20 · dashboard reads everything live</div>
+
+<table>
+<tr><th>Workflow</th><th>Schedule (AEST)</th><th>Job</th></tr>
+<tr><td><b>BEXT — Source Ingest</b></td><td>hourly :00</td><td>Every active source down the retrieval ladder; every tier attempt logged</td></tr>
+<tr><td><b>BEXT — Newsletter Intake</b></td><td>on mail arrival</td><td>Tier 0 — the lawful route past account walls (Reuters, The Australian, IEA)</td></tr>
+<tr><td><b>BEXT — Article Analysis</b></td><td>every 30 min</td><td>Scores new articles; exits instantly when there is nothing new, so the cadence is free</td></tr>
+<tr><td><b>BEXT — News Quality</b></td><td>06:00 / 12:00 / 23:00</td><td>The quality pass: dates, judgement, coverage. The 23:00 run closes the day</td></tr>
+<tr><td><b>BEXT — Daily Report</b></td><td>05:00</td><td>Assembles the finished prior day, sends via Microsoft Graph</td></tr>
+<tr><td colspan="3" class="small">Plus: Daily News Card (05:20, Teams), Self-Heal (15 min), Graph Health (06:00), Contract Test (02:00), Meeting Intake, Teams Inbound, and the four content workflows. 15 total, all mapped live on the dashboard's architecture page.</td></tr>
+</table>
+
+<h2>2 · Hourly ingestion — how a source is actually fetched</h2>
+
+<div class="box">One rule governs the ladder: <b>the cheapest tier that demonstrably works, verified by
+evidence, visible when it fails.</b> Every tier writes an attempt row every run — tried, skipped,
+succeeded, refused — so "was this even attempted?" is always answerable. That log is what caught
+every silent failure this week.</div>
+
+<table>
+<tr><th>Tier</th><th>Route</th><th>Applies to</th><th>Proven on</th></tr>
+<tr><td>0</td><td><b>Email</b> — newsletters into the intake mailbox, headline-rule extraction</td><td>Account-walled publishers</td><td>Reuters ×5 briefings, The Australian, Conversation arriving daily</td></tr>
+<tr><td>1</td><td><b>Scrapling</b> — Chrome TLS fingerprint impersonation</td><td>Everything first; defeats WAF 403s</td><td>DCCEEW, NABERS, EcoGeneration, S&amp;P: 403 → 200</td></tr>
+<tr><td>1b</td><td><b>Sitemap</b> — publisher's XML read as a feed, staggered so siblings never burst</td><td>Client-rendered listings with open sitemaps</td><td>S&amp;P latest-news + crude-oil: 21 articles day one</td></tr>
+<tr><td>2</td><td><b>Firecrawl</b> — hosted JS rendering (metered: 04/10/16/22 only)</td><td><code>firecrawl: true</code> sources</td><td>vic-premier 9 releases, aer-registers 21 decisions — after 428/494 straight failures</td></tr>
+<tr><td>2</td><td><b>Chromium</b> — local browser render</td><td>Ordinary JS pages (non-firecrawl)</td><td>standing fallback</td></tr>
+<tr><td>3</td><td><b>Session login</b></td><td>Member portals (CEC built, credential pending)</td><td>—</td></tr>
+<tr><td>4</td><td><b>Hermes reads the page</b></td><td>Markup no parser recognises</td><td>bounded last resort</td></tr>
+</table>
+
+<div class="small">Politeness is load-bearing: never two requests in flight to the same host, 1.2 s
+spacing — a flat pool earned 429s from our highest-volume source, and a 429 is indistinguishable
+from "no data" unless recorded apart (<code>blocked</code>, retried; never written off).</div>
+
+<h2>3 · The four causes — where each stands</h2>
+
+<table>
+<tr><th>Cause (25 Aug diagnosis)</th><th>Status</th><th>The fix, and the live evidence</th></tr>
+<tr><td><b>1. We never read the article</b> — dated by fetch time; 232/318 undated; 1 in 3 filed under the wrong day</td>
+<td><span class="badge fixed">FIXED</span></td>
+<td>Date read from the URL at ingest, then from the article page itself (<code>article:published_time</code>, JSON-LD) by News Quality; visited once (<code>date_state</code>). <b>Live: 203 of 234 articles in the last 24 h carry the publisher's own date — 87%, from ~27%.</b></td></tr>
+<tr><td><b>2. Hourly ingest drifts across midnight</b> — evening stories fell between two reports</td>
+<td><span class="badge fixed">FIXED — structural</span></td>
+<td>Window runs on the real publication date, two days back to now; the <code>report_items</code> ledger guarantees exactly-once. <b>Verified: 0 duplicates, 0 losses since deployment.</b> No per-source action exists or is needed.</td></tr>
+<tr><td><b>3. Half of what we capture isn't an article</b> — 429s mistaken for no-date; section pages as news</td>
+<td><span class="badge fixed">FIXED</span></td>
+<td>Per-host politeness (429 → <code>blocked</code> → retried); Hermes news-vs-reference judge (10/10 on live titles, 33+ pages held); furniture rule (no date <i>and</i> score 0). Undecided ships — dropping a real story is the failure being engineered out.</td></tr>
+<tr><td><b>4. Monitoring records but never alerts</b></td>
+<td><span class="badge partial">PARTLY FIXED</span></td>
+<td>Coverage line per quality pass (fetched · dated · undated · wrong-day-corrected · quiet sources); <code>fetch_attempts</code> retention 30 d; failed sends can no longer be recorded as sent. <b>Still open: no Teams page when a source goes quiet</b> — the count is measured, nobody is woken. Next build item.</td></tr>
+</table>
+
+<h2>4 · News Quality — the three-stage pass (06:00 / 12:00 / 23:00)</h2>
+
+<table>
+<tr><th>Stage</th><th>What it does</th><th>Guard rails</th></tr>
+<tr><td><b>Enrich</b></td><td>Opens articles still undated, reads the publisher's own date, writes <code>published_at</code> + <code>date_state</code></td><td>Per-host politeness · 4-min budget · a resolved date older than 14 days holds the article automatically (archive can never masquerade as news — 484 caught once)</td></tr>
+<tr><td><b>Judge</b></td><td>Hermes separates news from standing pages (DWGM, ISP, "IT change &amp; release management")</td><td>Batches of five (larger drifts out of format) · undecided ships · verdict stored, judged once</td></tr>
+<tr><td><b>Monitor</b></td><td>Writes the coverage line to <code>integration_health</code> — the number to quote when asked "how many articles were affected"</td><td>Counts the Self-Heal blind spot: sources that ran clean and returned zero</td></tr>
+</table>
+
+<div class="box">The <b>23:00 pass is the reconciliation gate.</b> The original design placed a catch-up
+step inside the 05:00 report; it was deliberately moved out — the send is the client deliverable, and
+a diagnostic that throws must not take it down (four consecutive runs were once lost that way). The
+23:00 pass completes the day <i>before</i> it closes, so 05:00 reads finished data instead of racing
+it; the widened window + ledger make the gate unnecessary on the send path itself.</div>
+
+<h2>5 · The report — four gates, then send</h2>
+
+<div class="flow">window: real publication date, day-2 → now        (drift-proof)
+  minus  everything already sent                     (ledger — exactly once)
+  gate 1 relevance ≥ 1     noise kept, wrong-subject dropped (score 0 stays in the data)
+  gate 2 not a reference page                        (judge verdict)
+  gate 3 not furniture     (no date AND score 0 — never was an article)
+  gate 4 not stale-dated   (report_eligible hold)
+  → render → Microsoft Graph send (token as urlencoded form; non-202 THROWS)
+  → report row 'sent' only on a real 202 — a failed send can never look successful</div>
+
+<h2>6 · Source Doctor — honest status</h2>
+
+<table>
+<tr><th>Component</th><th>Status</th><th>Detail</th></tr>
+<tr><td>Four-fault playbook (diagnosis ladder)</td><td><span class="badge fixed">DOCUMENTED</span></td><td>Methodology v2 Part 4 — what fires automatically, what to force, which tool per symptom</td></tr>
+<tr><td>Quiet-source measurement</td><td><span class="badge fixed">LIVE</span></td><td>Counted every quality pass in the coverage line</td></tr>
+<tr><td>Judge + date remedies</td><td><span class="badge fixed">LIVE</span></td><td>Running inside News Quality three times daily</td></tr>
+<tr><td>Automated diagnosis (robots→sitemap proposal, YAML suggestion to Teams)</td><td><span class="badge open">NOT BUILT</span></td><td>Today this procedure is run by hand — it found and fixed S&amp;P. Automating it is the remaining Doctor work</td></tr>
+<tr><td>Quiet-source Teams page</td><td><span class="badge open">NOT BUILT</span></td><td>The measured count needs a webhook post + incidents row. Highest-value small item left</td></tr>
+</table>
+
+<h2>7 · Verification — how the system is checked, continuously</h2>
+
+<ul class="small">
+<li><b>Preflight</b> (<code>n8n/preflight.js</code>) — 30+ regression assertions before any deploy; every rule cites a documented regression.</li>
+<li><b>Contract Test</b> — nightly 02:00: every scheduled workflow has an unconditional heartbeat, Code nodes parse, inlined libs are stripped of exports.</li>
+<li><b>Attempt log</b> — every source × tier × run; 30-day retention; the dashboard tier-strip reads it live.</li>
+<li><b>Coverage line</b> — per quality pass; trends the wrong-day number toward zero.</li>
+<li><b>Ledger check</b> — already-sent articles can never reappear (0 duplicates verified).</li>
+<li><b>Send guard</b> — non-202 throws; both silent-send incidents this week were caught by it, not by a reader.</li>
+<li><b>Live watches</b> — first runs of new machinery are monitored to completion, not assumed (Firecrawl's first window, the S&amp;P sitemaps, the quality passes — each caught a real fault this way).</li>
+</ul>
+
+<div class="box warn"><b>Open items, stated plainly:</b> vic-premier rendered 9 releases on its first
+Firecrawl run then empty twice (hydration flakiness — under watch, retry logic if it persists) ·
+first newsletter arrivals against the fixed keep-step are tonight — kept&gt;0 is the proof ·
+first coverage line lands at 23:00 tonight (enum cast fixed today) · quiet-source Teams page and
+automated Doctor diagnosis not yet built · IEA newsletter not yet arriving · a2ep.org.au/news from
+the brief not yet registered (our A2EP source watches the sibling aidc.org.au site).</div>
+
+<div class="sub" style="margin-top:14px">BEXT Consultancy · automation stack · 27 Aug 2026 ·
+architecture map: dashboard /architecture (15 workflows, 45 edges, generated from the deployed
+workflows — the map cannot drift from reality) · diagrams: docs/diagrams/ incl. BEXT-News-Quality</div>
+</body></html>
