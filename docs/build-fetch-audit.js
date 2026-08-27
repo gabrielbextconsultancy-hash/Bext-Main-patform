@@ -15,9 +15,18 @@ require('dotenv').config();
 const { Pool } = require('pg');
 const fs = require('fs');
 
+// Two windows, one audit shape. Default: a fetch-time window (what did we pull
+// in these 24 hours). With --pubday YYYY-MM-DD: a publication-day window - the
+// exact population a morning report draws from, so the audit is the one-to-one
+// companion to that email: every article of the day, the sent ones marked sent,
+// and every absentee carrying its reason.
+const argIdx = process.argv.indexOf('--pubday');
+const PUBDAY = argIdx > -1 ? process.argv[argIdx + 1] : null;
+if (PUBDAY && !/^\d{4}-\d{2}-\d{2}$/.test(PUBDAY)) { console.error('--pubday YYYY-MM-DD'); process.exit(1); }
+
 const WIN_FROM = '2026-08-26T13:00:00Z';   // 23:00 26 Aug Melbourne
 const WIN_TO   = '2026-08-27T13:00:00Z';   // 23:00 27 Aug Melbourne
-const OUT = 'docs/BEXT-Fetch-Audit-2026-08-27';
+const OUT = PUBDAY ? 'docs/BEXT-Fetch-Audit-pubday-' + PUBDAY : 'docs/BEXT-Fetch-Audit-2026-08-27';
 
 const esc = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const apex = (h) => String(h || '').replace(/^www\./, '');
@@ -48,8 +57,10 @@ const pathOf = (u) => { try { return new URL(u).pathname.toLowerCase(); } catch 
     LEFT JOIN LATERAL (
       SELECT r.report_date::text FROM report_items ri JOIN reports r ON r.id = ri.report_id
       WHERE ri.article_id = a.id AND r.status = 'sent' LIMIT 1) sent ON true
-    WHERE a.fetched_at BETWEEN $1 AND $2
-    ORDER BY an.relevance_score DESC NULLS LAST, a.id`, [WIN_FROM, WIN_TO])).rows;
+    WHERE ($3::date IS NULL AND a.fetched_at BETWEEN $1 AND $2)
+       OR ($3::date IS NOT NULL
+           AND (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')::date = $3::date)
+    ORDER BY an.relevance_score DESC NULLS LAST, a.id`, [WIN_FROM, WIN_TO, PUBDAY])).rows;
   await db.end();
 
   const dis = (r) => {
@@ -59,7 +70,9 @@ const pathOf = (u) => { try { return new URL(u).pathname.toLowerCase(); } catch 
     if (!r.elig) return ['HELD', 'stale-dated (older than 14 days)'];
     if (Number(r.score) === 0) return ['EXCLUDED', 'score 0 - no energy/building/climate bearing'];
     if (r.score === null) return ['QUEUED', 'awaiting scoring, then next report'];
-    return ['QUEUED', 'goes out in the next 05:00 report'];
+    return ['QUEUED', PUBDAY
+      ? 'late arrival - fetched after the send; the ledger carries it into the next report'
+      : 'goes out in the next 05:00 report'];
   };
   const tally = {};
   const items = items0.map((r) => { const [k, why] = dis(r); tally[k] = (tally[k] || 0) + 1; return { ...r, k, why }; });
@@ -165,7 +178,9 @@ const pathOf = (u) => { try { return new URL(u).pathname.toLowerCase(); } catch 
     + '.pagebreak{page-break-before:always}'
     + '</style></head><body>'
     + '<h1>Fetch Audit - the brief, link by link, article by article</h1>'
-    + '<div class="sub">Window: 23:00 26 Aug to 23:00 27 Aug 2026, Melbourne. Every one of the brief&#39;s '
+    + '<div class="sub">' + (PUBDAY
+      ? 'Publication day: ' + PUBDAY + ', Melbourne - the exact population the morning report drew from. Every one of the brief&#39;s '
+      : 'Window: 23:00 26 Aug to 23:00 27 Aug 2026, Melbourne. Every one of the brief&#39;s ')
     + mapped.length + ' links, and under each one every article it produced - ' + items.length + ' articles, all accounted for.</div>'
 
     + '<div class="tiles">'
