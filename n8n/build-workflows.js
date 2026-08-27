@@ -1664,13 +1664,20 @@ const rcpts = String(R.recipient || '').split(/[;,]/).map(function (s) { return 
   .filter(Boolean).map(function (a) { return { emailAddress: { address: a } }; });
 if (!rcpts.length) throw new Error('no recipients on the rendered report');
 
+// URLSearchParams with an explicit form header, never the form: option.
+// n8n's httpRequest JSON-encodes form:, the login endpoint answers 400, and
+// the node dies before sendMail is ever reached - which is why two mornings'
+// reports rendered and never sent while the recipient fix changed nothing.
+// The local test had masked it: its helpers stub implemented form: correctly,
+// so the node code passed a test the production helpers could not.
 const tok = await this.helpers.httpRequest({
   method: 'POST',
   url: 'https://login.microsoftonline.com/' + TENANT + '/oauth2/v2.0/token',
-  form: {
+  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  body: new URLSearchParams({
     client_id: CLIENT, client_secret: SECRET,
     grant_type: 'client_credentials', scope: 'https://graph.microsoft.com/.default',
-  },
+  }).toString(),
   json: true, timeout: 30000,
 });
 if (!tok || !tok.access_token) throw new Error('Graph token refused');
@@ -2091,7 +2098,9 @@ WHERE a.id = v.id`,
           // Measured every pass rather than reconstructed after a complaint.
           query: `INSERT INTO integration_health (service, status, detail)
 SELECT 'news_quality',
-       CASE WHEN c.quiet > 0 OR c.undated > 20 THEN 'degraded' ELSE 'up' END,
+       -- Cast, or the insert dies: the column is the health_status enum and a
+       -- bare CASE yields text. Two quality passes were lost to exactly this.
+       (CASE WHEN c.quiet > 0 OR c.undated > 20 THEN 'degraded' ELSE 'up' END)::health_status,
        'fetched 24h ' || c.fetched || ' · dated ' || c.dated || ' · undated ' || c.undated
          || ' · wrong-day corrected ' || c.corrected || ' · quiet sources ' || c.quiet
 FROM (
