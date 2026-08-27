@@ -3895,16 +3895,44 @@ for (const item of $input.all()) {
   // newsletter subscribed to next month should work immediately, and a publisher
   // quietly changing its sending domain is exactly the failure that goes
   // unnoticed for weeks.
-  const domain = (from.match(/@([a-z0-9.-]+)/) || [null, 'mail.invalid'])[1];
-  const h = await hermesExtract({
-    html, baseUrl: 'https://' + domain, http: helpers.httpRequest,
-  });
+  // Deterministic extraction, not a model gate. The first design handed the
+  // links to Hermes BEFORE unwrapping, scoped to the sender's mail domain — so
+  // the model was shown tracking gibberish and call-to-action text, judged none
+  // of it to be an article, and 79 newsletters produced zero articles while
+  // links_found said 107. The judge was answering the wrong question honestly.
+  //
+  // The rule that actually separates stories from housekeeping in a newsletter
+  // is the anchor text: publishers link headlines, and headlines are long.
+  // Everything kept here still faces the gates every other article faces —
+  // relevance scoring, the news-vs-reference judge, dedupe — so generosity
+  // costs noise at worst, never junk in the client's sheet.
+  const anchors = [];
+  const aRe = /<a\\b[^>]*href=["']([^"'#]+)["'][^>]*>([\\s\\S]*?)<\\/a>/gi;
+  let am;
+  while ((am = aRe.exec(html)) !== null) anchors.push({ url: am[1], text: strip(am[2]) });
+
+  // Housekeeping by name — the furniture every newsletter carries.
+  const NAV = /unsubscribe|manage.{0,20}preference|view.{0,12}browser|privacy|terms of|contact us|facebook|twitter|linkedin|instagram|youtube|whatsapp|advertis|subscribe|sign.?up|app store|google play|download the app|feedback|help cent/i;
 
   const kept = [];
-  for (const a of h.articles) {
+  const seenText = {};
+  for (const a of anchors) {
+    const text = (a.text || '').trim();
+    // A headline is long; a button is short. GENERIC is the shared CTA list —
+    // "Read more", "Find out more" — from the ingest parser.
+    if (text.length < 25 || GENERIC.test(text) || NAV.test(text) || NAV.test(a.url)) continue;
     const url = unwrap(a.url);
-    if (!/^https?:\\/\\//i.test(url)) continue;
-    kept.push({ url: url, title: a.title, from_address: from.slice(0, 200), published_at: j.date || null });
+    if (url.indexOf('http') !== 0) continue;
+    const key = text.toLowerCase();
+    if (seenText[key]) continue;
+    seenText[key] = true;
+    // The URL may still be a tracking wrapper the query-unwrap cannot open —
+    // Reuters and The Australian encode the target in the path. Kept anyway:
+    // the wrapper redirects to the article, so the page opens for the reader
+    // and for the date reader alike, and the title-based content hash absorbs
+    // the per-send tracking ids that would otherwise defeat URL dedupe.
+    kept.push({ url: url.slice(0, 600), title: text.slice(0, 300), from_address: from.slice(0, 200), published_at: j.date || null });
+    if (kept.length >= 25) break;
   }
 
   messages.push({
@@ -3912,7 +3940,7 @@ for (const item of $input.all()) {
     from_address: from.slice(0, 200),
     subject: subject.slice(0, 400),
     received_at: j.date || null,
-    links_found: h.considered || 0,
+    links_found: anchors.length,
     articles_kept: kept.length,
   });
   for (const k of kept) rows.push(k);

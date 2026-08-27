@@ -1,0 +1,404 @@
+[
+  {
+    "url": "https://www.abc.net.au/news/topic/energy-industry",
+    "name": "ABC News \u2014 Energy",
+    "cat": "Australian News",
+    "route": "Scrape (HTML index)"
+  },
+  {
+    "url": "https://www.abc.net.au/news/topic/climate-change",
+    "name": "ABC News \u2014 Climate Change",
+    "cat": "Australian News",
+    "route": "Scrape (HTML index)"
+  },
+  {
+    "url": "https://www.afr.com/companies/energy",
+    "name": "Australian Financial Review \u2014 Energy",
+    "cat": "Australian News",
+    "route": "Scrape + Tier-3 Session"
+  },
+  {
+    "url": "https://theconversation.com/au/environment",
+    "name": "The Conversation AU \u2014 Environment & Energy",
+    "cat": "Australian News",
+    "route": "Scrape with category filter"
+  },
+  {
+    "url": "https://www.reuters.com/markets/carbon/",
+    "name": "Reuters \u2014 Carbon Markets",
+    "cat": "International Industry Updates",
+    "route": "Google News RSS + Newsletter"
+  },
+  {
+    "url": "https://www.spglobal.com/en/research-insights/market-insights/energy-transition#news",
+    "name": "S&P Global \u2014 Energy Transition",
+    "cat": "International Industry Updates",
+    "route": "XML Sitemap + Scrapling"
+  },
+  {
+    "url": "https://www.iea.org/news",
+    "name": "IEA",
+    "cat": "International Industry Updates",
+    "route": "Newsletter Intake (reports@bext...)"
+  },
+  {
+    "url": "https://www.irena.org/News",
+    "name": "IRENA",
+    "cat": "International Industry Updates",
+    "route": "Scrape (HTML index)"
+  },
+  {
+    "url": "https://unfccc.int/news",
+    "name": "UNFCCC",
+    "cat": "International Industry Updates",
+    "route": "Scrapling / Browser"
+  },
+  {
+    "url": "https://energy.ec.europa.eu/news_en",
+    "name": "European Commission \u2014 Energy",
+    "cat": "International Industry Updates",
+    "route": "Scrape (HTML index)"
+  },
+  {
+    "url": "https://www.energy.gov/search?page=0&sort_by=date&f%5B0%5D=article_type%3A1&f%5B1%5D=offices_rest%3AEnergy.gov",
+    "name": "US Department of Energy",
+    "cat": "International Industry Updates",
+    "route": "Native RSS (energy.gov/feed/)"
+  },
+  {
+    "url": "https://www.nzherald.co.nz/business/companies/energy/",
+    "name": "NZ Herald \u2014 Energy",
+    "cat": "International Industry Updates",
+    "route": "Scrape (HTML index)"
+  },
+  {
+    "url": "https://ieefa.org/newsroom?keys=&content_type%5B3%5D=3&tid%5B302%5D=302",
+    "name": "IEEFA",
+    "cat": "International Industry Updates",
+    "route": "Native RSS (ieefa.org/rss.xml)"
+  },
+  {
+    "url": "https://energytracker.asia/",
+    "name": "Energy Tracker Asia",
+    "cat": "International Industry Updates",
+    "route": "Native RSS (energytracker.asia/feed/)"
+  },
+  {
+    "url": "https://renewablesnow.com/news/",
+    "name": "Renewables Now",
+    "cat": "International Industry Updates",
+    "route": "Scrape + Politeness Delay"
+  },
+  {
+    "url": "https://www.aemo.com.au/newsroom/news-updates",
+    "name": "AEMO",
+    "cat": "Industry Updates",
+    "route": "Scrapling TLS Impersonation"
+  },
+  {
+    "url": "https://www.aer.gov.au/news/articles",
+    "name": "AER \u2014 News",
+    "cat": "Industry Updates",
+    "route": "Scrapling (aer.gov.au/news)"
+  },
+  {
+    "url": "https://www.aer.gov.au/industry/registers",
+    "name": "AER \u2014 Registers Status",
+    "cat": "Industry Updates",
+    "route": "Firecrawl JS / Scrapling"
+  },
+  {
+    "url": "https://www.aemc.gov.au/news-centre",
+    "name": "AEMC \u2014 News Centre",
+    "cat": "Industry Updates",
+    "route": "Native RSS (aemc.gov.au/rss.xml)"
+  },
+  {
+    "url": "https://www.aemc.gov.au/our-work/changing-energy-rules/rule-changes",
+    "name": "AEMC \u2014 Rule Changes / Registers",
+    "cat": "Industry Updates",
+    "route": "Native RSS with path filter"
+  },
+  {
+    "url": "https://cer.gov.au/news-and-media/news#all-news",
+    "name": "Clean Energy Regulator \u2014 News",
+    "cat": "Industry Updates",
+    "route": "Scrape (cer.gov.au/news)"
+  },
+  {
+    "url": "https://cer.gov.au/news-and-media/media-centre/media-releases#all-media-releases",
+    "name": "Clean Energy Regulator \u2014 Media Releases",
+    "cat": "Industry Updates",
+    "route": "Scrape with path filter"
+  },
+  {
+    "url": "https://arena.gov.au/news/",
+    "name": "ARENA \u2014 News",
+    "cat": "Industry Updates",
+    "route": "Native RSS (arena.gov.au/feed/)"
+  },
+  {
+    "url": "https://arena.gov.au/knowledge-bank/",
+    "name": "ARENA \u2014 Knowledge Bank",
+    "cat": "Industry Updates",
+    "route": "Native RSS (arena.gov.au/knowledge-bank/feed/)"
+  },
+  {
+    "url": "https://www.cefc.com.au/media/",
+    "name": "CEFC \u2014 Media",
+    "cat": "Industry Updates",
+    "route": "Scrape (HTML index)"
+  },
+  {
+    "url": "https://www.cefc.com.au/insights/",
+    "name": "CEFC \u2014 Insights",
+    "cat": "Industry Updates",
+    "route": "Scrape (HTML index)"
+  },
+  {
+    "url": "https://www.climatechangeauthority.gov.au/latest-news",
+    "name": "Climate Change Authority",
+    "cat": "Industry Updates",
+    "route": "Native RSS (climatechangeauthority.gov.au/rss.xml)"
+  },
+  {
+    "url": "https://www.accc.gov.au/news-centre?type=accc_news&layout=full_width&f%5B0%5D=topic%3A133",
+    "name": "ACCC \u2014 Energy",
+    "cat": "Industry Updates",
+    "route": "Scrape (HTML index)"
+  },
+  {
+    "url": "https://www.energy.vic.gov.au/victorian-energy-upgrades/installers/veu-industry-latest-news",
+    "name": "VEU \u2014 Latest News",
+    "cat": "Industry Updates",
+    "route": "Scrapling TLS Impersonation"
+  },
+  {
+    "url": "https://www.esc.vic.gov.au/victorian-energy-upgrades-program/veu-updates-reports-reviews-and-data/updates-veu-program",
+    "name": "VEU \u2014 Program Updates",
+    "cat": "Industry Updates",
+    "route": "Native RSS with keyword filter"
+  },
+  {
+    "url": "https://www.esc.vic.gov.au/media-centre",
+    "name": "Essential Services Commission \u2014 Media",
+    "cat": "Industry Updates",
+    "route": "Native RSS (esc.vic.gov.au/rss)"
+  },
+  {
+    "url": "https://fma.com.au/Web/Web/Informed/News-landing.aspx",
+    "name": "Facility Management Association",
+    "cat": "Industry Updates",
+    "route": "Scrape (HTML index)"
+  },
+  {
+    "url": "https://infrastructuremagazine.com.au/facilities-management/",
+    "name": "Infrastructure Magazine \u2014 FM",
+    "cat": "Industry Updates",
+    "route": "Native RSS (infrastructuremagazine.com.au/feed/)"
+  },
+  {
+    "url": "https://www.dcceew.gov.au/about/news/all?f%5B0%5D=news_type%3A1863&f%5B1%5D=topic%3A1883",
+    "name": "DCCEEW",
+    "cat": "Industry Updates",
+    "route": "Scrapling (/about/news clean path)"
+  },
+  {
+    "url": "https://www.energy.gov.au/news",
+    "name": "Energy.gov.au \u2014 News",
+    "cat": "Industry Updates",
+    "route": "Native RSS (energy.gov.au/rss.xml)"
+  },
+  {
+    "url": "https://minister.dcceew.gov.au/bowen",
+    "name": "Minister Bowen \u2014 Media Releases",
+    "cat": "Industry Updates",
+    "route": "Scrape (HTML index)"
+  },
+  {
+    "url": "https://www.aph.gov.au/Parliamentary_Business/Bills_Legislation",
+    "name": "Parliament of Australia \u2014 Bills",
+    "cat": "Industry Updates",
+    "route": "Scrape (HTML index)"
+  },
+  {
+    "url": "https://www.premier.vic.gov.au/media-centre?portfolio=Climate+Action&portfolio=Energy+and+Resources&portfolio=Industry+and+Innovation&portfolio=Resources&portfolio=Small+Business&portfolio=State+Electricity+Commission",
+    "name": "Victorian Premier",
+    "cat": "Industry Updates",
+    "route": "Firecrawl JS / Scrapling"
+  },
+  {
+    "url": "https://www.nabers.gov.au/news",
+    "name": "NABERS",
+    "cat": "Industry Updates",
+    "route": "Scrapling TLS Impersonation"
+  },
+  {
+    "url": "https://www.cbd.gov.au/news-and-events",
+    "name": "Commercial Building Disclosure",
+    "cat": "Industry Updates",
+    "route": "Native RSS (cbd.gov.au/rss.xml)"
+  },
+  {
+    "url": "https://www.abcb.gov.au/news",
+    "name": "Australian Building Codes Board",
+    "cat": "Industry Updates",
+    "route": "Scrape (HTML index)"
+  },
+  {
+    "url": "https://www.energyrating.gov.au/news-and-stories",
+    "name": "Energy Rating / GEMS",
+    "cat": "Industry Updates",
+    "route": "Scrape (HTML index)"
+  },
+  {
+    "url": "https://www.industry.gov.au/news?news-topic%5B2964%5D=2964&news-topic%5B2957%5D=2957&news-topic%5B2958%5D=2958&news-topic%5B2941%5D=2941&news-topic%5B3148%5D=3148&news-topic%5B3149%5D=3149&news-topic%5B2943%5D=2943&field_news_date_value=All",
+    "name": "DISR",
+    "cat": "Industry Updates",
+    "route": "Scrape (HTML index)"
+  },
+  {
+    "url": "https://cer.gov.au/news-and-media/news?schemes=30#all-news",
+    "name": "Clean Energy Regulator \u2014 NGER",
+    "cat": "Industry Updates",
+    "route": "Scrape with NGER filter"
+  },
+  {
+    "url": "https://www.energy.vic.gov.au/about-energy/news",
+    "name": "DEECA \u2014 Energy News",
+    "cat": "Industry Updates",
+    "route": "Scrapling TLS Impersonation"
+  },
+  {
+    "url": "https://www.vicgrid.com.au/about/news",
+    "name": "VicGrid",
+    "cat": "Industry Updates",
+    "route": "Scrapling TLS Impersonation"
+  },
+  {
+    "url": "https://www.secvictoria.com.au/news",
+    "name": "SEC Victoria",
+    "cat": "Industry Updates",
+    "route": "Scrapling TLS Impersonation"
+  },
+  {
+    "url": "https://www.solar.vic.gov.au/",
+    "name": "Solar Victoria",
+    "cat": "Industry Updates",
+    "route": "Scrape (solar.vic.gov.au/news)"
+  },
+  {
+    "url": "https://eec.org.au/resources/news/",
+    "name": "Energy Efficiency Council",
+    "cat": "Industry Updates",
+    "route": "Native RSS (eec.org.au/feed/)"
+  },
+  {
+    "url": "https://cleanenergycouncil.org.au/news-resources",
+    "name": "Clean Energy Council",
+    "cat": "Industry Updates",
+    "route": "Scrape + Tier-3 Member Portal"
+  },
+  {
+    "url": "https://energycouncil.com.au/media/",
+    "name": "Australian Energy Council",
+    "cat": "Industry Updates",
+    "route": "Native RSS (energycouncil.com.au/feed/)"
+  },
+  {
+    "url": "https://new.gbca.org.au/news/",
+    "name": "Green Building Council Australia",
+    "cat": "Industry Updates",
+    "route": "Scrape (HTML index)"
+  },
+  {
+    "url": "https://www.propertycouncil.com.au/news-research/viewallnews",
+    "name": "Property Council of Australia",
+    "cat": "Industry Updates",
+    "route": "Native RSS (propertycouncil.com.au/feed)"
+  },
+  {
+    "url": "https://www.a2ep.org.au/news",
+    "name": "AIDC (formerly A2EP)",
+    "cat": "Industry Updates",
+    "route": "Scrape (aidc.org.au)"
+  },
+  {
+    "url": "https://aidc.org.au/aidc-media-releases/",
+    "name": "Australian Hydrogen Council",
+    "cat": "Industry Updates",
+    "route": "Scrape (aidc.org.au/aidc-media-releases/)"
+  },
+  {
+    "url": "https://smartenergy.org.au/news/sec-news/",
+    "name": "Smart Energy Council",
+    "cat": "Industry Updates",
+    "route": "Native RSS (smartenergy.org.au/feed/)"
+  },
+  {
+    "url": "https://euaa.com.au/media-hub/",
+    "name": "Energy Users Association Australia",
+    "cat": "Industry Updates",
+    "route": "Native RSS (euaa.com.au/feed/)"
+  },
+  {
+    "url": "https://igcc.org.au/news/",
+    "name": "Investor Group on Climate Change",
+    "cat": "Industry Updates",
+    "route": "Native RSS (igcc.org.au/feed/)"
+  },
+  {
+    "url": "https://climateworkscentre.org/news/",
+    "name": "Climate Works Centre",
+    "cat": "Industry Updates",
+    "route": "Scrape (HTML index)"
+  },
+  {
+    "url": "https://www.racefor2030.com.au/news-and-events/",
+    "name": "RACE for 2030",
+    "cat": "Industry Updates",
+    "route": "Native RSS (racefor2030.com.au/feed/)"
+  },
+  {
+    "url": "https://www.csiro.au/en/news/All?start=0&count=12&tag=&keyword=&date=all&cat=%7B5E7813EA-F09F-484F-A1FC-395C6B5158A6%7D%7C%7BE8C89119-667A-4B7F-BC62-F0A2124699F6%7D%7C%7B7D06D6FD-69F6-4FFF-8753-2AE434949D36%7D&type=%7B60727734-1BF6-4FD4-88DA-028304CF3D74%7D%7C%7B6B6F9B5C-3CB2-42DD-A714-2A012B3720FD%7D%7C%7BFE827E74-5B1A-4B33-8000-B1FE167A1706%7D%7C%7B49F817AF-74EB-43C4-A51B-CE2B14F46215%7D%7C%7B01DD0A16-96BC-4001-ACA4-F82DBB83B26C%7D%7C%7B9E28CCA8-AAC8-475C-AEB3-7BDE93F6155E%7D&articletags=",
+    "name": "CSIRO \u2014 Energy News",
+    "cat": "Industry Updates",
+    "route": "Scrape (HTML index)"
+  },
+  {
+    "url": "https://reneweconomy.com.au/",
+    "name": "RenewEconomy",
+    "cat": "Industry Updates",
+    "route": "Native RSS (reneweconomy.com.au/feed/)"
+  },
+  {
+    "url": "https://reneweconomy.com.au/author/david-leitch/",
+    "name": "RenewEconomy \u2014 David Leitch",
+    "cat": "Industry Updates",
+    "route": "Author RSS (/author/david-leitch/feed/)"
+  },
+  {
+    "url": "https://www.pv-magazine-australia.com/all-news/",
+    "name": "PV Magazine Australia",
+    "cat": "Industry Updates",
+    "route": "Native RSS (pv-magazine-australia.com/feed/)"
+  },
+  {
+    "url": "https://www.energymagazine.com.au/news/",
+    "name": "Energy Magazine",
+    "cat": "Industry Updates",
+    "route": "Native RSS (energymagazine.com.au/feed/)"
+  },
+  {
+    "url": "https://thefifthestate.com.au/",
+    "name": "The Fifth Estate",
+    "cat": "Industry Updates",
+    "route": "Native RSS (thefifthestate.com.au/feed/)"
+  },
+  {
+    "url": "https://www.ecogeneration.com.au/latest-news/",
+    "name": "Eco Generation",
+    "cat": "Industry Updates",
+    "route": "Native RSS (ecogeneration.com.au/feed/)"
+  }
+]
