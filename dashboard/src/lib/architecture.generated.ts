@@ -46,9 +46,9 @@ export interface ArchitectureGraph {
 }
 
 export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
-  "generatedAt": "2026-08-27T10:56:42.179Z",
+  "generatedAt": "2026-08-27T14:43:53.084Z",
   "workflowCount": 15,
-  "edgeCount": 47,
+  "edgeCount": 48,
   "workflows": [
     {
       "slug": "BEXT-Article-Analysis",
@@ -914,6 +914,7 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
         "label": "Schedule (0 6 * * *)"
       },
       "tablesRead": [
+        "article_analysis",
         "articles",
         "incidents",
         "report_items",
@@ -1054,6 +1055,39 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
           "id": "page",
           "name": "Page Teams",
           "type": "n8n-nodes-base.code",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "audload",
+          "name": "Load audit data",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [
+            "article_analysis",
+            "articles",
+            "report_items",
+            "reports",
+            "sources"
+          ],
+          "writes": [],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "audbuild",
+          "name": "Build day audit",
+          "type": "n8n-nodes-base.code",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "audsave",
+          "name": "Save day audit",
+          "type": "n8n-nodes-base.postgres",
           "actor": "system",
           "reads": [],
           "writes": [],
@@ -1390,6 +1424,12 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
       "to": "BEXT-Daily-Report",
       "table": "article_analysis",
       "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Article-Analysis",
+      "to": "BEXT-News-Quality",
+      "table": "article_analysis",
+      "domain": "cross_domain"
     },
     {
       "from": "BEXT-Content-Topics",

@@ -1,0 +1,812 @@
+{
+ "mapped": [
+  {
+   "link": "https://www.abc.net.au/news/topic/energy-industry",
+   "slug": "abc-energy",
+   "name": "ABC News — Energy",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-25",
+   "stat": null
+  },
+  {
+   "link": "https://www.abc.net.au/news/topic/climate-change",
+   "slug": "abc-climate",
+   "name": "ABC News — Climate Change",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-27",
+   "stat": {
+    "fetched": 1,
+    "sent": 0,
+    "queued": 1,
+    "held": 0,
+    "excluded": 0
+   }
+  },
+  {
+   "link": "https://www.afr.com/companies/energy",
+   "slug": "afr-energy",
+   "name": "Australian Financial Review — Energy",
+   "method": "scrape",
+   "active": true,
+   "email": true,
+   "last": "2026-08-27",
+   "stat": {
+    "fetched": 9,
+    "sent": 0,
+    "queued": 1,
+    "held": 0,
+    "excluded": 8
+   }
+  },
+  {
+   "link": "https://theconversation.com/au/environment",
+   "slug": "conversation-au",
+   "name": "The Conversation AU — Environment & Energy",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-27",
+   "stat": {
+    "fetched": 5,
+    "sent": 0,
+    "queued": 3,
+    "held": 0,
+    "excluded": 2
+   }
+  },
+  {
+   "link": "https://www.reuters.com/markets/carbon/",
+   "slug": "reuters-carbon",
+   "name": "Reuters — Carbon Markets",
+   "method": "rss",
+   "active": true,
+   "email": true,
+   "last": "2026-08-27",
+   "stat": {
+    "fetched": 122,
+    "sent": 2,
+    "queued": 7,
+    "held": 0,
+    "excluded": 113
+   }
+  },
+  {
+   "link": "https://www.spglobal.com/en/research-insights/market-insights/energy-transition#news",
+   "slug": "spglobal-energy-transition",
+   "name": "S&P Global — Energy Transition",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-24",
+   "stat": null
+  },
+  {
+   "link": "https://www.iea.org/news",
+   "slug": "iea-energy-efficiency",
+   "name": "IEA — Energy Efficiency",
+   "method": "scrape",
+   "active": false,
+   "email": true,
+   "last": null,
+   "stat": null
+  },
+  {
+   "link": "https://www.irena.org/News",
+   "slug": "irena",
+   "name": "IRENA",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-26",
+   "stat": null
+  },
+  {
+   "link": "https://unfccc.int/news",
+   "slug": "unfccc",
+   "name": "UNFCCC",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-27",
+   "stat": {
+    "fetched": 1,
+    "sent": 0,
+    "queued": 1,
+    "held": 0,
+    "excluded": 0
+   }
+  },
+  {
+   "link": "https://energy.ec.europa.eu/news_en",
+   "slug": "ec-energy",
+   "name": "European Commission — Energy",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-19",
+   "stat": null
+  },
+  {
+   "link": "https://www.energy.gov/search?page=0&sort_by=date&f%5B0%5D=article_type%3A1&f%5B1%5D=offices_rest%3AEnergy.gov",
+   "slug": "us-doe",
+   "name": "US Department of Energy",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-24",
+   "stat": null
+  },
+  {
+   "link": "https://www.nzherald.co.nz/business/companies/energy/",
+   "slug": "nz-herald-energy",
+   "name": "NZ Herald — Energy",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-26",
+   "stat": {
+    "fetched": 1,
+    "sent": 0,
+    "queued": 1,
+    "held": 0,
+    "excluded": 0
+   }
+  },
+  {
+   "link": "https://ieefa.org/newsroom?keys=&content_type%5B3%5D=3&tid%5B302%5D=302",
+   "slug": "ieefa",
+   "name": "IEEFA",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-27",
+   "stat": {
+    "fetched": 4,
+    "sent": 0,
+    "queued": 4,
+    "held": 0,
+    "excluded": 0
+   }
+  },
+  {
+   "link": "https://energytracker.asia/",
+   "slug": "energy-tracker",
+   "name": "Energy Tracker Asia",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-03",
+   "stat": null
+  },
+  {
+   "link": "https://renewablesnow.com/news/",
+   "slug": "renewables-now",
+   "name": "Renewables Now",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-27",
+   "stat": {
+    "fetched": 32,
+    "sent": 8,
+    "queued": 22,
+    "held": 1,
+    "excluded": 1
+   }
+  },
+  {
+   "link": "https://www.aemo.com.au/newsroom/news-updates",
+   "slug": "aemo",
+   "name": "AEMO",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-24",
+   "stat": null
+  },
+  {
+   "link": "https://www.aer.gov.au/news/articles",
+   "slug": "aer-news",
+   "name": "AER — News",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-23",
+   "stat": null
+  },
+  {
+   "link": "https://www.aer.gov.au/industry/registers",
+   "slug": "aer-registers",
+   "name": "AER — Registers Status",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-27",
+   "stat": {
+    "fetched": 4,
+    "sent": 0,
+    "queued": 0,
+    "held": 4,
+    "excluded": 0
+   }
+  },
+  {
+   "link": "https://www.aemc.gov.au/news-centre",
+   "slug": "aemc-news",
+   "name": "AEMC — News Centre",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-26",
+   "stat": {
+    "fetched": 2,
+    "sent": 2,
+    "queued": 0,
+    "held": 0,
+    "excluded": 0
+   }
+  },
+  {
+   "link": "https://www.aemc.gov.au/our-work/changing-energy-rules/rule-changes",
+   "slug": "aemc-registers",
+   "name": "AEMC — Rule Changes / Registers",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-05",
+   "stat": null
+  },
+  {
+   "link": "https://cer.gov.au/news-and-media/news#all-news",
+   "slug": "cer-news",
+   "name": "Clean Energy Regulator — News",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-25",
+   "stat": null
+  },
+  {
+   "link": "https://cer.gov.au/news-and-media/media-centre/media-releases#all-media-releases",
+   "slug": "cer-media",
+   "name": "Clean Energy Regulator — Media Releases",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-07-31",
+   "stat": null
+  },
+  {
+   "link": "https://arena.gov.au/news/",
+   "slug": "arena-news",
+   "name": "ARENA — News",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-04",
+   "stat": null
+  },
+  {
+   "link": "https://arena.gov.au/knowledge-bank/",
+   "slug": "arena-knowledge",
+   "name": "ARENA — Knowledge Bank",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-11",
+   "stat": null
+  },
+  {
+   "link": "https://www.cefc.com.au/media/",
+   "slug": "cefc-media",
+   "name": "CEFC — Media",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-25",
+   "stat": null
+  },
+  {
+   "link": "https://www.cefc.com.au/insights/",
+   "slug": "cefc-insights",
+   "name": "CEFC — Insights",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-27",
+   "stat": {
+    "fetched": 1,
+    "sent": 0,
+    "queued": 1,
+    "held": 0,
+    "excluded": 0
+   }
+  },
+  {
+   "link": "https://www.climatechangeauthority.gov.au/latest-news",
+   "slug": "cca",
+   "name": "Climate Change Authority",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-20",
+   "stat": null
+  },
+  {
+   "link": "https://www.accc.gov.au/news-centre?type=accc_news&layout=full_width&f%5B0%5D=topic%3A133",
+   "slug": "accc-energy",
+   "name": "ACCC — Energy",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-23",
+   "stat": null
+  },
+  {
+   "link": "https://www.energy.vic.gov.au/victorian-energy-upgrades/installers/veu-industry-latest-news",
+   "slug": "veu-news",
+   "name": "Victorian Energy Upgrades — News",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-23",
+   "stat": null
+  },
+  {
+   "link": "https://www.esc.vic.gov.au/victorian-energy-upgrades-program/veu-updates-reports-reviews-and-data/updates-veu-program",
+   "slug": "veu-program",
+   "name": "Victorian Energy Upgrades — Program Updates",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-03",
+   "stat": null
+  },
+  {
+   "link": "https://www.esc.vic.gov.au/media-centre",
+   "slug": "esc-media",
+   "name": "Essential Services Commission — Media",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-25",
+   "stat": null
+  },
+  {
+   "link": "https://fma.com.au/Web/Web/Informed/News-landing.aspx",
+   "slug": "fma",
+   "name": "Facility Management Association",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-24",
+   "stat": null
+  },
+  {
+   "link": "https://infrastructuremagazine.com.au/facilities-management/",
+   "slug": "infrastructure-mag",
+   "name": "Infrastructure Magazine — Facilities Management",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-27",
+   "stat": {
+    "fetched": 5,
+    "sent": 0,
+    "queued": 2,
+    "held": 0,
+    "excluded": 3
+   }
+  },
+  {
+   "link": "https://www.dcceew.gov.au/about/news/all?f%5B0%5D=news_type%3A1863&f%5B1%5D=topic%3A1883",
+   "slug": "dcceew",
+   "name": "DCCEEW",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-27",
+   "stat": {
+    "fetched": 1,
+    "sent": 0,
+    "queued": 1,
+    "held": 0,
+    "excluded": 0
+   }
+  },
+  {
+   "link": "https://www.energy.gov.au/news",
+   "slug": "energy-gov-au",
+   "name": "Energy.gov.au — News",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-24",
+   "stat": null
+  },
+  {
+   "link": "https://minister.dcceew.gov.au/bowen",
+   "slug": "minister-bowen",
+   "name": "Minister Bowen — Media Releases",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-27",
+   "stat": {
+    "fetched": 1,
+    "sent": 0,
+    "queued": 1,
+    "held": 0,
+    "excluded": 0
+   }
+  },
+  {
+   "link": "https://www.aph.gov.au/Parliamentary_Business/Bills_Legislation",
+   "slug": "aph-bills",
+   "name": "Parliament of Australia — Bills & Legislation",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-20",
+   "stat": null
+  },
+  {
+   "link": "https://www.premier.vic.gov.au/media-centre?portfolio=Climate+Action&portfolio=Energy+and+Resources&portfolio=Industry+and+Innovation&portfolio=Resources&portfolio=Small+Business&portfolio=State+Electricity+Commission",
+   "slug": "vic-premier",
+   "name": "Victorian Premier — Energy & Climate Media",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-26",
+   "stat": null
+  },
+  {
+   "link": "https://www.nabers.gov.au/news",
+   "slug": "nabers",
+   "name": "NABERS",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-26",
+   "stat": null
+  },
+  {
+   "link": "https://www.cbd.gov.au/news-and-events",
+   "slug": "cbd",
+   "name": "Commercial Building Disclosure",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-17",
+   "stat": null
+  },
+  {
+   "link": "https://www.abcb.gov.au/news",
+   "slug": "abcb",
+   "name": "Australian Building Codes Board",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-06",
+   "stat": null
+  },
+  {
+   "link": "https://www.energyrating.gov.au/news-and-stories",
+   "slug": "energy-rating-gems",
+   "name": "Energy Rating / GEMS",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-27",
+   "stat": {
+    "fetched": 1,
+    "sent": 0,
+    "queued": 1,
+    "held": 0,
+    "excluded": 0
+   }
+  },
+  {
+   "link": "https://www.industry.gov.au/news?news-topic%5B2964%5D=2964&news-topic%5B2957%5D=2957&news-topic%5B2958%5D=2958&news-topic%5B2941%5D=2941&news-topic%5B3148%5D=3148&news-topic%5B3149%5D=3149&news-topic%5B2943%5D=2943&field_news_date_value=All",
+   "slug": "disr",
+   "name": "DISR",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-25",
+   "stat": null
+  },
+  {
+   "link": "https://cer.gov.au/news-and-media/news?schemes=30#all-news",
+   "slug": "cer-news",
+   "name": "Clean Energy Regulator — News",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-25",
+   "stat": null
+  },
+  {
+   "link": "https://www.energy.vic.gov.au/about-energy/news",
+   "slug": "deeca-energy",
+   "name": "DEECA — Energy News",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": null,
+   "stat": null
+  },
+  {
+   "link": "https://www.vicgrid.com.au/about/news",
+   "slug": "vicgrid",
+   "name": "VicGrid",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-23",
+   "stat": null
+  },
+  {
+   "link": "https://www.secvictoria.com.au/news",
+   "slug": "sec-victoria",
+   "name": "SEC Victoria",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-23",
+   "stat": null
+  },
+  {
+   "link": "https://www.solar.vic.gov.au/",
+   "slug": "solar-victoria",
+   "name": "Solar Victoria",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-26",
+   "stat": null
+  },
+  {
+   "link": "https://eec.org.au/resources/news/",
+   "slug": "eec",
+   "name": "Energy Efficiency Council",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-25",
+   "stat": null
+  },
+  {
+   "link": "https://cleanenergycouncil.org.au/news-resources",
+   "slug": "cec",
+   "name": "Clean Energy Council",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-23",
+   "stat": null
+  },
+  {
+   "link": "https://energycouncil.com.au/media/",
+   "slug": "aec",
+   "name": "Australian Energy Council",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-27",
+   "stat": {
+    "fetched": 1,
+    "sent": 0,
+    "queued": 1,
+    "held": 0,
+    "excluded": 0
+   }
+  },
+  {
+   "link": "https://new.gbca.org.au/news/",
+   "slug": "gbca",
+   "name": "Green Building Council of Australia",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-27",
+   "stat": {
+    "fetched": 1,
+    "sent": 0,
+    "queued": 1,
+    "held": 0,
+    "excluded": 0
+   }
+  },
+  {
+   "link": "https://www.propertycouncil.com.au/news-research/viewallnews",
+   "slug": "pca",
+   "name": "Property Council of Australia",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-25",
+   "stat": null
+  },
+  {
+   "link": "https://www.a2ep.org.au/news",
+   "slug": "a2ep-aidc",
+   "name": "Australian Alliance for Energy Productivity (AIDC)",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-27",
+   "stat": {
+    "fetched": 35,
+    "sent": 0,
+    "queued": 19,
+    "held": 16,
+    "excluded": 0
+   }
+  },
+  {
+   "link": "https://aidc.org.au/aidc-media-releases/",
+   "slug": "aidc-media",
+   "name": "AIDC — Industrial Decarbonisation Media Releases",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": null,
+   "stat": null
+  },
+  {
+   "link": "https://smartenergy.org.au/news/sec-news/",
+   "slug": "smart-energy-council",
+   "name": "Smart Energy Council",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-27",
+   "stat": {
+    "fetched": 1,
+    "sent": 0,
+    "queued": 1,
+    "held": 0,
+    "excluded": 0
+   }
+  },
+  {
+   "link": "https://euaa.com.au/media-hub/",
+   "slug": "euaa",
+   "name": "Energy Users Association of Australia",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-25",
+   "stat": null
+  },
+  {
+   "link": "https://igcc.org.au/news/",
+   "slug": "igcc",
+   "name": "Investor Group on Climate Change",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-20",
+   "stat": null
+  },
+  {
+   "link": "https://climateworkscentre.org/news/",
+   "slug": "climateworks",
+   "name": "Climate Works Centre",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-25",
+   "stat": null
+  },
+  {
+   "link": "https://www.racefor2030.com.au/news-and-events/",
+   "slug": "race-2030",
+   "name": "RACE for 2030",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": null,
+   "stat": null
+  },
+  {
+   "link": "https://www.csiro.au/en/news/All?start=0&count=12&tag=&keyword=&date=all&cat=%7B5E7813EA-F09F-484F-A1FC-395C6B5158A6%7D%7C%7BE8C89119-667A-4B7F-BC62-F0A2124699F6%7D%7C%7B7D06D6FD-69F6-4FFF-8753-2AE434949D36%7D&type=%7B60727734-1BF6-4FD4-88DA-028304CF3D74%7D%7C%7B6B6F9B5C-3CB2-42DD-A714-2A012B3720FD%7D%7C%7BFE827E74-5B1A-4B33-8000-B1FE167A1706%7D%7C%7B49F817AF-74EB-43C4-A51B-CE2B14F46215%7D%7C%7B01DD0A16-96BC-4001-ACA4-F82DBB83B26C%7D%7C%7B9E28CCA8-AAC8-475C-AEB3-7BDE93F6155E%7D&articletags=",
+   "slug": "csiro",
+   "name": "CSIRO — Energy News",
+   "method": "scrape",
+   "active": true,
+   "email": false,
+   "last": "2026-08-23",
+   "stat": null
+  },
+  {
+   "link": "https://reneweconomy.com.au/",
+   "slug": "reneweconomy",
+   "name": "RenewEconomy",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-27",
+   "stat": {
+    "fetched": 8,
+    "sent": 0,
+    "queued": 8,
+    "held": 0,
+    "excluded": 0
+   }
+  },
+  {
+   "link": "https://reneweconomy.com.au/author/david-leitch/",
+   "slug": "reneweconomy-leitch",
+   "name": "RenewEconomy — David Leitch",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-11",
+   "stat": null
+  },
+  {
+   "link": "https://www.pv-magazine-australia.com/all-news/",
+   "slug": "pv-magazine-au",
+   "name": "PV Magazine Australia",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-27",
+   "stat": {
+    "fetched": 5,
+    "sent": 0,
+    "queued": 5,
+    "held": 0,
+    "excluded": 0
+   }
+  },
+  {
+   "link": "https://www.energymagazine.com.au/news/",
+   "slug": "energy-magazine",
+   "name": "Energy Magazine",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-25",
+   "stat": null
+  },
+  {
+   "link": "https://thefifthestate.com.au/",
+   "slug": "fifth-estate",
+   "name": "The Fifth Estate",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-27",
+   "stat": {
+    "fetched": 5,
+    "sent": 0,
+    "queued": 4,
+    "held": 0,
+    "excluded": 1
+   }
+  },
+  {
+   "link": "https://www.ecogeneration.com.au/latest-news/",
+   "slug": "eco-generation",
+   "name": "Eco Generation",
+   "method": "rss",
+   "active": true,
+   "email": false,
+   "last": "2026-08-26",
+   "stat": {
+    "fetched": 1,
+    "sent": 0,
+    "queued": 1,
+    "held": 0,
+    "excluded": 0
+   }
+  }
+ ]
+}

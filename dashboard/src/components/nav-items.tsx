@@ -76,6 +76,13 @@ export const NAV: NavEntry[] = [
     icon: icon(<><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18z" /></>),
   },
   {
+    href: '/audit',
+    label: 'Day Audit',
+    hint: 'Brief links → every article, sent or why not',
+    live: true,
+    icon: icon(<><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" /><rect x="9" y="3" width="6" height="4" rx="1" /><path d="M9 12l2 2 4-4" /></>),
+  },
+  {
     href: '/reports',
     label: 'Daily Report',
     hint: 'Send results, readiness & references',

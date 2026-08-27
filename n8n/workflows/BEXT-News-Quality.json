@@ -244,6 +244,64 @@
       }
     },
     {
+      "id": "audload",
+      "name": "Load audit data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        560,
+        480
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "0SoqGGqUOqbwYTmJ",
+          "name": "BEXT Postgres"
+        }
+      },
+      "alwaysOutputData": true,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT\n  (now() AT TIME ZONE 'Australia/Melbourne')::date::text AS day,\n  (SELECT json_agg(json_build_object(\n     'id', s.id, 'slug', s.slug, 'name', s.name, 'url', s.url,\n     'feed_url', s.config->>'feed_url', 'method', s.method::text, 'active', s.active,\n     'last_article', (SELECT max(a.fetched_at)::date::text FROM articles a WHERE a.source_id = s.id)))\n   FROM sources s) AS sources,\n  (SELECT coalesce(json_agg(json_build_object(\n     'id', a.id, 'title', a.title, 'url', a.url, 'source_id', a.source_id,\n     'score', an.relevance_score, 'kind', a.content_kind::text,\n     'ds', a.date_state::text, 'elig', a.report_eligible,\n     'day', to_char(coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne', 'DD Mon'),\n     'exact_date', (a.published_at IS NOT NULL), 'sent_in', sent.report_date)), '[]'::json)\n   FROM articles a\n   LEFT JOIN article_analysis an ON an.article_id = a.id\n   LEFT JOIN LATERAL (\n     SELECT r.report_date::text FROM report_items ri JOIN reports r ON r.id = ri.report_id\n     WHERE ri.article_id = a.id AND r.status = 'sent' LIMIT 1) sent ON true\n   WHERE (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')::date\n         = (now() AT TIME ZONE 'Australia/Melbourne')::date) AS articles"
+      }
+    },
+    {
+      "id": "audbuild",
+      "name": "Build day audit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        480
+      ],
+      "parameters": {
+        "jsCode": "\n// The sandbox withholds the url globals - the third feature this session that\n// worked locally (where Node provides them) and would have died at its first\n// scheduled run. Preflight R002 caught each one before the schedule could.\nconst { URL } = require('url');\n/**\n * The day audit: every article of one publication day, nested under the brief\n * link it answers to, with score and disposition — built as a string, no I/O,\n * so the News Quality node and the CLI share one implementation and cannot\n * drift. Backtick-free and template-free on purpose: this file is inlined into\n * a Code node, where cooked escapes have already broken two features.\n *\n * buildDayAudit(day, sources, articles, briefLinks) -> { html, tally }\n *   sources:  [{id, slug, name, url, feed_url, method, active, last_article}]\n *   articles: [{id, title, url, source_id, score, kind, ds, elig, day, exact_date, sent_in}]\n */\n\n\nfunction auditEsc(s) {\n  return String(s == null ? '' : s).split('&').join('&amp;').split('<').join('&lt;').split('>').join('&gt;');\n}\nfunction auditHost(u) {\n  try {\n    var h = new URL(u).host;\n    return h.indexOf('www.') === 0 ? h.slice(4) : h;\n  } catch (e) { return ''; }\n}\nfunction auditPath(u) {\n  try { return new URL(u).pathname.toLowerCase(); } catch (e) { return ''; }\n}\n\nfunction buildDayAudit(day, sources, articles, briefLinks) {\n  // Disposition, in gate order — the same order the report applies them.\n  var tally = { fetched: articles.length, sent: 0, queued: 0, held: 0, excluded: 0 };\n  var items = articles.map(function (r) {\n    var k, why;\n    if (r.sent_in) { k = 'SENT'; why = 'sent in the ' + r.sent_in + ' report'; }\n    else if (r.kind === 'reference') { k = 'HELD'; why = 'standing reference page (judge)'; }\n    else if (r.ds === 'none' && Number(r.score) === 0) { k = 'HELD'; why = 'website furniture (no date, score 0)'; }\n    else if (r.elig === false) { k = 'HELD'; why = 'stale-dated (older than 14 days)'; }\n    else if (Number(r.score) === 0) { k = 'EXCLUDED'; why = 'score 0 - no energy/building/climate bearing'; }\n    else if (r.score === null || r.score === undefined) { k = 'QUEUED'; why = 'awaiting scoring, then the next report'; }\n    else { k = 'QUEUED'; why = 'goes out in the next 05:00 report'; }\n    tally[k.toLowerCase()]++;\n    var o = {}; for (var key in r) o[key] = r[key];\n    o.k = k; o.why = why;\n    return o;\n  });\n\n  // Walled publishers reach us by another route than the URL the brief names.\n  var MANUAL = {\n    'reuters.com': 'reuters-carbon', 'theaustralian.com.au': 'the-australian',\n    'iea.org': 'iea-energy-efficiency', 'portal.cleanenergycouncil.org.au': 'cec',\n  };\n  var mapped = briefLinks.map(function (link) {\n    var h = auditHost(link), p = auditPath(link);\n    var best = null, bestScore = -1;\n    for (var i = 0; i < sources.length; i++) {\n      var s = sources[i], sc = -1;\n      if (auditHost(s.url) === h || auditHost(s.feed_url || '') === h) sc = 1;\n      else if (MANUAL[h] === s.slug) sc = 0.5;\n      if (sc < 0) continue;\n      var sp = auditPath(s.url);\n      var segs = p.split('/');\n      for (var j = 0; j < segs.length; j++) if (segs[j] && sp.indexOf(segs[j]) > -1) sc++;\n      if (sc > bestScore) { bestScore = sc; best = s; }\n    }\n    return { link: link, s: best };\n  });\n\n  var bySource = {};\n  items.forEach(function (a) { (bySource[a.source_id] = bySource[a.source_id] || []).push(a); });\n  var groups = [], seen = {};\n  mapped.forEach(function (m, i) {\n    if (!m.s) { groups.push({ links: [{ n: i + 1, link: m.link }], s: null }); return; }\n    if (seen[m.s.slug]) { seen[m.s.slug].links.push({ n: i + 1, link: m.link }); return; }\n    var g = { links: [{ n: i + 1, link: m.link }], s: m.s };\n    seen[m.s.slug] = g; groups.push(g);\n  });\n  var briefIds = {};\n  groups.forEach(function (g) { if (g.s) briefIds[g.s.id] = true; });\n  var beyond = items.filter(function (a) { return !briefIds[a.source_id]; });\n\n  var chip = function (n) {\n    if (n === null || n === undefined) return '<span class=\"chip grey\">-</span>';\n    var c = n >= 80 ? 'green' : n >= 55 ? 'teal' : n >= 20 ? 'amber' : 'grey';\n    return '<span class=\"chip ' + c + '\">' + n + '</span>';\n  };\n  var K = { SENT: ['#166534', '#dcfce7'], QUEUED: ['#1e40af', '#dbeafe'], HELD: ['#854d0e', '#fef9c3'], EXCLUDED: ['#4b5563', '#e5e7eb'] };\n  var row = function (i) {\n    return '<tr><td>' + chip(i.score === null || i.score === undefined ? null : Number(i.score)) + '</td>'\n      + '<td class=\"t\"><a href=\"' + auditEsc(i.url) + '\">' + auditEsc(String(i.title).slice(0, 95)) + '</a><br><span class=\"u\">'\n      + auditEsc(i.day) + (i.exact_date ? '' : ' (picked up)') + '</span></td>'\n      + '<td><span class=\"disp\" style=\"color:' + K[i.k][0] + ';background:' + K[i.k][1] + '\">' + i.k + '</span><br><span class=\"u\">' + auditEsc(i.why) + '</span></td></tr>';\n  };\n  var groupBlock = function (g) {\n    var heads = g.links.map(function (l) {\n      var short = l.link.replace('https://', '').replace('http://', '');\n      if (short.indexOf('www.') === 0) short = short.slice(4);\n      return '<div class=\"lk\">#' + l.n + ' &middot; <a href=\"' + auditEsc(l.link) + '\">' + auditEsc(short.slice(0, 80)) + '</a></div>';\n    }).join('');\n    if (!g.s) return '<div class=\"grp\">' + heads + '<div class=\"gname held\">NOT REGISTERED</div></div>';\n    var arts = bySource[g.s.id] || [];\n    var status;\n    if (!g.s.active) status = '<span class=\"held\">walled - articles arrive by newsletter (tier 0), not from this URL</span>';\n    else if (!arts.length) status = '<span class=\"quiet\">no items this day - last article ' + auditEsc(g.s.last_article || 'never') + '</span>';\n    else status = '<span class=\"ok\">' + arts.length + ' article' + (arts.length > 1 ? 's' : '') + ' this day</span>';\n    return '<div class=\"grp\">' + heads\n      + '<div class=\"gname\">' + auditEsc(g.s.name) + ' <span class=\"u\">(' + auditEsc(g.s.method) + ')</span> &mdash; ' + status + '</div>'\n      + (arts.length ? '<table><tr><th>Score</th><th>Article</th><th>Disposition</th></tr>' + arts.map(row).join('') + '</table>' : '')\n      + '</div>';\n  };\n\n  var html = '<div class=\"audit\">'\n    + '<div class=\"tiles\">'\n    + '<div class=\"tile\"><b>' + tally.fetched + '</b>articles this day</div>'\n    + '<div class=\"tile\"><b>' + tally.sent + '</b>sent</div>'\n    + '<div class=\"tile\"><b>' + tally.queued + '</b>queued for the next report</div>'\n    + '<div class=\"tile\"><b>' + tally.held + '</b>held</div>'\n    + '<div class=\"tile\"><b>' + tally.excluded + '</b>excluded (score 0)</div>'\n    + '</div>'\n    + '<h3>The brief, link by link - everything the day produced under each</h3>'\n    + groups.map(groupBlock).join('')\n    + (beyond.length\n      ? '<h3>Beyond the brief - ' + beyond.length + ' articles</h3>'\n        + '<table><tr><th>Score</th><th>Article</th><th>Disposition</th></tr>' + beyond.map(row).join('') + '</table>'\n      : '')\n    + '</div>';\n\n  return { html: html, tally: tally };\n}\n\n\n\n\nconst BRIEF_LINKS = [\"https://www.abc.net.au/news/topic/energy-industry\",\"https://www.abc.net.au/news/topic/climate-change\",\"https://www.afr.com/companies/energy\",\"https://theconversation.com/au/environment\",\"https://www.reuters.com/markets/carbon/\",\"https://www.spglobal.com/en/research-insights/market-insights/energy-transition#news\",\"https://www.iea.org/news\",\"https://www.irena.org/News\",\"https://unfccc.int/news\",\"https://energy.ec.europa.eu/news_en\",\"https://www.energy.gov/search?page=0&sort_by=date&f%5B0%5D=article_type%3A1&f%5B1%5D=offices_rest%3AEnergy.gov\",\"https://www.nzherald.co.nz/business/companies/energy/\",\"https://ieefa.org/newsroom?keys=&content_type%5B3%5D=3&tid%5B302%5D=302\",\"https://energytracker.asia/\",\"https://renewablesnow.com/news/\",\"https://www.aemo.com.au/newsroom/news-updates\",\"https://www.aer.gov.au/news/articles\",\"https://www.aer.gov.au/industry/registers\",\"https://www.aemc.gov.au/news-centre\",\"https://www.aemc.gov.au/our-work/changing-energy-rules/rule-changes\",\"https://cer.gov.au/news-and-media/news#all-news\",\"https://cer.gov.au/news-and-media/media-centre/media-releases#all-media-releases\",\"https://arena.gov.au/news/\",\"https://arena.gov.au/knowledge-bank/\",\"https://www.cefc.com.au/media/\",\"https://www.cefc.com.au/insights/\",\"https://www.climatechangeauthority.gov.au/latest-news\",\"https://www.accc.gov.au/news-centre?type=accc_news&layout=full_width&f%5B0%5D=topic%3A133\",\"https://www.energy.vic.gov.au/victorian-energy-upgrades/installers/veu-industry-latest-news\",\"https://www.esc.vic.gov.au/victorian-energy-upgrades-program/veu-updates-reports-reviews-and-data/updates-veu-program\",\"https://www.esc.vic.gov.au/media-centre\",\"https://fma.com.au/Web/Web/Informed/News-landing.aspx\",\"https://infrastructuremagazine.com.au/facilities-management/\",\"https://www.dcceew.gov.au/about/news/all?f%5B0%5D=news_type%3A1863&f%5B1%5D=topic%3A1883\",\"https://www.energy.gov.au/news\",\"https://minister.dcceew.gov.au/bowen\",\"https://www.aph.gov.au/Parliamentary_Business/Bills_Legislation\",\"https://www.premier.vic.gov.au/media-centre?portfolio=Climate+Action&portfolio=Energy+and+Resources&portfolio=Industry+and+Innovation&portfolio=Resources&portfolio=Small+Business&portfolio=State+Electricity+Commission\",\"https://www.nabers.gov.au/news\",\"https://www.cbd.gov.au/news-and-events\",\"https://www.abcb.gov.au/news\",\"https://www.energyrating.gov.au/news-and-stories\",\"https://www.industry.gov.au/news?news-topic%5B2964%5D=2964&news-topic%5B2957%5D=2957&news-topic%5B2958%5D=2958&news-topic%5B2941%5D=2941&news-topic%5B3148%5D=3148&news-topic%5B3149%5D=3149&news-topic%5B2943%5D=2943&field_news_date_value=All\",\"https://cer.gov.au/news-and-media/news?schemes=30#all-news\",\"https://www.energy.vic.gov.au/about-energy/news\",\"https://www.vicgrid.com.au/about/news\",\"https://www.secvictoria.com.au/news\",\"https://www.solar.vic.gov.au/\",\"https://eec.org.au/resources/news/\",\"https://cleanenergycouncil.org.au/news-resources\",\"https://energycouncil.com.au/media/\",\"https://new.gbca.org.au/news/\",\"https://www.propertycouncil.com.au/news-research/viewallnews\",\"https://www.a2ep.org.au/news\",\"https://aidc.org.au/aidc-media-releases/\",\"https://smartenergy.org.au/news/sec-news/\",\"https://euaa.com.au/media-hub/\",\"https://igcc.org.au/news/\",\"https://climateworkscentre.org/news/\",\"https://www.racefor2030.com.au/news-and-events/\",\"https://www.csiro.au/en/news/All?start=0&count=12&tag=&keyword=&date=all&cat=%7B5E7813EA-F09F-484F-A1FC-395C6B5158A6%7D%7C%7BE8C89119-667A-4B7F-BC62-F0A2124699F6%7D%7C%7B7D06D6FD-69F6-4FFF-8753-2AE434949D36%7D&type=%7B60727734-1BF6-4FD4-88DA-028304CF3D74%7D%7C%7B6B6F9B5C-3CB2-42DD-A714-2A012B3720FD%7D%7C%7BFE827E74-5B1A-4B33-8000-B1FE167A1706%7D%7C%7B49F817AF-74EB-43C4-A51B-CE2B14F46215%7D%7C%7B01DD0A16-96BC-4001-ACA4-F82DBB83B26C%7D%7C%7B9E28CCA8-AAC8-475C-AEB3-7BDE93F6155E%7D&articletags=\",\"https://reneweconomy.com.au/\",\"https://reneweconomy.com.au/author/david-leitch/\",\"https://www.pv-magazine-australia.com/all-news/\",\"https://www.energymagazine.com.au/news/\",\"https://thefifthestate.com.au/\",\"https://www.ecogeneration.com.au/latest-news/\"];\nconst d = $input.first().json || {};\nconst out = buildDayAudit(String(d.day || ''), d.sources || [], d.articles || [], BRIEF_LINKS);\nreturn [{ json: {\n  day: d.day, html: out.html, tally: JSON.stringify(out.tally),\n  detail: 'day audit ' + d.day + ': ' + out.tally.fetched + ' fetched, '\n    + out.tally.sent + ' sent, ' + out.tally.queued + ' queued',\n} }];\n"
+      }
+    },
+    {
+      "id": "audsave",
+      "name": "Save day audit",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1000,
+        480
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "0SoqGGqUOqbwYTmJ",
+          "name": "BEXT Postgres"
+        }
+      },
+      "alwaysOutputData": true,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO day_audits (day, tally, html, updated_at)\nSELECT x.day::date, x.tally::jsonb, x.html, now()\nFROM json_to_recordset($1::json) AS x(day text, tally text, html text)\nON CONFLICT (day) DO UPDATE SET tally = EXCLUDED.tally, html = EXCLUDED.html, updated_at = now()",
+        "options": {
+          "queryReplacement": "={{ JSON.stringify([{ day: $json.day, tally: $json.tally, html: $json.html }]) }}"
+        }
+      }
+    },
+    {
       "id": "kuma",
       "name": "Heartbeat",
       "type": "n8n-nodes-base.httpRequest",
@@ -397,6 +455,39 @@
       ]
     },
     "Page Teams": {
+      "main": [
+        [
+          {
+            "node": "Load audit data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load audit data": {
+      "main": [
+        [
+          {
+            "node": "Build day audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build day audit": {
+      "main": [
+        [
+          {
+            "node": "Save day audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save day audit": {
       "main": [
         [
           {

@@ -41,6 +41,20 @@ const CLASSIFY_SRC = fs
   // passes died on exactly that before anyone saw a coverage row.
   .replace(/^'use strict';$/m, '');
 
+// The day-audit builder, minus its export line — every article of a day nested
+// under the brief link it answers to. Shared with docs/build-fetch-audit.js so
+// the nightly audit and the hand-run one cannot drift.
+const AUDIT_SRC = fs
+  .readFileSync(path.join(__dirname, 'lib', 'day-audit.js'), 'utf8')
+  .replace(/^module\.exports\s*=.*$/m, '')
+  .replace(/^'use strict';$/m, '');
+
+// The hyperlinks embedded in the client's Project Brief PDF, refreshed by
+// docs/build-fetch-audit.js. Embedded as data so the audit node needs no file.
+const BRIEF_LINKS = JSON.stringify(
+  fs.readFileSync(path.join(__dirname, '..', 'docs', 'brief-links.txt'), 'utf8')
+    .split(/\r?\n/).map((l) => l.trim()).filter(Boolean));
+
 // The model-backed fallback reader, minus its export line. Runs only when the
 // ordinary parser finds nothing, so a broken source degrades instead of dying.
 const HERMES_SRC = fs
@@ -1098,7 +1112,10 @@ SELECT id, url, title, image_url, image_state, shown_at, date_is_exact, source_n
        summary, relevance_score,
        -- Carried on every row so the footer can state coverage without a
        -- second query: how many sources are being pulled right now.
-       (SELECT count(*) FROM sources WHERE active) AS sources_monitored
+       (SELECT count(*) FROM sources WHERE active) AS sources_monitored,
+       -- The covered day's audit, written by the 23:00 quality pass: how the
+       -- whole day resolved, not only the rows this sheet carries.
+       (SELECT da.tally FROM day_audits da WHERE da.day = w.day_start::date) AS audit_tally
 FROM ranked
 -- The per-section cap is the only ceiling now, and it is a backstop against one
 -- category flooding the page — not a length. The overall top-30 cap was removed
@@ -1186,6 +1203,7 @@ const sourcesContributing = new Set(rows.map(r => r.source_name)).size;
 return [{ json: { empty: false, item_count: rows.length, sections, intro,
                   sources_monitored: sourcesMonitored,
                   sources_contributing: sourcesContributing,
+                  audit_tally: rows[0].audit_tally || null,
                   generated_by: intro ? 'hermes3:8b' : 'none' } }];
 `,
         },
@@ -1542,7 +1560,8 @@ const html = \`<!doctype html><html><body style="margin:0;padding:0;background:#
   <h1 style="font:600 20px/1.3 Arial,sans-serif;color:#111827;margin:6px 0 2px">\${coverage}</h1>
   <div style="font:12px/1.4 Arial,sans-serif;color:#9ca3af;margin-bottom:20px">
     \${d.item_count} items across \${d.sections.length} sections\${d.sources_monitored
-      ? \` · \${d.sources_contributing} of \${d.sources_monitored} sources contributed\` : ''}
+      ? \` · \${d.sources_contributing} of \${d.sources_monitored} sources contributed\` : ''}\${d.audit_tally
+      ? \` · day audit: \${d.audit_tally.fetched} fetched — \${d.audit_tally.sent} sent, \${d.audit_tally.queued} queued, \${d.audit_tally.held} held, \${d.audit_tally.excluded} score-0\` : ''}
   </div>
   \${d.intro ? \`<div style="background:#f0fdfa;border-left:3px solid #14b8a6;padding:12px 14px;
        font:13px/1.6 Arial,sans-serif;color:#134e4a;margin-bottom:8px">\${esc(d.intro)}</div>\` : ''}
@@ -2197,6 +2216,23 @@ await new Promise(function (resolve, reject) {
 return [{ json: { posted: findings.length } }];
 `;
 
+const DAY_AUDIT_CODE = `
+// The sandbox withholds the url globals - the third feature this session that
+// worked locally (where Node provides them) and would have died at its first
+// scheduled run. Preflight R002 caught each one before the schedule could.
+const { URL } = require('url');
+${AUDIT_SRC}
+
+const BRIEF_LINKS = ${BRIEF_LINKS};
+const d = $input.first().json || {};
+const out = buildDayAudit(String(d.day || ''), d.sources || [], d.articles || [], BRIEF_LINKS);
+return [{ json: {
+  day: d.day, html: out.html, tally: JSON.stringify(out.tally),
+  detail: 'day audit ' + d.day + ': ' + out.tally.fetched + ' fetched, '
+    + out.tally.sent + ' sent, ' + out.tally.queued + ' queued',
+} }];
+`;
+
 function newsQualityWorkflow() {
   return {
     name: 'BEXT — News Quality',
@@ -2419,6 +2455,57 @@ WHERE NOT EXISTS (
         alwaysOutputData: true,
         parameters: { jsCode: DOCTOR_PAGE_CODE },
       },
+      {
+        id: 'audload', name: 'Load audit data', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(560, 480),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          // One row: the day, every source, every article published today. The
+          // audit is rebuilt on each pass, so the 23:00 run - the one that
+          // closes the day - leaves the finished version behind.
+          query: `SELECT
+  (now() AT TIME ZONE 'Australia/Melbourne')::date::text AS day,
+  (SELECT json_agg(json_build_object(
+     'id', s.id, 'slug', s.slug, 'name', s.name, 'url', s.url,
+     'feed_url', s.config->>'feed_url', 'method', s.method::text, 'active', s.active,
+     'last_article', (SELECT max(a.fetched_at)::date::text FROM articles a WHERE a.source_id = s.id)))
+   FROM sources s) AS sources,
+  (SELECT coalesce(json_agg(json_build_object(
+     'id', a.id, 'title', a.title, 'url', a.url, 'source_id', a.source_id,
+     'score', an.relevance_score, 'kind', a.content_kind::text,
+     'ds', a.date_state::text, 'elig', a.report_eligible,
+     'day', to_char(coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne', 'DD Mon'),
+     'exact_date', (a.published_at IS NOT NULL), 'sent_in', sent.report_date)), '[]'::json)
+   FROM articles a
+   LEFT JOIN article_analysis an ON an.article_id = a.id
+   LEFT JOIN LATERAL (
+     SELECT r.report_date::text FROM report_items ri JOIN reports r ON r.id = ri.report_id
+     WHERE ri.article_id = a.id AND r.status = 'sent' LIMIT 1) sent ON true
+   WHERE (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')::date
+         = (now() AT TIME ZONE 'Australia/Melbourne')::date) AS articles`,
+        },
+      },
+      {
+        id: 'audbuild', name: 'Build day audit', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(780, 480),
+        parameters: { jsCode: DAY_AUDIT_CODE },
+      },
+      {
+        id: 'audsave', name: 'Save day audit', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(1000, 480),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          query: `INSERT INTO day_audits (day, tally, html, updated_at)
+SELECT x.day::date, x.tally::jsonb, x.html, now()
+FROM json_to_recordset($1::json) AS x(day text, tally text, html text)
+ON CONFLICT (day) DO UPDATE SET tally = EXCLUDED.tally, html = EXCLUDED.html, updated_at = now()`,
+          options: { queryReplacement: '={{ JSON.stringify([{ day: $json.day, tally: $json.tally, html: $json.html }]) }}' },
+        },
+      },
       heartbeat('KUMA_PUSH_NEWS_QUALITY', 780, 0),
     ],
     connections: {
@@ -2433,7 +2520,10 @@ WHERE NOT EXISTS (
       'Quiet sources': { main: [[{ node: 'Diagnose quiet sources', type: 'main', index: 0 }]] },
       'Diagnose quiet sources': { main: [[{ node: 'Record incidents', type: 'main', index: 0 }]] },
       'Record incidents': { main: [[{ node: 'Page Teams', type: 'main', index: 0 }]] },
-      'Page Teams': { main: [[{ node: 'Heartbeat', type: 'main', index: 0 }]] },
+      'Page Teams': { main: [[{ node: 'Load audit data', type: 'main', index: 0 }]] },
+      'Load audit data': { main: [[{ node: 'Build day audit', type: 'main', index: 0 }]] },
+      'Build day audit': { main: [[{ node: 'Save day audit', type: 'main', index: 0 }]] },
+      'Save day audit': { main: [[{ node: 'Heartbeat', type: 'main', index: 0 }]] },
     },
   };
 }
@@ -4395,7 +4485,7 @@ return [{ json: {
   coverage,
   card,
   listHtml,
-  counts: { fetched: rows.length, solar: solar.length, energy: energy.length, shown: shown },
+  counts: { fetched: rows.length, solar: solar.length, energy: energy.length, shown: shown, audit: rows[0].audit_tally || null },
 } }];
 `;
 
@@ -4463,6 +4553,7 @@ const dailyNewsCardWorkflow = () => ({
 )
 SELECT (SELECT report_date::text FROM day) AS report_date,
        (SELECT covers::text FROM day)      AS covers,
+       (SELECT da.tally FROM day_audits da WHERE da.day = (SELECT covers FROM day)) AS audit_tally,
        a.title, a.url, s.name AS source_name, s.category,
        coalesce(an.relevance_score, 0)                            AS relevance_score,
        coalesce(an.summary, '')                                   AS summary,

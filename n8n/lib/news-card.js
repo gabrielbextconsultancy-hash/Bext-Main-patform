@@ -101,7 +101,10 @@ var buildNewsCard = function (opts) {
       text: sent.length + ' item' + (sent.length === 1 ? '' : 's') + ' sent to the client'
             + (counts.fetched ? '  ·  ' + counts.fetched + ' fetched' : '')
             + (counts.sources_contributing ? '  ·  ' + counts.sources_contributing
-               + ' of ' + (counts.sources_monitored || '?') + ' sources contributed' : ''),
+               + ' of ' + (counts.sources_monitored || '?') + ' sources contributed' : '')
+            + (counts.audit ? '  ·  day audit: ' + counts.audit.sent + ' sent / '
+               + counts.audit.queued + ' queued / ' + counts.audit.excluded + ' score-0'
+               + ' of ' + counts.audit.fetched + ' fetched' : ''),
       isSubtle: true, size: 'Small', wrap: true, spacing: 'None' },
   ];
 
