@@ -459,6 +459,19 @@ sources:
     method: rss
     feed_url: "https://www.propertycouncil.com.au/feed"
     requires_browser: true
+  - slug: aidc-media
+    name: "AIDC — Industrial Decarbonisation Media Releases"
+    category: Industry Updates
+    url: "https://aidc.org.au/aidc-media-releases/"
+    method: scrape
+    firecrawl: true
+    active: true
+    note: >-
+      The whole site 403s at the edge - Scrapling, local Chromium, even
+      robots.txt - so no local tier can ever reach it. Firecrawl's cloud
+      browsers pass and returned 78 article links on the proving run
+      (28 Aug 2026). Hydrogen and industrial decarbonisation releases,
+      distinct from the a2ep.org.au news the old shared slug now watches.
   - slug: a2ep-aidc
     name: Australian Alliance for Energy Productivity (AIDC)
     category: Industry Updates
