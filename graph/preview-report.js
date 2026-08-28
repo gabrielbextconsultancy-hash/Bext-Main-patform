@@ -81,6 +81,7 @@ const ORDER = ['Australian News', 'Industry Updates', 'International Industry Up
   const d = {
     sections, empty: false, item_count: rows.length,
     sources_monitored: rows[0].sources_monitored,
+    audit_tally: rows[0].audit_tally || null,
     sources_contributing: new Set(rows.map(r => r.source_name)).size,
     intro: 'Preview render — the sheet as the workflow would build it right now.',
     recipient: 'preview@local',

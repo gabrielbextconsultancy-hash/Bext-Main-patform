@@ -1114,8 +1114,11 @@ SELECT id, url, title, image_url, image_state, shown_at, date_is_exact, source_n
        -- second query: how many sources are being pulled right now.
        (SELECT count(*) FROM sources WHERE active) AS sources_monitored,
        -- The covered day's audit, written by the 23:00 quality pass: how the
-       -- whole day resolved, not only the rows this sheet carries.
-       (SELECT da.tally FROM day_audits da WHERE da.day = w.day_start::date) AS audit_tally
+       -- whole day resolved, not only the rows this sheet carries. The win CTE
+       -- is read directly: the w alias lives inside ranked, not out here - the
+       -- 28 Aug 05:00 run died on exactly that, at the first node, silently.
+       (SELECT da.tally FROM day_audits da
+         WHERE da.day = (SELECT day_start::date FROM win)) AS audit_tally
 FROM ranked
 -- The per-section cap is the only ceiling now, and it is a backstop against one
 -- category flooding the page — not a length. The overall top-30 cap was removed
