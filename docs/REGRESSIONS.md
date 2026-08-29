@@ -595,3 +595,17 @@ stories were dropped upfront as "off-host".
 **Guard:** R034 — asserts `hermes-extract.js` unwraps tracking URLs during candidate extraction and resolves apex domains.
 
 
+
+## R035 — SQL that only the database can refuse
+
+The 28 Aug 05:00 report died at its first node: a subquery referenced the
+window CTE's alias from the outer query, where it does not exist. Every static
+check passed — Code nodes parsed, workflows deployed, preflight green — because
+no amount of reading SQL substitutes for planning it. Symptom in the log:
+`missing FROM-clause entry for table "w"`; consequence: no report row, no send,
+found ten hours later by a person.
+
+Rule: after any edit to a report query, the SQL must be PREPAREd against the
+live schema before deploy. Preflight R035 does this for every postgres node in
+the daily report whenever the database is reachable, and `graph/preview-report.js`
+executes the full query end-to-end — run one of them, not neither.

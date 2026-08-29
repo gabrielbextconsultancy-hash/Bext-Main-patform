@@ -725,6 +725,42 @@ if (VPS) {
   });
 }
 
+// ── R035 ─ the report SQL must PLAN against the live schema ─────────────────
+// Cost: the 28 Aug 05:00 send. A subquery referenced the window alias from a
+// scope where it does not exist; every static check passed, because only the
+// database can parse SQL. This check PREPAREs every query in the daily report
+// against the real schema through the tunnel, and skips cleanly when no
+// database is reachable rather than failing the build on a closed laptop.
+check('R035', 'daily-report SQL prepares against the live schema', () => {
+  const wf = JSON.parse(read('n8n/workflows/BEXT-Daily-Report.json'));
+  const queries = wf.nodes
+    .filter(n => n.type === 'n8n-nodes-base.postgres' && n.parameters && n.parameters.query)
+    .map(n => ({ name: n.name, q: n.parameters.query }));
+  const script = [
+    "require('dotenv').config();",
+    "const {Client}=require('pg');",
+    "const qs=JSON.parse(process.argv[1]||'[]');",
+    "(async()=>{",
+    " const c=new Client({host:process.env.PG_HOST,port:+process.env.PG_PORT,database:process.env.PG_DB,user:process.env.PG_USER,password:process.env.PG_PASSWORD,connectionTimeoutMillis:4000});",
+    " try{await c.connect();}catch(e){console.log('SKIP');process.exit(0);}",
+    " for(const x of qs){",
+    "  try{await c.query('BEGIN');await c.query('PREPARE _pf AS '+x.q);await c.query('ROLLBACK');}",
+    "  catch(e){console.log('FAIL '+x.name+': '+String(e.message).slice(0,140));await c.end();process.exit(0);}",
+    " }",
+    " await c.end();console.log('OK '+qs.length);",
+    "})();",
+  ].join('');
+  try {
+    const out = execFileSync('node', ['-e', script, JSON.stringify(queries)],
+      { encoding: 'utf8', cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    if (out.startsWith('SKIP')) return { ok: true, detail: 'no database reachable — run with the tunnel up to exercise this' };
+    if (out.startsWith('FAIL')) return { ok: false, detail: out.slice(5) };
+    return { ok: true, detail: queries.length + ' queries prepared clean' };
+  } catch (e) {
+    return { ok: false, detail: 'checker crashed: ' + String(e.message).slice(0, 120) };
+  }
+});
+
 // ── report ──────────────────────────────────────────────────────────────────
 const failed = results.filter(r => !r.ok);
 if (JSON_OUT) {
