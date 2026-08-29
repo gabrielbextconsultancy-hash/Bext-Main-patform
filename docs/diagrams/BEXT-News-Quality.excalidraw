@@ -25,7 +25,7 @@
       "height": 20,
       "strokeColor": "#94a3b8",
       "backgroundColor": "transparent",
-      "text": "Trigger: Schedule (0 6 * * *) | Domain: OPS | Tables Read: [articles, report_items, reports, sources] | Tables Written: [articles, integration_health]",
+      "text": "Trigger: Schedule (0 6 * * *) | Domain: OPS | Tables Read: [article_analysis, articles, incidents, report_items, reports, sources] | Tables Written: [articles, incidents, integration_health]",
       "fontSize": 13,
       "fontFamily": 1
     },
@@ -1092,7 +1092,7 @@
       "version": 1,
       "versionNonce": 1,
       "isDeleted": false,
-      "text": "Heartbeat",
+      "text": "Quiet sources",
       "fontSize": 14,
       "fontFamily": 1,
       "textAlign": "center",
@@ -1116,6 +1116,888 @@
       "opacity": 100,
       "groupIds": [
         "node-BEXT-News-Quality-8"
+      ],
+      "roundness": null,
+      "seed": 1003,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "⚙️ System Node",
+      "fontSize": 11,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle"
+    },
+    {
+      "id": "arrow-BEXT-News-Quality-8-arrow",
+      "type": "arrow",
+      "x": 990,
+      "y": 282.5,
+      "width": 50,
+      "height": 0,
+      "angle": 0,
+      "strokeColor": "#64748b",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 2001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          0
+        ]
+      ],
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "node-BEXT-News-Quality-9-box",
+      "type": "rectangle",
+      "x": 1040,
+      "y": 245,
+      "width": 200,
+      "height": 75,
+      "angle": 0,
+      "strokeColor": "#94a3b8",
+      "backgroundColor": "#0f172a",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-News-Quality-9"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 1001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "node-BEXT-News-Quality-9-text"
+        }
+      ]
+    },
+    {
+      "id": "node-BEXT-News-Quality-9-text",
+      "type": "text",
+      "x": 1048,
+      "y": 255,
+      "width": 184,
+      "height": 24,
+      "angle": 0,
+      "strokeColor": "#f8fafc",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-News-Quality-9"
+      ],
+      "roundness": null,
+      "seed": 1002,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "Diagnose quiet sources",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "node-BEXT-News-Quality-9-box"
+    },
+    {
+      "id": "node-BEXT-News-Quality-9-subtext",
+      "type": "text",
+      "x": 1048,
+      "y": 294,
+      "width": 184,
+      "height": 18,
+      "angle": 0,
+      "strokeColor": "#cbd5e1",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-News-Quality-9"
+      ],
+      "roundness": null,
+      "seed": 1003,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "⚙️ System Node",
+      "fontSize": 11,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle"
+    },
+    {
+      "id": "arrow-BEXT-News-Quality-9-arrow",
+      "type": "arrow",
+      "x": 1140,
+      "y": 320,
+      "width": 1000,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#64748b",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 2001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          -1000,
+          50
+        ]
+      ],
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "node-BEXT-News-Quality-10-box",
+      "type": "rectangle",
+      "x": 40,
+      "y": 370,
+      "width": 200,
+      "height": 75,
+      "angle": 0,
+      "strokeColor": "#94a3b8",
+      "backgroundColor": "#0f172a",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-News-Quality-10"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 1001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "node-BEXT-News-Quality-10-text"
+        }
+      ]
+    },
+    {
+      "id": "node-BEXT-News-Quality-10-text",
+      "type": "text",
+      "x": 48,
+      "y": 380,
+      "width": 184,
+      "height": 24,
+      "angle": 0,
+      "strokeColor": "#f8fafc",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-News-Quality-10"
+      ],
+      "roundness": null,
+      "seed": 1002,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "Record incidents",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "node-BEXT-News-Quality-10-box"
+    },
+    {
+      "id": "node-BEXT-News-Quality-10-subtext",
+      "type": "text",
+      "x": 48,
+      "y": 419,
+      "width": 184,
+      "height": 18,
+      "angle": 0,
+      "strokeColor": "#cbd5e1",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-News-Quality-10"
+      ],
+      "roundness": null,
+      "seed": 1003,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "⚙️ System Node",
+      "fontSize": 11,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle"
+    },
+    {
+      "id": "arrow-BEXT-News-Quality-10-arrow",
+      "type": "arrow",
+      "x": 240,
+      "y": 407.5,
+      "width": 50,
+      "height": 0,
+      "angle": 0,
+      "strokeColor": "#64748b",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 2001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          0
+        ]
+      ],
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "node-BEXT-News-Quality-11-box",
+      "type": "rectangle",
+      "x": 290,
+      "y": 370,
+      "width": 200,
+      "height": 75,
+      "angle": 0,
+      "strokeColor": "#94a3b8",
+      "backgroundColor": "#0f172a",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-News-Quality-11"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 1001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "node-BEXT-News-Quality-11-text"
+        }
+      ]
+    },
+    {
+      "id": "node-BEXT-News-Quality-11-text",
+      "type": "text",
+      "x": 298,
+      "y": 380,
+      "width": 184,
+      "height": 24,
+      "angle": 0,
+      "strokeColor": "#f8fafc",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-News-Quality-11"
+      ],
+      "roundness": null,
+      "seed": 1002,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "Page Teams",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "node-BEXT-News-Quality-11-box"
+    },
+    {
+      "id": "node-BEXT-News-Quality-11-subtext",
+      "type": "text",
+      "x": 298,
+      "y": 419,
+      "width": 184,
+      "height": 18,
+      "angle": 0,
+      "strokeColor": "#cbd5e1",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-News-Quality-11"
+      ],
+      "roundness": null,
+      "seed": 1003,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "⚙️ System Node",
+      "fontSize": 11,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle"
+    },
+    {
+      "id": "arrow-BEXT-News-Quality-11-arrow",
+      "type": "arrow",
+      "x": 490,
+      "y": 407.5,
+      "width": 50,
+      "height": 0,
+      "angle": 0,
+      "strokeColor": "#64748b",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 2001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          0
+        ]
+      ],
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "node-BEXT-News-Quality-12-box",
+      "type": "rectangle",
+      "x": 540,
+      "y": 370,
+      "width": 200,
+      "height": 75,
+      "angle": 0,
+      "strokeColor": "#94a3b8",
+      "backgroundColor": "#0f172a",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-News-Quality-12"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 1001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "node-BEXT-News-Quality-12-text"
+        }
+      ]
+    },
+    {
+      "id": "node-BEXT-News-Quality-12-text",
+      "type": "text",
+      "x": 548,
+      "y": 380,
+      "width": 184,
+      "height": 24,
+      "angle": 0,
+      "strokeColor": "#f8fafc",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-News-Quality-12"
+      ],
+      "roundness": null,
+      "seed": 1002,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "Load audit data",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "node-BEXT-News-Quality-12-box"
+    },
+    {
+      "id": "node-BEXT-News-Quality-12-subtext",
+      "type": "text",
+      "x": 548,
+      "y": 419,
+      "width": 184,
+      "height": 18,
+      "angle": 0,
+      "strokeColor": "#cbd5e1",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-News-Quality-12"
+      ],
+      "roundness": null,
+      "seed": 1003,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "⚙️ System Node",
+      "fontSize": 11,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle"
+    },
+    {
+      "id": "arrow-BEXT-News-Quality-12-arrow",
+      "type": "arrow",
+      "x": 740,
+      "y": 407.5,
+      "width": 50,
+      "height": 0,
+      "angle": 0,
+      "strokeColor": "#64748b",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 2001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          0
+        ]
+      ],
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "node-BEXT-News-Quality-13-box",
+      "type": "rectangle",
+      "x": 790,
+      "y": 370,
+      "width": 200,
+      "height": 75,
+      "angle": 0,
+      "strokeColor": "#94a3b8",
+      "backgroundColor": "#0f172a",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-News-Quality-13"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 1001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "node-BEXT-News-Quality-13-text"
+        }
+      ]
+    },
+    {
+      "id": "node-BEXT-News-Quality-13-text",
+      "type": "text",
+      "x": 798,
+      "y": 380,
+      "width": 184,
+      "height": 24,
+      "angle": 0,
+      "strokeColor": "#f8fafc",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-News-Quality-13"
+      ],
+      "roundness": null,
+      "seed": 1002,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "Build day audit",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "node-BEXT-News-Quality-13-box"
+    },
+    {
+      "id": "node-BEXT-News-Quality-13-subtext",
+      "type": "text",
+      "x": 798,
+      "y": 419,
+      "width": 184,
+      "height": 18,
+      "angle": 0,
+      "strokeColor": "#cbd5e1",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-News-Quality-13"
+      ],
+      "roundness": null,
+      "seed": 1003,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "⚙️ System Node",
+      "fontSize": 11,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle"
+    },
+    {
+      "id": "arrow-BEXT-News-Quality-13-arrow",
+      "type": "arrow",
+      "x": 990,
+      "y": 407.5,
+      "width": 50,
+      "height": 0,
+      "angle": 0,
+      "strokeColor": "#64748b",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 2001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          50,
+          0
+        ]
+      ],
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "node-BEXT-News-Quality-14-box",
+      "type": "rectangle",
+      "x": 1040,
+      "y": 370,
+      "width": 200,
+      "height": 75,
+      "angle": 0,
+      "strokeColor": "#94a3b8",
+      "backgroundColor": "#0f172a",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-News-Quality-14"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 1001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "node-BEXT-News-Quality-14-text"
+        }
+      ]
+    },
+    {
+      "id": "node-BEXT-News-Quality-14-text",
+      "type": "text",
+      "x": 1048,
+      "y": 380,
+      "width": 184,
+      "height": 24,
+      "angle": 0,
+      "strokeColor": "#f8fafc",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-News-Quality-14"
+      ],
+      "roundness": null,
+      "seed": 1002,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "Save day audit",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "node-BEXT-News-Quality-14-box"
+    },
+    {
+      "id": "node-BEXT-News-Quality-14-subtext",
+      "type": "text",
+      "x": 1048,
+      "y": 419,
+      "width": 184,
+      "height": 18,
+      "angle": 0,
+      "strokeColor": "#cbd5e1",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-News-Quality-14"
+      ],
+      "roundness": null,
+      "seed": 1003,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "⚙️ System Node",
+      "fontSize": 11,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle"
+    },
+    {
+      "id": "arrow-BEXT-News-Quality-14-arrow",
+      "type": "arrow",
+      "x": 1140,
+      "y": 445,
+      "width": 1000,
+      "height": 50,
+      "angle": 0,
+      "strokeColor": "#64748b",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [],
+      "roundness": {
+        "type": 2
+      },
+      "seed": 2001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "points": [
+        [
+          0,
+          0
+        ],
+        [
+          -1000,
+          50
+        ]
+      ],
+      "endArrowhead": "arrow"
+    },
+    {
+      "id": "node-BEXT-News-Quality-15-box",
+      "type": "rectangle",
+      "x": 40,
+      "y": 495,
+      "width": 200,
+      "height": 75,
+      "angle": 0,
+      "strokeColor": "#94a3b8",
+      "backgroundColor": "#0f172a",
+      "fillStyle": "solid",
+      "strokeWidth": 2,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-News-Quality-15"
+      ],
+      "roundness": {
+        "type": 3
+      },
+      "seed": 1001,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "boundElements": [
+        {
+          "type": "text",
+          "id": "node-BEXT-News-Quality-15-text"
+        }
+      ]
+    },
+    {
+      "id": "node-BEXT-News-Quality-15-text",
+      "type": "text",
+      "x": 48,
+      "y": 505,
+      "width": 184,
+      "height": 24,
+      "angle": 0,
+      "strokeColor": "#f8fafc",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-News-Quality-15"
+      ],
+      "roundness": null,
+      "seed": 1002,
+      "version": 1,
+      "versionNonce": 1,
+      "isDeleted": false,
+      "text": "Heartbeat",
+      "fontSize": 14,
+      "fontFamily": 1,
+      "textAlign": "center",
+      "verticalAlign": "middle",
+      "containerId": "node-BEXT-News-Quality-15-box"
+    },
+    {
+      "id": "node-BEXT-News-Quality-15-subtext",
+      "type": "text",
+      "x": 48,
+      "y": 544,
+      "width": 184,
+      "height": 18,
+      "angle": 0,
+      "strokeColor": "#cbd5e1",
+      "backgroundColor": "transparent",
+      "fillStyle": "solid",
+      "strokeWidth": 1,
+      "strokeStyle": "solid",
+      "roughness": 0,
+      "opacity": 100,
+      "groupIds": [
+        "node-BEXT-News-Quality-15"
       ],
       "roundness": null,
       "seed": 1003,
