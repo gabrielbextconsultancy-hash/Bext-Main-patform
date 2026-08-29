@@ -1,98 +1,240 @@
-import { getDayAudits, getDayAuditHtml } from '@/lib/queries';
+import {
+  getManagementRows,
+  getLiveTally,
+  getDaySources,
+  getAuditDayList,
+  PAGE_SIZE,
+  type ManagementRow,
+} from '@/lib/queries';
 import { Card, DatabaseDown, Empty } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * The day audit, live.
+ * The daily-report management table.
  *
- * The client kept asking the same question by hand — "you fetched N, the email
- * carried M, where did the rest go?" — and the answer was a PDF built on
- * request. This page is that answer standing: every article of a publication
- * day nested under the brief link it answers to, sent items marked with the
- * report that carried them, every absentee with its reason. Written by the
- * quality passes; the 23:00 run closes the day.
+ * Every article of a publication day, live from the database: score, the
+ * article with its link, disposition with reason, when it was fetched, and
+ * when it goes out — filterable by disposition, source (with its brief-link
+ * number), and title search, paginated. Live on purpose: the stored audit
+ * snapshot is built at fixed times and made the numbers here disagree with
+ * the numbers there; a management view must never argue with itself.
  */
+
+const CHIP: Record<string, string> = {
+  SENT: 'text-green-300 bg-green-900/40',
+  QUEUED: 'text-blue-300 bg-blue-900/40',
+  HELD: 'text-amber-300 bg-amber-900/40',
+  EXCLUDED: 'text-ink-300 bg-ink-800',
+};
+
+function scoreClass(n: number | null) {
+  if (n === null) return 'text-ink-300 bg-ink-800';
+  if (n >= 80) return 'text-green-900 bg-green-200';
+  if (n >= 55) return 'text-teal-900 bg-teal-200';
+  if (n >= 20) return 'text-amber-900 bg-amber-200';
+  return 'text-ink-700 bg-ink-300';
+}
+
+/** Melbourne "today", and the next 05:00 send for queued rows. */
+function melbourne() {
+  const mel = new Date(new Date().toLocaleString('en-US', { timeZone: 'Australia/Melbourne' }));
+  const today = mel.toISOString().slice(0, 10);
+  const next = new Date(mel);
+  next.setHours(5, 0, 0, 0);
+  if (mel >= next) next.setDate(next.getDate() + 1);
+  const nextSend = next.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) + ' 05:00';
+  return { today, nextSend };
+}
+
+function qs(base: Record<string, string | undefined>, patch: Record<string, string | undefined>) {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries({ ...base, ...patch })) if (v) p.set(k, v);
+  const s = p.toString();
+  return s ? `/audit?${s}` : '/audit';
+}
+
 export default async function AuditPage({
   searchParams,
 }: {
-  searchParams: Promise<{ day?: string }>;
+  searchParams: Promise<{ day?: string; status?: string; src?: string; q?: string; page?: string }>;
 }) {
-  const { day } = await searchParams;
-  const audits = await getDayAudits();
-  if (audits === null) return <DatabaseDown />;
-  if (!audits.length) {
-    return (
-      <Card title="Day audit">
-        <Empty>No audits yet — the first is written by the next quality pass (06:00, 12:00 or 23:00).</Empty>
-      </Card>
-    );
-  }
+  const sp = await searchParams;
+  const { today, nextSend } = melbourne();
+  const day = sp.day ?? today;
+  const page = Math.max(1, Number(sp.page ?? 1) || 1);
 
-  const chosen = audits.find((a) => a.day === day) ?? audits[0];
-  const html = await getDayAuditHtml(chosen.day);
+  const [days, tally, sources, result] = await Promise.all([
+    getAuditDayList(),
+    getLiveTally(day),
+    getDaySources(day),
+    getManagementRows({ day, status: sp.status, src: sp.src, q: sp.q, page }),
+  ]);
+  if (days === null || sources === null) return <DatabaseDown />;
+
+  const base = { day, status: sp.status, src: sp.src, q: sp.q };
+  const pages = Math.max(1, Math.ceil(result.total / PAGE_SIZE));
+
+  const tile = (label: string, n: number, status?: string) => (
+    <a
+      key={label}
+      href={qs(base, { status, page: undefined })}
+      className={`flex-1 rounded-lg border px-3 py-2 ${
+        (sp.status ?? '') === (status ?? '')
+          ? 'border-brief-a bg-brief-a/10'
+          : 'border-ink-700 hover:border-ink-500'
+      }`}
+    >
+      <span className="block text-lg font-bold text-ink-100">{n}</span>
+      <span className="text-xs text-ink-300">{label}</span>
+    </a>
+  );
 
   return (
     <div className="space-y-5">
-      <Card title="Day audit — the brief, link by link">
+      <Card title="Daily report — management table">
         <p className="text-sm text-ink-300">
-          Every article of the day under the brief link it answers to: sent items name the report
-          that carried them, and every absentee carries its reason. Rebuilt each quality pass; the
-          23:00 run leaves the finished version behind for the 05:00 email and the Teams card.
+          Every article of the day, live: what was fetched, what each scored, what went out and
+          when, what waits for the next 05:00, and what is held — with the brief link each source
+          answers to. Queued items go out {nextSend}.
         </p>
+
         <div className="mt-3 flex flex-wrap gap-2">
-          {audits.map((a) => (
+          {(days ?? []).map((d) => (
             <a
-              key={a.day}
-              href={`/audit?day=${a.day}`}
+              key={d.day}
+              href={qs({ ...base, status: undefined, src: undefined, q: undefined }, { day: d.day, page: undefined })}
               className={`rounded-full border px-3 py-1 text-xs ${
-                a.day === chosen.day
+                d.day === day
                   ? 'border-brief-a bg-brief-a/10 text-brief-a'
                   : 'border-ink-700 text-ink-300 hover:border-ink-500'
               }`}
             >
-              {a.day}
-              <span className="ml-2 text-ink-400">
-                {a.tally.fetched} fetched · {a.tally.sent} sent · {a.tally.queued} queued
-              </span>
+              {d.day}
             </a>
           ))}
         </div>
+
+        {/* Disposition tiles double as filters; the active one highlights. */}
+        <div className="mt-4 flex flex-wrap gap-2">
+          {tile('fetched this day', tally.fetched, undefined)}
+          {tile('sent', tally.SENT, 'SENT')}
+          {tile(`queued — go out ${nextSend}`, tally.QUEUED, 'QUEUED')}
+          {tile('held', tally.HELD, 'HELD')}
+          {tile('excluded (score 0)', tally.EXCLUDED, 'EXCLUDED')}
+        </div>
+
+        {/* Search + source filter. A plain GET form: no client code to break. */}
+        <form method="get" action="/audit" className="mt-4 flex flex-wrap items-center gap-2">
+          <input type="hidden" name="day" value={day} />
+          {sp.status ? <input type="hidden" name="status" value={sp.status} /> : null}
+          <input
+            type="search"
+            name="q"
+            defaultValue={sp.q ?? ''}
+            placeholder="search titles…"
+            className="w-56 rounded-md border border-ink-700 bg-ink-900 px-3 py-1.5 text-sm text-ink-100
+                       placeholder:text-ink-500 focus:border-brief-a focus:outline-none"
+          />
+          <select
+            name="src"
+            defaultValue={sp.src ?? ''}
+            className="max-w-[22rem] rounded-md border border-ink-700 bg-ink-900 px-2 py-1.5 text-sm text-ink-100"
+          >
+            <option value="">every source</option>
+            {(sources ?? []).map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.brief_n ? `#${s.brief_n} · ` : ''}{s.name} ({s.n})
+              </option>
+            ))}
+          </select>
+          <button
+            type="submit"
+            className="rounded-md border border-ink-700 px-3 py-1.5 text-sm text-ink-200 hover:border-brief-a"
+          >
+            Filter
+          </button>
+          {(sp.q || sp.src || sp.status) && (
+            <a href={qs({ day }, {})} className="text-xs text-ink-400 hover:text-ink-200">
+              clear filters
+            </a>
+          )}
+        </form>
       </Card>
 
-      <Card title={`Audit for ${chosen.day}`}>
-        {/* The stored markup is produced by our own builder (n8n/lib/day-audit.js)
-            from database fields it escapes itself; nothing user-authored reaches
-            it unescaped. The style block scopes the document's classes. */}
-        <style>{`
-          .audit { color: #d1d5db; font-size: 13px; line-height: 1.5; }
-          .audit h3 { font-size: 15px; font-weight: 700; color: #f3f4f6; margin: 18px 0 8px;
-                      border-bottom: 2px solid #0f766e; padding-bottom: 3px; }
-          .audit .tiles { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
-          .audit .tile { flex: 1; min-width: 130px; border: 1px solid #374151; border-radius: 8px; padding: 8px 10px; }
-          .audit .tile b { font-size: 18px; display: block; color: #f9fafb; }
-          .audit .grp { margin: 12px 0 16px; }
-          .audit .lk { font-size: 11px; color: #9ca3af; }
-          .audit .lk a { color: #9ca3af; text-decoration: none; }
-          .audit .gname { font-size: 13px; font-weight: 700; color: #f3f4f6; margin: 2px 0; }
-          .audit .ok { color: #4ade80; } .audit .quiet { color: #fbbf24; } .audit .held { color: #9ca3af; }
-          .audit table { width: 100%; border-collapse: collapse; margin: 4px 0 6px; }
-          .audit th { text-align: left; font-size: 10px; text-transform: uppercase; color: #9ca3af;
-                      border-bottom: 1px solid #374151; padding: 3px 6px; }
-          .audit td { border-bottom: 1px solid #1f2937; padding: 4px 6px; vertical-align: top; }
-          .audit .t a { color: #2dd4bf; text-decoration: none; font-weight: 600; }
-          .audit .u { color: #6b7280; font-size: 10px; }
-          .audit .chip { display: inline-block; font: 700 10px/1 sans-serif; padding: 3px 7px; border-radius: 9px; }
-          .audit .green { color: #166534; background: #dcfce7; }
-          .audit .teal { color: #0f766e; background: #ccfbf1; }
-          .audit .amber { color: #854d0e; background: #fef9c3; }
-          .audit .grey { color: #4b5563; background: #e5e7eb; }
-          .audit .disp { display: inline-block; font: 700 10px/1 sans-serif; padding: 2px 7px; border-radius: 9px; }
-        `}</style>
-        {html ? (
-          <div dangerouslySetInnerHTML={{ __html: html }} />
+      <Card title={`${result.total} article${result.total === 1 ? '' : 's'} · ${day}`}>
+        {result.rows.length === 0 ? (
+          <Empty>Nothing matches these filters.</Empty>
         ) : (
-          <Empty>The audit body for this day is missing.</Empty>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-ink-700 text-left text-[10px] uppercase tracking-wide text-ink-400">
+                  <th className="px-2 py-2">Score</th>
+                  <th className="px-2 py-2">Article</th>
+                  <th className="px-2 py-2">Disposition</th>
+                  <th className="px-2 py-2">Fetched</th>
+                  <th className="px-2 py-2">Sent / will send</th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.rows.map((r: ManagementRow) => (
+                  <tr key={r.id} className="border-b border-ink-800/60 align-top">
+                    <td className="px-2 py-2">
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${scoreClass(r.score)}`}>
+                        {r.score ?? '–'}
+                      </span>
+                    </td>
+                    <td className="max-w-[30rem] px-2 py-2">
+                      <a
+                        href={r.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-semibold text-brief-a hover:underline"
+                      >
+                        {r.title}
+                      </a>
+                      <div className="text-xs text-ink-400">
+                        {r.brief_n ? `#${r.brief_n} · ` : ''}{r.source_name}
+                      </div>
+                    </td>
+                    <td className="px-2 py-2">
+                      <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-bold ${CHIP[r.disposition]}`}>
+                        {r.disposition}
+                      </span>
+                      <div className="max-w-[16rem] text-xs text-ink-400">{r.reason}</div>
+                    </td>
+                    <td className="whitespace-nowrap px-2 py-2 text-xs text-ink-300">{r.fetched_at}</td>
+                    <td className="whitespace-nowrap px-2 py-2 text-xs">
+                      {r.disposition === 'SENT' ? (
+                        <span className="text-green-300">{r.sent_at ?? r.sent_report}</span>
+                      ) : r.disposition === 'QUEUED' ? (
+                        <span className="text-blue-300">{nextSend}</span>
+                      ) : (
+                        <span className="text-ink-500">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {pages > 1 && (
+          <div className="mt-4 flex items-center gap-2 text-sm">
+            {page > 1 && (
+              <a href={qs(base, { page: String(page - 1) })} className="rounded border border-ink-700 px-3 py-1 hover:border-brief-a">
+                ← prev
+              </a>
+            )}
+            <span className="text-ink-400">page {page} of {pages}</span>
+            {page < pages && (
+              <a href={qs(base, { page: String(page + 1) })} className="rounded border border-ink-700 px-3 py-1 hover:border-brief-a">
+                next →
+              </a>
+            )}
+          </div>
         )}
       </Card>
     </div>

@@ -159,6 +159,128 @@ export const getDayAuditHtml = async (day: string) => {
   return rows?.[0]?.html ?? null;
 };
 
+/** The management table behind /audit: every article of a publication day with
+ *  its score, disposition, fetch time, and where it is going — filterable by
+ *  disposition, source, and title search, paginated. The disposition CASE
+ *  mirrors n8n/lib/day-audit.js exactly; if one changes, change both. */
+export interface ManagementRow {
+  id: string;
+  title: string;
+  url: string;
+  source_name: string;
+  brief_n: number | null;
+  score: number | null;
+  disposition: 'SENT' | 'QUEUED' | 'HELD' | 'EXCLUDED';
+  reason: string;
+  fetched_at: string;
+  sent_report: string | null;
+  sent_at: string | null;
+}
+
+const DISPOSITION_SQL = `
+  CASE
+    WHEN sent.report_date IS NOT NULL THEN 'SENT'
+    WHEN a.content_kind = 'reference' THEN 'HELD'
+    WHEN a.date_state = 'none' AND coalesce(an.relevance_score, -1) = 0 THEN 'HELD'
+    WHEN NOT a.report_eligible THEN 'HELD'
+    WHEN coalesce(an.relevance_score, -1) = 0 THEN 'EXCLUDED'
+    ELSE 'QUEUED'
+  END`;
+
+const REASON_SQL = `
+  CASE
+    WHEN sent.report_date IS NOT NULL THEN 'sent in the ' || sent.report_date || ' report'
+    WHEN a.content_kind = 'reference' THEN 'standing reference page (judge)'
+    WHEN a.date_state = 'none' AND coalesce(an.relevance_score, -1) = 0 THEN 'website furniture (no date, score 0)'
+    WHEN NOT a.report_eligible THEN 'stale-dated (older than 14 days)'
+    WHEN coalesce(an.relevance_score, -1) = 0 THEN 'score 0 - no energy/building/climate bearing'
+    WHEN an.relevance_score IS NULL THEN 'awaiting scoring, then the next report'
+    ELSE 'goes out in the next 05:00 report'
+  END`;
+
+const MANAGEMENT_FROM = `
+  FROM articles a
+  JOIN sources s ON s.id = a.source_id
+  LEFT JOIN article_analysis an ON an.article_id = a.id
+  LEFT JOIN LATERAL (
+    SELECT r.report_date::text, r.sent_at
+    FROM report_items ri JOIN reports r ON r.id = ri.report_id
+    WHERE ri.article_id = a.id AND r.status = 'sent' LIMIT 1) sent ON true
+  WHERE (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')::date = $1::date`;
+
+export const PAGE_SIZE = 50;
+
+export async function getManagementRows(opts: {
+  day: string; status?: string; src?: string; q?: string; page?: number;
+}) {
+  const params: unknown[] = [opts.day];
+  let where = '';
+  if (opts.status && ['SENT', 'QUEUED', 'HELD', 'EXCLUDED'].includes(opts.status)) {
+    params.push(opts.status);
+    where += ` AND ${DISPOSITION_SQL} = $${params.length}`;
+  }
+  if (opts.src) {
+    params.push(Number(opts.src));
+    where += ` AND s.id = $${params.length}`;
+  }
+  if (opts.q) {
+    params.push('%' + opts.q + '%');
+    where += ` AND a.title ILIKE $${params.length}`;
+  }
+  const countRows = await tryQuery<{ n: string }>(
+    `SELECT count(*)::text AS n ${MANAGEMENT_FROM}${where}`, params
+  );
+  const total = Number(countRows?.[0]?.n ?? 0);
+
+  const page = Math.max(1, opts.page ?? 1);
+  params.push(PAGE_SIZE, (page - 1) * PAGE_SIZE);
+  const rows = await tryQuery<ManagementRow>(
+    `SELECT a.id::text, a.title, a.url, s.name AS source_name,
+            (SELECT min(bl.n) FROM brief_links bl WHERE bl.source_id = s.id) AS brief_n,
+            an.relevance_score AS score,
+            ${DISPOSITION_SQL} AS disposition,
+            ${REASON_SQL} AS reason,
+            to_char(a.fetched_at AT TIME ZONE 'Australia/Melbourne', 'DD Mon HH24:MI') AS fetched_at,
+            sent.report_date AS sent_report,
+            to_char(sent.sent_at AT TIME ZONE 'Australia/Melbourne', 'DD Mon HH24:MI') AS sent_at
+     ${MANAGEMENT_FROM}${where}
+     ORDER BY an.relevance_score DESC NULLS LAST, a.id
+     LIMIT $${params.length - 1} OFFSET $${params.length}`, params
+  );
+  return { rows: rows ?? [], total };
+}
+
+/** Live tally for one publication day — always current, unlike the stored
+ *  audit snapshot, so the page and the numbers can never disagree. */
+export async function getLiveTally(day: string) {
+  const rows = await tryQuery<{ disposition: string; n: string }>(
+    `SELECT ${DISPOSITION_SQL} AS disposition, count(*)::text AS n
+     ${MANAGEMENT_FROM} GROUP BY 1`, [day]
+  );
+  const t = { fetched: 0, SENT: 0, QUEUED: 0, HELD: 0, EXCLUDED: 0 } as Record<string, number>;
+  for (const r of rows ?? []) { t[r.disposition] = Number(r.n); t.fetched += Number(r.n); }
+  return t;
+}
+
+/** Sources with at least one article on the day, for the filter dropdown —
+ *  each carrying its brief-link number where one maps. */
+export const getDaySources = (day: string) =>
+  tryQuery<{ id: string; name: string; brief_n: number | null; n: string }>(
+    `SELECT s.id::text, s.name,
+            (SELECT min(bl.n) FROM brief_links bl WHERE bl.source_id = s.id) AS brief_n,
+            count(*)::text AS n
+     FROM articles a JOIN sources s ON s.id = a.source_id
+     WHERE (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')::date = $1::date
+     GROUP BY s.id, s.name ORDER BY count(*) DESC`, [day]
+  );
+
+/** The days that have any articles, newest first, for the day chips. */
+export const getAuditDayList = () =>
+  tryQuery<{ day: string }>(
+    `SELECT DISTINCT (coalesce(published_at, fetched_at) AT TIME ZONE 'Australia/Melbourne')::date::text AS day
+     FROM articles ORDER BY 1 DESC LIMIT 14`
+  );
+
 /** Pipeline readiness — what the report will have to work with at 05:00. */
 export interface PipelineReadiness {
   articles_24h: number;
