@@ -31,6 +31,7 @@ function buildDayAudit(day, sources, articles, briefLinks) {
     var k, why;
     if (r.sent_in) { k = 'SENT'; why = 'sent in the ' + r.sent_in + ' report'; }
     else if (r.kind === 'reference') { k = 'HELD'; why = 'standing reference page (judge)'; }
+    else if (r.kind === 'offtopic') { k = 'HELD'; why = 'off-topic article, not industry news (judge)'; }
     else if (r.ds === 'none' && Number(r.score) === 0) { k = 'HELD'; why = 'website furniture (no date, score 0)'; }
     else if (r.elig === false) { k = 'HELD'; why = 'stale-dated (older than 14 days)'; }
     else if (Number(r.score) === 0) { k = 'EXCLUDED'; why = 'score 0 - no energy/building/climate bearing'; }

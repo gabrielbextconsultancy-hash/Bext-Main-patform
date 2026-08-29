@@ -180,7 +180,7 @@ export interface ManagementRow {
 const DISPOSITION_SQL = `
   CASE
     WHEN sent.report_date IS NOT NULL THEN 'SENT'
-    WHEN a.content_kind = 'reference' THEN 'HELD'
+    WHEN a.content_kind IN ('reference', 'offtopic') THEN 'HELD'
     WHEN a.date_state = 'none' AND coalesce(an.relevance_score, -1) = 0 THEN 'HELD'
     WHEN NOT a.report_eligible THEN 'HELD'
     WHEN coalesce(an.relevance_score, -1) = 0 THEN 'EXCLUDED'
@@ -191,6 +191,7 @@ const REASON_SQL = `
   CASE
     WHEN sent.report_date IS NOT NULL THEN 'sent in the ' || sent.report_date || ' report'
     WHEN a.content_kind = 'reference' THEN 'standing reference page (judge)'
+    WHEN a.content_kind = 'offtopic' THEN 'off-topic article, not industry news (judge)'
     WHEN a.date_state = 'none' AND coalesce(an.relevance_score, -1) = 0 THEN 'website furniture (no date, score 0)'
     WHEN NOT a.report_eligible THEN 'stale-dated (older than 14 days)'
     WHEN coalesce(an.relevance_score, -1) = 0 THEN 'score 0 - no energy/building/climate bearing'

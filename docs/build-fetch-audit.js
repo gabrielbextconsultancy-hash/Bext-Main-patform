@@ -66,6 +66,7 @@ const pathOf = (u) => { try { return new URL(u).pathname.toLowerCase(); } catch 
   const dis = (r) => {
     if (r.sent_in) return ['SENT', 'sent in the ' + r.sent_in + ' report'];
     if (r.kind === 'reference') return ['HELD', 'standing reference page (judge)'];
+    if (r.kind === 'offtopic') return ['HELD', 'off-topic article, not industry news (judge)'];
     if (r.ds === 'none' && Number(r.score) === 0) return ['HELD', 'website furniture (no date, score 0)'];
     if (!r.elig) return ['HELD', 'stale-dated (older than 14 days)'];
     if (Number(r.score) === 0) return ['EXCLUDED', 'score 0 - no energy/building/climate bearing'];

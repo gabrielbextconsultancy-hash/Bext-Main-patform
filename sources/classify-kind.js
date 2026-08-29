@@ -59,10 +59,10 @@ const http = async (o) => {
 
   const verdicts = await classifyKind(rows, { http, ollamaUrl: OLLAMA, batch: 5 });
 
-  let news = 0, reference = 0;
+  let news = 0, reference = 0, offtopic = 0;
   for (const [id, kind] of verdicts) {
     await db.query('UPDATE articles SET content_kind = $1::article_content_kind WHERE id = $2', [kind, id]);
-    if (kind === 'reference') reference++; else news++;
+    if (kind === 'reference') reference++; else if (kind === 'offtopic') offtopic++; else news++;
   }
   // Anything the model would not commit on stays 'unknown' and keeps going out.
   const undecided = rows.length - verdicts.size;
@@ -75,6 +75,7 @@ const http = async (o) => {
   await db.end();
   console.log('\n  news       ' + news);
   console.log('  reference  ' + reference + '   (held out of the sheet)');
+  console.log('  offtopic   ' + offtopic + '   (real articles, not industry news - held)');
   console.log('  undecided  ' + undecided + '   (left in, on purpose)');
   if (sample.rowCount) {
     console.log('\n  held as reference:');

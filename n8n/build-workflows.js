@@ -1087,7 +1087,7 @@ ranked AS (
     -- management" are real pages about real subjects, they score well, and a
     -- daily briefing that carries them looks broken. Judged once and stored;
     -- anything the model would not commit on stays 'unknown' and still goes out.
-    AND a.content_kind <> 'reference'
+    AND a.content_kind NOT IN ('reference', 'offtopic')
     -- Website furniture, not news. Opening the page found no publication date
     -- anywhere AND the scorer found nothing relevant in it — failing both tests
     -- at once is what separates "Legal notice and disclaimer", "Subscribe to our

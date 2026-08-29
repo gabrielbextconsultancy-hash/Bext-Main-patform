@@ -22,15 +22,20 @@
 
 const PROMPT_HEAD =
   'You are sorting pages from Australian energy and building industry websites.\n\n'
-  + 'For each item decide if it is NEWS (a story published on a particular date - an\n'
-  + 'announcement, a decision, a consultation opening, a report release, a media\n'
-  + 'release) or REFERENCE (a standing page that is always there - a program or\n'
-  + 'scheme overview, a portal, a market or mechanism explainer, a team or contact\n'
-  + 'page, a legal or policy notice, a standards page).\n\n'
+  + 'For each item answer with one of three kinds:\n'
+  + '  NEWS      - a story published on a particular date: an announcement, a decision,\n'
+  + '              a consultation opening, a report release, a media release.\n'
+  + '  REFERENCE - a standing page that is always there: a program or scheme overview,\n'
+  + '              a portal, a market or mechanism explainer, a team or contact page,\n'
+  + '              a legal or policy notice, a standards page.\n'
+  + '  OFFTOPIC  - a real article, but not industry news: lifestyle, food, travel,\n'
+  + '              fashion, sport, entertainment, personality profiles. A business\n'
+  + '              paper prints these beside its energy coverage; they are articles,\n'
+  + '              not reference pages, and not news for this industry.\n\n'
   + 'When a title reads like a subject rather than an event, it is reference.\n'
-  + 'When in doubt, answer news.\n\n'
+  + 'When in doubt between news and the others, answer news.\n\n'
   + 'Return ONLY a JSON array, one object per item, in the same order, like:\n'
-  + '[{"id":1,"kind":"news"},{"id":2,"kind":"reference"}]\n\n'
+  + '[{"id":1,"kind":"news"},{"id":2,"kind":"reference"},{"id":3,"kind":"offtopic"}]\n\n'
   + 'ITEMS:\n';
 
 /**
@@ -94,8 +99,10 @@ async function classifyKind(items, opts) {
     for (let k = 0; k < batch.length; k++) {
       const p = parsed[k] || {};
       if (p.id !== undefined && Number(p.id) !== k + 1) continue;
-      const kind = String(p.kind || '').toLowerCase();
-      if (kind === 'reference' || kind === 'news') out.set(batch[k].id, kind);
+      // The model writes 'off-topic' about as often as 'offtopic'; both mean
+      // the enum's spelling.
+      const kind = String(p.kind || '').toLowerCase().replace('-', '');
+      if (kind === 'reference' || kind === 'news' || kind === 'offtopic') out.set(batch[k].id, kind);
     }
   }
   return out;
