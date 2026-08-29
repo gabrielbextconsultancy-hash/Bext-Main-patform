@@ -2250,7 +2250,11 @@ function newsQualityWorkflow() {
             interval: [
               { field: 'cronExpression', expression: '0 6 * * *' },
               { field: 'cronExpression', expression: '0 12 * * *' },
-              { field: 'cronExpression', expression: '0 23 * * *' },
+              // 23:50, not 23:00 - the operator asked for the day to stay
+              // open as late as possible before it closes. Ten minutes is left
+              // before midnight because the audit stage anchors its day to the
+              // run, not the clock (see Load audit data).
+              { field: 'cronExpression', expression: '50 23 * * *' },
             ],
           },
         },
@@ -2469,7 +2473,12 @@ WHERE NOT EXISTS (
           // audit is rebuilt on each pass, so the 23:00 run - the one that
           // closes the day - leaves the finished version behind.
           query: `SELECT
-  (now() AT TIME ZONE 'Australia/Melbourne')::date::text AS day,
+  -- Six hours back, then the date: a 23:50 pass whose enrichment and judge
+  -- stages spill past midnight must still close the day it started in, and a
+  -- naive now()::date would build the new day's empty audit instead. Minus six
+  -- hours maps 00:00-05:59 to the previous day - exactly the spill window -
+  -- while the 06:00, 12:00 and 23:50 starts all stay their own day.
+  ((now() AT TIME ZONE 'Australia/Melbourne') - interval '6 hours')::date::text AS day,
   (SELECT json_agg(json_build_object(
      'id', s.id, 'slug', s.slug, 'name', s.name, 'url', s.url,
      'feed_url', s.config->>'feed_url', 'method', s.method::text, 'active', s.active,
@@ -2487,7 +2496,7 @@ WHERE NOT EXISTS (
      SELECT r.report_date::text FROM report_items ri JOIN reports r ON r.id = ri.report_id
      WHERE ri.article_id = a.id AND r.status = 'sent' LIMIT 1) sent ON true
    WHERE (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')::date
-         = (now() AT TIME ZONE 'Australia/Melbourne')::date) AS articles`,
+         = ((now() AT TIME ZONE 'Australia/Melbourne') - interval '6 hours')::date) AS articles`,
         },
       },
       {

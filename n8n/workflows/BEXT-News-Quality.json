@@ -27,7 +27,7 @@
             },
             {
               "field": "cronExpression",
-              "expression": "0 23 * * *"
+              "expression": "50 23 * * *"
             }
           ]
         }
@@ -261,7 +261,7 @@
       "alwaysOutputData": true,
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT\n  (now() AT TIME ZONE 'Australia/Melbourne')::date::text AS day,\n  (SELECT json_agg(json_build_object(\n     'id', s.id, 'slug', s.slug, 'name', s.name, 'url', s.url,\n     'feed_url', s.config->>'feed_url', 'method', s.method::text, 'active', s.active,\n     'last_article', (SELECT max(a.fetched_at)::date::text FROM articles a WHERE a.source_id = s.id)))\n   FROM sources s) AS sources,\n  (SELECT coalesce(json_agg(json_build_object(\n     'id', a.id, 'title', a.title, 'url', a.url, 'source_id', a.source_id,\n     'score', an.relevance_score, 'kind', a.content_kind::text,\n     'ds', a.date_state::text, 'elig', a.report_eligible,\n     'day', to_char(coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne', 'DD Mon'),\n     'exact_date', (a.published_at IS NOT NULL), 'sent_in', sent.report_date)), '[]'::json)\n   FROM articles a\n   LEFT JOIN article_analysis an ON an.article_id = a.id\n   LEFT JOIN LATERAL (\n     SELECT r.report_date::text FROM report_items ri JOIN reports r ON r.id = ri.report_id\n     WHERE ri.article_id = a.id AND r.status = 'sent' LIMIT 1) sent ON true\n   WHERE (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')::date\n         = (now() AT TIME ZONE 'Australia/Melbourne')::date) AS articles"
+        "query": "SELECT\n  -- Six hours back, then the date: a 23:50 pass whose enrichment and judge\n  -- stages spill past midnight must still close the day it started in, and a\n  -- naive now()::date would build the new day's empty audit instead. Minus six\n  -- hours maps 00:00-05:59 to the previous day - exactly the spill window -\n  -- while the 06:00, 12:00 and 23:50 starts all stay their own day.\n  ((now() AT TIME ZONE 'Australia/Melbourne') - interval '6 hours')::date::text AS day,\n  (SELECT json_agg(json_build_object(\n     'id', s.id, 'slug', s.slug, 'name', s.name, 'url', s.url,\n     'feed_url', s.config->>'feed_url', 'method', s.method::text, 'active', s.active,\n     'last_article', (SELECT max(a.fetched_at)::date::text FROM articles a WHERE a.source_id = s.id)))\n   FROM sources s) AS sources,\n  (SELECT coalesce(json_agg(json_build_object(\n     'id', a.id, 'title', a.title, 'url', a.url, 'source_id', a.source_id,\n     'score', an.relevance_score, 'kind', a.content_kind::text,\n     'ds', a.date_state::text, 'elig', a.report_eligible,\n     'day', to_char(coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne', 'DD Mon'),\n     'exact_date', (a.published_at IS NOT NULL), 'sent_in', sent.report_date)), '[]'::json)\n   FROM articles a\n   LEFT JOIN article_analysis an ON an.article_id = a.id\n   LEFT JOIN LATERAL (\n     SELECT r.report_date::text FROM report_items ri JOIN reports r ON r.id = ri.report_id\n     WHERE ri.article_id = a.id AND r.status = 'sent' LIMIT 1) sent ON true\n   WHERE (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')::date\n         = ((now() AT TIME ZONE 'Australia/Melbourne') - interval '6 hours')::date) AS articles"
       }
     },
     {
