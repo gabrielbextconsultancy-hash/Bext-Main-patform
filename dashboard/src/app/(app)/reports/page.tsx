@@ -130,12 +130,19 @@ export async function ReportsView({
 
   // The report only has something to say if analysis has scored enough of the
   // last day's articles — surfaced up front so an empty send is explainable.
+  // What would actually be EMAILED if the send ran now — the Before list, which
+  // is the report's own query with every gate applied. The banner used to quote
+  // the qualifying count instead, and so announced "183 would be included"
+  // directly above a list of 74: the same screen disagreeing with itself.
+  const willSend = preview?.rows.length ?? 0;
   const gate = ready
-    ? ready.qualifying > 0
-      ? { pass: true, msg: `${ready.qualifying} articles across ${ready.categories} sections would be included right now.` }
+    ? willSend > 0
+      ? { pass: true, msg: `${willSend} articles would be emailed right now, across ${ready.categories} sections.` }
       : ready.analysed_24h === 0
         ? { pass: false, msg: 'Nothing analysed in the last 24 hours — the analysis workflow has not scored new articles, so the report would be empty.' }
-        : { pass: false, msg: `${ready.analysed_24h} articles analysed but none scored 40 or above, so nothing qualifies for the sheet.` }
+        : ready.qualifying > 0
+          ? { pass: false, msg: `${ready.qualifying} articles scored ≥1, but none has cleared the send gates yet — most are waiting for a publication date to be read from their page.` }
+          : { pass: false, msg: `${ready.analysed_24h} articles analysed but none scored ≥1, so nothing qualifies for the sheet.` }
     : null;
 
   return (
@@ -151,12 +158,15 @@ export async function ReportsView({
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Stat label="Fetched this day" value={ready.articles_24h} />
               <Stat label="Analysed" value={ready.analysed_24h} />
+              {/* Scored is a measure of the scorer's work; Will send is the
+                  deliverable. Calling the first one "qualifying" invited it to
+                  be read as the second. */}
+              <Stat label="Scored ≥1" value={ready.qualifying} />
               <Stat
-                label="Qualifying (≥1)"
-                value={ready.qualifying}
-                tone={ready.qualifying > 0 ? 'good' : 'bad'}
+                label="Will send now"
+                value={willSend}
+                tone={willSend > 0 ? 'good' : 'bad'}
               />
-              <Stat label="Sections" value={ready.categories} />
             </div>
             {/* The three numbers a reader will compare are deliberately
                 different sets, and unlabelled they read as a bug: Qualifying
@@ -167,13 +177,13 @@ export async function ReportsView({
                 saying "they differ by a handful" was true at 3 and a lie at 34;
                 the figures move nightly, so they are computed, not written. */}
             <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
-              Of the {ready.qualifying} qualifying,{' '}
+              Of the {ready.qualifying} scored ≥1,{' '}
               <span className="text-amber-300">{ready.held_unverified_age}</span> are waiting for a
               date to be read from their page and{' '}
               <span className="text-amber-300">{ready.held_by_judge}</span> were judged reference or
               off-topic — both refused by the send gate. The Before list is what remains, plus any
-              unsent straggler from the two prior days. The date passes clear the first number
-              through the evening, so the two converge by 05:00.
+              unsent straggler from the two prior days — {willSend} right now. The date passes
+              clear the first number through the evening, so the two converge by 05:00.
             </p>
             {pulse && (
               <div className="mt-4">
