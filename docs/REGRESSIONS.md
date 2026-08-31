@@ -679,3 +679,27 @@ live day and compares all four dispositions.
 waiting for the 23:50 pass, reusing the shipped SELECT, the shipped UPSERT and
 the same `day-audit.js` the Code node inlines — so the CLI and the workflow
 cannot drift into disagreeing either.
+
+## R039 — a prune that undid itself within the hour
+
+Deleting everything before 25 August removed 2,390 articles. An hour later the
+dashboard showed 18, 19, 20 August again, and the operator asked why.
+
+The rows had been deleted correctly. They were then re-fetched. `Insert articles`
+ends `ON CONFLICT (url) DO NOTHING`, and that clause is the *only* thing standing
+between a feed and a duplicate — it works by finding the row already present. Take
+the row away and the URL is new again, so the next hourly run re-inserted every
+old article the feeds still list: 75 of them, dated the 17th to the 24th, all
+stamped with the same fetch time.
+
+Deduplication by existing row means deletion is not idempotent against a live
+feed. Anything that removes articles must therefore be paired with a rule that
+stops them coming back, or the removal lasts exactly until the next ingest.
+
+The rule is a floor on age at insert: an article the feed itself dates more than
+fourteen days ago is not stored. That is far wider than the report's own window,
+which reaches back two days, so nothing that could still be sent is refused.
+Undated articles are always kept — most feeds omit the date and News Quality
+resolves it later, so a null means "not known yet", never "old".
+
+`db/prune-before.js` is safe to re-run; the floor is what makes it stay done.

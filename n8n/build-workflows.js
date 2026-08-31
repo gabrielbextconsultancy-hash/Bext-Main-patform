@@ -639,6 +639,19 @@ SELECT source_id, url, title, author, published_at, summary_raw, content_hash
 FROM json_to_recordset($1::json) AS x(
   source_id int, url text, title text, author text,
   published_at timestamptz, summary_raw text, content_hash text)
+-- A floor on age, because ON CONFLICT (url) is the ONLY thing that stops a feed
+-- being re-ingested, and it depends on the row still existing. Delete old
+-- articles and every URL looks new again: pruning everything before 25 Aug took
+-- 2,390 rows out, and the next hourly run put 75 of them straight back with
+-- publication dates from the 17th to the 24th. A prune that undoes itself
+-- within the hour is not a prune.
+--
+-- Fourteen days is far wider than the report's own window, which reaches back
+-- at most two days, so nothing that could still be sent is refused here.
+-- Undated articles are always kept: most feeds omit the date and News Quality
+-- resolves it later, so a null is "not known yet", never "old".
+WHERE x.published_at IS NULL
+   OR x.published_at > now() - interval '14 days'
 ON CONFLICT (url) DO NOTHING`,
           options: { queryReplacement: '={{ $json.payload }}' },
         },
