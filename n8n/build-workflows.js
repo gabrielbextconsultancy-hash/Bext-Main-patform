@@ -1092,6 +1092,11 @@ ranked AS (
          (a.published_at IS NOT NULL)           AS date_is_exact,
          s.name AS source_name, s.category,
          coalesce(an.summary, '') AS summary,
+         -- How much of the actual article was available when this summary was
+         -- written. A summary from a 145-character feed teaser and one from a
+         -- 4,000-character article read identically on the page; this is the
+         -- only place the difference survives, and the pre-send check needs it.
+         length(coalesce(a.body_text, '')) AS body_chars,
          an.relevance_score,
          row_number() OVER (
            PARTITION BY s.category
@@ -1293,6 +1298,27 @@ if (items.length && truncated.length / items.length > 0.4) {
   notes.push(truncated.length + ' summaries end mid-sentence');
 }
 
+// --- what the summaries were written from ---------------------------------
+// The rules above ask whether the sheet READS correctly. This asks whether it
+// was written from anything: an article body, or a feed teaser averaging 145
+// characters. Both produce fluent prose, so neither the rules nor the reviewer
+// can tell them apart - only the character count can.
+//
+// It reports rather than blocks, because a thin day is a fact about the news
+// and holding the report would not improve it. The one exception is total
+// collapse: if nothing at all carries a body, retrieval has broken end to end
+// and the sheet is headlines wearing the shape of journalism.
+let coverage = null;
+const measured = items.filter(function (i) { return typeof i.body_chars === 'number'; });
+if (measured.length) {
+  const fromArticle = measured.filter(function (i) { return i.body_chars > 200; });
+  coverage = Math.round(fromArticle.length / measured.length * 100);
+  notes.push(coverage + '% written from the article (' + fromArticle.length + ' of ' + measured.length + ')');
+  if (measured.length >= 10 && fromArticle.length === 0) {
+    problems.push('not one item was written from an article body - retrieval has failed');
+  }
+}
+
 // --- judgement, which only advises --------------------------------------
 // The reviewer is its own node on the canvas now, so its prompt and its answer
 // are visible in the execution and a failed review is its own red node rather
@@ -1332,6 +1358,7 @@ const summary = blocked
 
 return [{ json: {
   validation_ok: !blocked,
+  body_coverage_pct: coverage,
   validation_detail: summary.slice(0, 900),
   validation_verdict: verdict,
   item_count: items.length,
@@ -1376,6 +1403,9 @@ function dailyReportWorkflow() {
         + '**Validate before send** owns the decision, on facts alone: summaries missing across a third of '
         + 'the sheet, encoding artefacts, double-escaped entities in the text, or fewer distinct summaries '
         + 'than items — the signature of a scoring batch that failed identically.\n\n'
+        + 'It also measures what each summary was WRITTEN FROM - the article body, or a ~145 character '
+        + 'feed teaser. That number is reported, not enforced: a thin day is the news, not a fault. Only '
+        + 'total collapse (not one item with a body) blocks, because that is retrieval broken.\n\n'
         + 'It FAILS OPEN. No key, spent quota, unreachable endpoint: the sheet still goes, carrying '
         + '"reviewer did not answer". Only an explicit false holds it.'),
       note('n5', 2380, -360, 980, 300, 6,
@@ -1874,6 +1904,7 @@ const items = d.sections.flatMap(sec =>
   sec.items.map((it, i) => ({
     article_id: it.id, category: sec.name, rank: i + 1,
     blurb: String(it.summary || '').slice(0, 500),
+    body_chars: Number(it.body_chars || 0),
   }))
 );
 return [{ json: { html, text, items, subject: 'BEXT Industry Daily — ' + coverage,
