@@ -53,7 +53,7 @@ export default async function PipelinePage({
     const p = new URLSearchParams();
     p.set('tab', id);
     if (id === 'audit') {
-      for (const k of ['day', 'status', 'src', 'q', 'page', 'section', 'body'] as const) {
+      for (const k of ['day', 'status', 'src', 'q', 'page', 'section', 'body', 'dated'] as const) {
         const v = sp[k];
         if (v) p.set(k, v);
       }

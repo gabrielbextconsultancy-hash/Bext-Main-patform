@@ -63,7 +63,7 @@ function qs(
 
 export interface AuditParams {
   day?: string; status?: string; src?: string; q?: string; page?: string; t?: string;
-  section?: string; body?: string;
+  section?: string; body?: string; dated?: string;
 }
 
 /** The page body, exported so the merged pipeline page can render it as a tab
@@ -95,12 +95,12 @@ export async function AuditView({
     getDaySections(day),
     getManagementRows({
       day, status: sp.status, src: sp.src, q: sp.q, page,
-      section: sp.section, body: sp.body,
+      section: sp.section, body: sp.body, dated: sp.dated,
     }),
   ]);
   if (days === null || sources === null) return <DatabaseDown />;
 
-  const base = { ...extra, day, status: sp.status, src: sp.src, q: sp.q, section: sp.section, body: sp.body };
+  const base = { ...extra, day, status: sp.status, src: sp.src, q: sp.q, section: sp.section, body: sp.body, dated: sp.dated };
   const pages = Math.max(1, Math.ceil(result.total / PAGE_SIZE));
 
   const tile = (label: string, n: number, status?: string) => (
@@ -172,6 +172,28 @@ export async function AuditView({
           {tile(`queued — go out ${nextSend}`, tally.QUEUED, 'QUEUED')}
           {tile('held', tally.HELD, 'HELD')}
           {tile('excluded (score 0)', tally.EXCLUDED, 'EXCLUDED')}
+          {/* Publisher-dated versus assumed. "Confirmed" means the publisher
+              itself dated the article to this day; "assumed" means no date was
+              found and the day is merely when we fetched it - which is how old
+              news wears today's date. These filter like the tiles above. */}
+          <a
+            href={qs(basePath, { ...base, status: undefined }, { dated: 'confirmed', page: undefined })}
+            className={`flex-1 rounded-lg border px-3 py-2 ${
+              sp.dated === 'confirmed' ? 'border-brief-a bg-brief-a/10' : 'border-ink-700 hover:border-ink-500'
+            }`}
+          >
+            <span className="block text-lg font-bold text-green-300">{tally.confirmed}</span>
+            <span className="text-xs text-ink-300">new — publisher dated it this day</span>
+          </a>
+          <a
+            href={qs(basePath, { ...base, status: undefined }, { dated: 'assumed', page: undefined })}
+            className={`flex-1 rounded-lg border px-3 py-2 ${
+              sp.dated === 'assumed' ? 'border-brief-a bg-brief-a/10' : 'border-ink-700 hover:border-ink-500'
+            }`}
+          >
+            <span className="block text-lg font-bold text-amber-300">{tally.assumed}</span>
+            <span className="text-xs text-ink-300">day assumed — no date found, may be old</span>
+          </a>
         </div>
 
         {/* Search + source filter. A plain GET form: no client code to break. */}
@@ -230,7 +252,7 @@ export async function AuditView({
           >
             Search
           </button>
-          {(sp.q || sp.src || sp.status || sp.section || sp.body) && (
+          {(sp.q || sp.src || sp.status || sp.section || sp.body || sp.dated) && (
             <a href={qs(basePath, { ...extra, day }, {})} className="text-xs text-ink-400 hover:text-ink-200">
               clear filters
             </a>

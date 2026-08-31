@@ -216,6 +216,11 @@ export async function getManagementRows(opts: {
   section?: string;
   /** 'article' = read in full, 'teaser' = only the feed excerpt was available. */
   body?: string;
+  /** 'confirmed' = the publisher dated it this day; 'assumed' = no publication
+   *  date was found, so the day is only when we happened to fetch it. An
+   *  assumed article can be old news wearing today's date - the post-prune
+   *  re-ingest put 800 of them in one day bucket. */
+  dated?: string;
 }) {
   const params: unknown[] = [opts.day];
   let where = '';
@@ -240,6 +245,8 @@ export async function getManagementRows(opts: {
   // on what "read in full" means.
   if (opts.body === 'article') where += ` AND length(coalesce(a.body_text, '')) > 200`;
   if (opts.body === 'teaser') where += ` AND length(coalesce(a.body_text, '')) <= 200`;
+  if (opts.dated === 'confirmed') where += ` AND a.published_at IS NOT NULL`;
+  if (opts.dated === 'assumed') where += ` AND a.published_at IS NULL`;
   const countRows = await tryQuery<{ n: string }>(
     `SELECT count(*)::text AS n ${MANAGEMENT_FROM}${where}`, params
   );
@@ -295,10 +302,18 @@ export async function getLiveTally(day: string) {
   // Scoring is the step everything else waits on: an article the scorer has not
   // reached cannot qualify, so "fetched" without "analysed" beside it reads as
   // more readiness than there is.
-  const an = await tryQuery<{ n: string }>(
-    `SELECT count(an.article_id)::text AS n ${MANAGEMENT_FROM}`, [day]
+  const an = await tryQuery<{ n: string; confirmed: string }>(
+    `SELECT count(an.article_id)::text AS n,
+            count(*) FILTER (WHERE a.published_at IS NOT NULL)::text AS confirmed
+     ${MANAGEMENT_FROM}`, [day]
   );
   t.analysed = Number(an?.[0]?.n ?? 0);
+  // Publisher-dated versus day-assumed. An assumed article is on this page only
+  // because this is when we fetched it; it may be old news the publisher never
+  // dated - the distinction the operator asked for after 800 re-ingested
+  // articles landed in one day's bucket wearing its date.
+  t.confirmed = Number(an?.[0]?.confirmed ?? 0);
+  t.assumed = t.fetched - t.confirmed;
   return t;
 }
 
