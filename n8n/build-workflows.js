@@ -1234,6 +1234,20 @@ SELECT id, url, title, image_url, image_state, shown_at, date_is_exact, source_n
        -- Carried on every row so the footer can state coverage without a
        -- second query: how many sources are being pulled right now.
        (SELECT count(*) FROM sources WHERE active) AS sources_monitored,
+       -- Whether the day being sent was ever fully judged.
+       --
+       -- Scoring is what every later gate waits on: an article the scorer never
+       -- reached is not held and not excluded, it is absent - so an undrained
+       -- queue leaves a short sheet that reads like a quiet news day. The
+       -- window closes at midnight and the send is at 05:00, which is five
+       -- hours of scoring with no new arrivals for this day, so this should
+       -- always be zero. It is carried anyway, because the failure is silent
+       -- and this is the last moment anything can say so.
+       (SELECT count(*) FROM articles a4
+          LEFT JOIN article_analysis an4 ON an4.article_id = a4.id
+         WHERE an4.article_id IS NULL
+           AND (coalesce(a4.published_at, a4.fetched_at) AT TIME ZONE 'Australia/Melbourne')::date
+               = (SELECT day_start::date FROM win)) AS unscored_in_window,
        -- The covered day's audit, written by the 23:00 quality pass: how the
        -- whole day resolved, not only the rows this sheet carries. The win CTE
        -- is read directly: the w alias lives inside ranked, not out here - the
@@ -1362,6 +1376,11 @@ if (items.length && truncated.length / items.length > 0.4) {
 // and holding the report would not improve it. The one exception is total
 // collapse: if nothing at all carries a body, retrieval has broken end to end
 // and the sheet is headlines wearing the shape of journalism.
+const unscored = Number(d.unscored_in_window || 0);
+if (unscored > 0) {
+  notes.push(unscored + ' articles of the covered day were never scored - the sheet is short by whatever they held');
+}
+
 let coverage = null;
 const measured = items.filter(function (i) { return typeof i.body_chars === 'number'; });
 if (measured.length) {
@@ -1499,7 +1518,8 @@ if (rows.length === 0) {
   // No rows means no carrier for the source counts, so they are left at 0 and
   // the template omits the coverage line rather than claiming "0 of 0".
   return [{ json: { empty: true, item_count: 0, sections: [], intro: '',
-                    sources_monitored: 0, sources_contributing: 0 } }];
+                    sources_monitored: 0, sources_contributing: 0,
+                    unscored_in_window: 0 } }];
 }
 
 // Group into the brief's section order.
@@ -1550,6 +1570,7 @@ return [{ json: { empty: false, item_count: rows.length, sections, intro,
                   sources_monitored: sourcesMonitored,
                   sources_contributing: sourcesContributing,
                   audit_tally: rows[0].audit_tally || null,
+                  unscored_in_window: Number(rows[0].unscored_in_window || 0),
                   generated_by: intro ? 'hermes3:8b' : 'none' } }];
 `,
         },
@@ -1963,6 +1984,11 @@ const items = d.sections.flatMap(sec =>
 );
 return [{ json: { html, text, items, subject: 'BEXT Industry Daily — ' + coverage,
                   report_date: date, item_count: d.item_count,
+                  // How much of the covered day never reached the scorer,
+                  // carried to the pre-send check. Zero is the expected reading:
+                  // the window shuts at midnight and the send is five hours
+                  // later with no new arrivals for that day.
+                  unscored_in_window: Number(d.unscored_in_window || 0),
                   recipient, detail, generated_by: d.generated_by } }];
 `,
         },
