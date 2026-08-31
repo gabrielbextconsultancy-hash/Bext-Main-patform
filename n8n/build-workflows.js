@@ -63,6 +63,11 @@ const RENAMED_FROM = {
 // The tested parser, minus its CommonJS export line, for embedding in a Code node.
 const INGEST_SRC = fs
   .readFileSync(path.join(__dirname, 'lib', 'ingest.js'), 'utf8')
+  // The WHOLE statement, not its first line. Written line-wise this survived
+  // only while the export happened to fit on one line: adding a name wrapped it,
+  // the tail was left behind, and five Code nodes across four workflows shipped
+  // with a stray `};` in them. R004 caught it, after the deploy had gone out.
+  .replace(/^module\.exports\s*=\s*\{[\s\S]*?\};?\s*$/m, '')
   .replace(/^module\.exports\s*=.*$/m, '')
   .replace(/^const crypto = require\('crypto'\);$/m, '');
 

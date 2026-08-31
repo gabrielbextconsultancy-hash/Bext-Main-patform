@@ -199,6 +199,42 @@ function scoreLink(url, text, origin) {
  * Common on card layouts, where the headline is a heading element and the link
  * is a button beneath it.
  */
+// A share button wearing an article's clothes.
+//
+// WordPress renders each share control as a link to the article ITSELF with a
+// share parameter - reneweconomy.com.au/<slug>/?share=twitter - so the URL
+// scores as a real article, the path is genuine, and only the anchor text gives
+// it away. "Share on X (Opens in new window) X" is thirty-four characters, so
+// it also cleared the twenty-character floor that stops one-word links.
+//
+// It cost 27 rows across RenewEconomy and The Fifth Estate, and worse than the
+// noise: each variant is a DIFFERENT url for a story we already hold, so the
+// ON CONFLICT (url) dedupe cannot see the duplicate.
+const SHARE_TEXT = /^(share|click to share|share on|post on|send)|opens in (a )?new window|(whatsapp|telegram)/i;
+
+// Parameters that identify a share or a campaign rather than a document. The
+// path is the article; these only say who sent you to it.
+const JUNK_PARAMS = /^(share|utm_[a-z_]+|fbclid|gclid|mc_cid|mc_eid|nb|replytocom|amp)$/i;
+
+/**
+ * The URL with share and tracking parameters removed, so the same article is
+ * the same string whichever button pointed at it. Anything else in the query is
+ * kept: some publishers genuinely paginate or identify posts that way.
+ */
+function stripJunkParams(url) {
+  try {
+    const u = new URL(url);
+    const keep = [];
+    u.searchParams.forEach((v, k) => { if (!JUNK_PARAMS.test(k)) keep.push([k, v]); });
+    u.search = '';
+    for (const [k, v] of keep) u.searchParams.append(k, v);
+    u.hash = '';
+    return u.toString();
+  } catch (e) {
+    return url;
+  }
+}
+
 const GENERIC = /^(find out more|read (more|on|the (full )?(story|article|report))|learn more|more( info(rmation)?| details)?|view( (more|all|article|details))?|see more|click here|continue reading|full (story|article|report)|download( the)?( report| pdf)?|open|details)\.?$/i;
 
 /**
@@ -379,10 +415,15 @@ function relatedLinks(html, baseUrl, opts) {
   var re = /<a\b[^>]*href=["']([^"'#]+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   var hit;
   while ((hit = re.exec(region)) !== null) {
-    var url = absolute(hit[1], baseUrl);
+    var url = stripJunkParams(absolute(hit[1], baseUrl));
     if (seen[url]) continue;
     var text = strip(hit[2]);
     if (!text || text.length < 20 || GENERIC.test(text)) continue;
+    // The share bar links the article itself, so the URL cannot tell us; the
+    // wording is the only signal, and it has to be tested before the score.
+    if (SHARE_TEXT.test(text)) continue;
+    // Never emit the page we are reading as one of its own related links.
+    if (url === stripJunkParams(baseUrl)) continue;
     // scoreLink already knows what an article URL looks like on any of these
     // sites, and rejects navigation, assets and off-site links.
     if (scoreLink(url, text, origin) < minScore) continue;
@@ -509,8 +550,9 @@ function parseIndex(html, pageUrl, { minScore = 6, limit = 40 } = {}) {
   const seen = new Map();
 
   for (const m of html.matchAll(/<a\b[^>]*href=["']([^"'#]+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
-    const url = absolute(m[1], pageUrl);
+    const url = stripJunkParams(absolute(m[1], pageUrl));
     let title = strip(m[2]);
+    if (SHARE_TEXT.test(title)) continue;
     // Anchor text that is just the href carries no information — the slug does.
     // Nor does a call to action: the Clean Energy Council links every story with
     // "Find out more", which is thirteen characters, so it escaped the old
@@ -631,4 +673,4 @@ function normalise(raw, source) {
     }));
 }
 
-module.exports = { parseFeed, parseIndex, normalise, contentHash, passesFilter, strip, absolute, cleanSyndicatedTitle, dateFromUrl, parseSitemap, publishedFromHtml, looksLikeArticle, anchorsFromMarkdown, extractBody, relatedLinks, publisherFromMarkdown };
+module.exports = { stripJunkParams, parseFeed, parseIndex, normalise, contentHash, passesFilter, strip, absolute, cleanSyndicatedTitle, dateFromUrl, parseSitemap, publishedFromHtml, looksLikeArticle, anchorsFromMarkdown, extractBody, relatedLinks, publisherFromMarkdown };

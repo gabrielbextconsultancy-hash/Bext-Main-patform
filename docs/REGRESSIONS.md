@@ -703,3 +703,33 @@ Undated articles are always kept — most feeds omit the date and News Quality
 resolves it later, so a null means "not known yet", never "old".
 
 `db/prune-before.js` is safe to re-run; the floor is what makes it stay done.
+
+## R040 — share buttons wearing an article's clothes
+
+The management table filled with rows titled "Share on X (Opens in new window)
+X". They were not junk links: WordPress renders each share control as a link to
+the article ITSELF with a parameter — `reneweconomy.com.au/<slug>/?share=twitter`
+— so the URL was a real article path, scored like one, and only the anchor text
+gave it away. That text is thirty-four characters, so it also cleared the
+twenty-character floor that exists to reject one-word links.
+
+Twenty-seven rows across RenewEconomy and The Fifth Estate. Worse than the
+noise: each share variant is a DIFFERENT url for a story already held, so the
+`ON CONFLICT (url)` dedupe could not see the duplicate.
+
+Two rules. Anchor text is now tested against a share vocabulary before the URL
+is scored, because on this pattern the URL is genuinely indistinguishable from
+the article. And share and campaign parameters are stripped from every captured
+link, so one article is one string whichever button pointed at it.
+
+### The strip that only worked while the line was short
+
+Fixing it added a name to `module.exports`, which wrapped the statement onto a
+second line. `INGEST_SRC` removed export lines with `/^module\.exports\s*=.*$/m`
+— one line — so the tail was left behind and five Code nodes across four
+workflows shipped with a stray `};` inside them.
+
+R004 caught it, but only after `build-workflows.js` had already deployed. Build
+and deploy are one command; preflight runs after. So the strip now removes the
+whole statement however it is written, and the lesson is that a text transform
+over source code must match the construct, not the line it usually occupies.

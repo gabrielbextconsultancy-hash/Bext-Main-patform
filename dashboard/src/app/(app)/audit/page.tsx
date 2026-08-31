@@ -9,6 +9,7 @@ import {
 } from '@/lib/queries';
 import { Card, DatabaseDown, Empty } from '@/components/ui';
 import { ArticleDetails } from '@/components/ArticleDetails';
+import { FilterForm } from '@/components/FilterForm';
 
 export const dynamic = 'force-dynamic';
 
@@ -174,7 +175,7 @@ export async function AuditView({
         </div>
 
         {/* Search + source filter. A plain GET form: no client code to break. */}
-        <form method="get" action={basePath} className="mt-4 flex flex-wrap items-center gap-2">
+        <FilterForm action={basePath} className="mt-4 flex flex-wrap items-center gap-2">
           <input type="hidden" name="day" value={day} />
           {Object.entries(extra).map(([k, v]) => (
             <input key={k} type="hidden" name={k} value={v} />
@@ -227,14 +228,14 @@ export async function AuditView({
             type="submit"
             className="rounded-md border border-ink-700 px-3 py-1.5 text-sm text-ink-200 hover:border-brief-a"
           >
-            Filter
+            Search
           </button>
           {(sp.q || sp.src || sp.status || sp.section || sp.body) && (
             <a href={qs(basePath, { ...extra, day }, {})} className="text-xs text-ink-400 hover:text-ink-200">
               clear filters
             </a>
           )}
-        </form>
+        </FilterForm>
       </Card>
 
       <Card title={`${result.total} article${result.total === 1 ? '' : 's'} · ${day}`}>
