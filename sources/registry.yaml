@@ -100,7 +100,7 @@ sources:
     category: International Industry Updates
     url: "https://www.spglobal.com/commodity-insights/en/news-research"
     method: scrape
-    active: true
+    active: false
     note: >-
       Previously 403 to plain HTTP and to headless Chromium alike. The block was
       a TLS fingerprint, not a subscription wall; the Scrapling fetcher returns

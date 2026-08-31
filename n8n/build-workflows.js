@@ -4296,7 +4296,15 @@ for (const item of $input.all()) {
     // the wrapper redirects to the article, so the page opens for the reader
     // and for the date reader alike, and the title-based content hash absorbs
     // the per-send tracking ids that would otherwise defeat URL dedupe.
-    kept.push({ url: url.slice(0, 600), title: text.slice(0, 300), from_address: from.slice(0, 200), published_at: j.date || null });
+    // contentHash comes from the shared parser inlined above. Without it the
+    // insert violated content_hash NOT NULL and the whole run died - which is
+    // why the newsletter route extracted links for days and stored nothing:
+    // five errors a day filed as an IMAP flap were really this line missing.
+    kept.push({
+      url: url.slice(0, 600), title: text.slice(0, 300),
+      from_address: from.slice(0, 200), published_at: j.date || null,
+      content_hash: contentHash({ title: text, summary_raw: null }),
+    });
     if (kept.length >= 25) break;
   }
 
@@ -4372,7 +4380,7 @@ const newsletterIntakeWorkflow = () => ({
         // node, so registering a new publisher is one row in newsletter_senders.
         // Mail from a sender we do not recognise is still stored, against the
         // catch-all source — losing it would defeat the point of reading everything.
-        query: `INSERT INTO articles (source_id, url, title, published_at)
+        query: `INSERT INTO articles (source_id, url, title, published_at, content_hash)
 SELECT coalesce(
          (SELECT s.id FROM newsletter_senders ns
             JOIN sources s ON s.slug = ns.source_slug
@@ -4380,10 +4388,10 @@ SELECT coalesce(
            LIMIT 1),
          (SELECT id FROM sources WHERE slug = 'newsletter-other')
        ),
-       x.url, x.title, x.published_at
+       x.url, x.title, x.published_at, x.content_hash
 FROM json_to_recordset($1::json) AS x(
-  url text, title text, from_address text, published_at timestamptz)
-WHERE x.url IS NOT NULL
+  url text, title text, from_address text, published_at timestamptz, content_hash text)
+WHERE x.url IS NOT NULL AND x.content_hash IS NOT NULL
 ON CONFLICT (url) DO NOTHING`,
         options: { queryReplacement: '={{ $json.payload }}' },
       },

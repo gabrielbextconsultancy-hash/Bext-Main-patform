@@ -137,28 +137,6 @@ export const getFetchListHtml = async (date: string) => {
   return rows?.[0]?.fetch_list_html ?? null;
 };
 
-/** The nightly day audit: every article of a publication day, nested under the
- *  brief link it answers to. Written by the News Quality passes; the 23:00 run
- *  leaves the finished version. */
-export interface DayAuditRow {
-  day: string;
-  tally: { fetched: number; sent: number; queued: number; held: number; excluded: number };
-  updated_at: string;
-}
-
-export const getDayAudits = () =>
-  tryQuery<DayAuditRow>(
-    `SELECT day::text, tally, updated_at::text FROM day_audits ORDER BY day DESC LIMIT 30`
-  );
-
-export const getDayAuditHtml = async (day: string) => {
-  const rows = await tryQuery<{ html: string | null }>(
-    `SELECT html FROM day_audits WHERE day = $1::date`,
-    [day]
-  );
-  return rows?.[0]?.html ?? null;
-};
-
 /** The management table behind /audit: every article of a publication day with
  *  its score, disposition, fetch time, and where it is going — filterable by
  *  disposition, source, and title search, paginated. The disposition CASE
