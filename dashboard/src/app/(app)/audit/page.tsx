@@ -210,6 +210,7 @@ export async function AuditView({
                 <tr className="border-b border-ink-700 text-left text-[10px] uppercase tracking-wide text-ink-400">
                   <th className="px-2 py-2">Score</th>
                   <th className="px-2 py-2">Article</th>
+                  <th className="px-2 py-2">Source</th>
                   <th className="px-2 py-2">Disposition</th>
                   <th className="px-2 py-2">Fetched</th>
                   <th className="px-2 py-2">Sent / will send</th>
@@ -232,9 +233,64 @@ export async function AuditView({
                       >
                         {r.title}
                       </a>
-                      <div className="text-xs text-ink-400">
-                        {r.brief_n ? `#${r.brief_n} · ` : ''}{r.source_name}
+                      {/* Written from the article, or from a feed teaser — the
+                          distinction the title alone cannot show. */}
+                      <div className="text-xs text-ink-500">
+                        {r.body_chars > 200
+                          ? `read in full · ${r.body_chars.toLocaleString()} chars`
+                          : 'teaser only'}
                       </div>
+                    </td>
+                    {/* The source, and how it was reached. A name explains
+                        nothing on its own; the route, method and last successful
+                        fetch are what answer "why did this give us this". */}
+                    <td className="max-w-[15rem] px-2 py-2">
+                      <a
+                        href={qs(basePath, { ...extra, day }, { src: r.source_id, page: undefined })}
+                        className="text-xs font-medium text-ink-200 hover:text-brief-a"
+                      >
+                        {r.brief_n ? `#${r.brief_n} · ` : ''}{r.source_name}
+                      </a>
+                      <details className="mt-0.5">
+                        <summary className="cursor-pointer list-none text-[11px] text-ink-500 hover:text-ink-300">
+                          view more details
+                        </summary>
+                        <dl className="mt-1 space-y-0.5 text-[11px] text-ink-400">
+                          <div>
+                            <dt className="inline text-ink-500">method </dt>
+                            <dd className="inline">{r.source_method ?? '—'}</dd>
+                          </div>
+                          <div>
+                            <dt className="inline text-ink-500">last fetch </dt>
+                            <dd className="inline">{r.source_last_fetch ?? 'never'}</dd>
+                          </div>
+                          <div>
+                            <dt className="inline text-ink-500">status </dt>
+                            <dd className="inline">
+                              {r.source_active === false
+                                ? 'inactive'
+                                : (r.source_failures ?? 0) > 0
+                                  ? `${r.source_failures} consecutive failures`
+                                  : 'healthy'}
+                            </dd>
+                          </div>
+                          {r.source_route && (
+                            <div className="truncate">
+                              <dt className="inline text-ink-500">route </dt>
+                              <dd className="inline">
+                                <a
+                                  href={r.source_route}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="hover:text-brief-a hover:underline"
+                                >
+                                  {r.source_route.replace(/^https?:\/\//, '').slice(0, 44)}
+                                </a>
+                              </dd>
+                            </div>
+                          )}
+                        </dl>
+                      </details>
                     </td>
                     <td className="px-2 py-2">
                       <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-bold ${CHIP[r.disposition]}`}>

@@ -111,23 +111,8 @@ function groupByDate(rows: SentArticle[]): [string, SentArticle[]][] {
 export interface ReportParams { sheet?: string }
 
 /** The page body, exported so the merged pipeline page can render it as a tab. */
-export async function ReportsView({
-  sp,
-  basePath = '/reports',
-  extra = {},
-}: {
-  sp: ReportParams;
-  basePath?: string;
-  extra?: Record<string, string>;
-}) {
-  // One place that builds the toggle links, so the host page's params survive.
-  const sheetLink = (v: string) => {
-    const p = new URLSearchParams({ ...extra, sheet: v });
-    return `${basePath}?${p.toString()}`;
-  };
-  // Default to the preview: what is about to go out is the thing worth checking
-  // before 05:00. The delivered archive is one click away and never changes.
-  const before = (sp.sheet ?? 'before') !== 'after';
+export async function ReportsView(_props: { sp?: ReportParams; basePath?: string; extra?: Record<string, string> } = {}) {
+
 
   const [reports, ready, health, delivered, bands, totalScored, cats, refs, preview] =
     await Promise.all([
@@ -164,12 +149,12 @@ export async function ReportsView({
       {/* Readiness — the pass/fail check */}
       <Card
         title="Next run readiness"
-        subtitle="What the 05:00 send would produce if it ran now."
+        subtitle="The publication day the next 05:00 send covers — the same day the audit counts."
       >
         {ready ? (
           <>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Stat label="Fetched 24h" value={ready.articles_24h} />
+              <Stat label="Fetched this day" value={ready.articles_24h} />
               <Stat label="Analysed" value={ready.analysed_24h} />
               <Stat
                 label="Qualifying (≥1)"
@@ -214,38 +199,15 @@ export async function ReportsView({
         )}
       </Card>
 
-      {/* Two halves of one question: what is about to go, and what went.
-          A plain link toggle rather than client state — the page is server
-          rendered on every request, so the URL is the only state it needs. */}
+      {/* Before and after, both present. They answer different questions and are
+          read at different moments — what is about to go at four in the
+          afternoon, what went at nine the next morning — so neither should be
+          hidden behind the other. */}
       <Card
-        title="Delivered sheets"
-        subtitle={
-          before
-            ? `Before — the ${preview?.rows.length ?? 0} articles queued for the next 05:00 send. Nothing here has been emailed yet.`
-            : 'After — opens the exact HTML that was emailed, not a reconstruction of it.'
-        }
+        title="Before — goes out tomorrow 05:00"
+        subtitle={`The ${preview?.rows.length ?? 0} articles queued for the next send. Nothing here has been emailed yet.`}
       >
-        <div className="mb-4 inline-flex rounded-lg border border-ink-700 p-0.5">
-          <a
-            href={sheetLink('before')}
-            className={`rounded-md px-3 py-1.5 text-sm ${
-              before ? 'bg-ink-750 font-semibold text-ink-100' : 'text-ink-400 hover:text-ink-200'
-            }`}
-          >
-            Before — goes out tomorrow
-          </a>
-          <a
-            href={sheetLink('after')}
-            className={`rounded-md px-3 py-1.5 text-sm ${
-              !before ? 'bg-ink-750 font-semibold text-ink-100' : 'text-ink-400 hover:text-ink-200'
-            }`}
-          >
-            After — already delivered
-          </a>
-        </div>
-
-        {before ? (
-          preview && preview.rows.length > 0 ? (
+        {preview && preview.rows.length > 0 ? (
             <>
               <p className="mb-3 text-xs text-ink-400">
                 Covering the {preview.day} publication day. Everything gathered today waits for
@@ -296,15 +258,19 @@ export async function ReportsView({
                 </table>
               </div>
             </>
-          ) : (
-            <Empty>
-              Nothing is queued for the next send yet — articles gathered today appear here as the
-              scorer works through them.
-            </Empty>
-          )
         ) : (
-          <ReportViewer dates={reports.filter(r => r.status === 'sent').map(r => r.report_date)} />
+          <Empty>
+            Nothing is queued for the next send yet — articles gathered today appear here as the
+            scorer works through them.
+          </Empty>
         )}
+      </Card>
+
+      <Card
+        title="After — already delivered"
+        subtitle="Opens the exact HTML that was emailed, not a reconstruction of it."
+      >
+        <ReportViewer dates={reports.filter(r => r.status === 'sent').map(r => r.report_date)} />
       </Card>
 
       {/* Provenance. Deliberately here and not in the emailed sheet: the client

@@ -153,6 +153,17 @@ export interface ManagementRow {
   fetched_at: string;
   sent_report: string | null;
   sent_at: string | null;
+  // How this article was actually obtained. Carried per row so the audit can
+  // answer "why did this source give us this" without a second page: the table
+  // showed a name, and the name is the one thing that never explains anything.
+  source_id: string;
+  source_url: string | null;
+  source_method: string | null;
+  source_route: string | null;
+  source_last_fetch: string | null;
+  source_failures: number | null;
+  source_active: boolean | null;
+  body_chars: number;
 }
 
 const DISPOSITION_SQL = `
@@ -215,6 +226,15 @@ export async function getManagementRows(opts: {
   params.push(PAGE_SIZE, (page - 1) * PAGE_SIZE);
   const rows = await tryQuery<ManagementRow>(
     `SELECT a.id::text, a.title, a.url, s.name AS source_name,
+            s.id::text AS source_id,
+            s.url AS source_url,
+            s.method::text AS source_method,
+            coalesce(s.config->>'feed_url', s.url) AS source_route,
+            s.active AS source_active,
+            s.consecutive_failures AS source_failures,
+            to_char((SELECT max(a2.fetched_at) FROM articles a2 WHERE a2.source_id = s.id)
+                      AT TIME ZONE 'Australia/Melbourne', 'DD Mon HH24:MI') AS source_last_fetch,
+            length(coalesce(a.body_text, ''))::int AS body_chars,
             (SELECT min(bl.n) FROM brief_links bl WHERE bl.source_id = s.id) AS brief_n,
             an.relevance_score AS score,
             ${DISPOSITION_SQL} AS disposition,
@@ -268,18 +288,29 @@ export interface PipelineReadiness {
   categories: number;
 }
 
+/* Readiness counted over the publication DAY the next send covers, not a
+ * rolling 24 hours from now.
+ *
+ * Those are different sets and they showed different numbers on the same
+ * screen: 243 against 215, which read as a bug and was really two definitions
+ * wearing similar labels. The rolling window spans two calendar days and keys
+ * on fetch time; the audit keys on publication day. The pipeline decides
+ * everything else by publication day, so readiness now does too, and the tiles
+ * agree with the audit and the preview beneath them by construction. */
 export const getPipelineReadiness = async () => {
   const rows = await tryQuery<PipelineReadiness>(
-    `SELECT
-       count(*) FILTER (WHERE a.fetched_at > now() - interval '24 hours')::int AS articles_24h,
-       count(an.article_id) FILTER (WHERE a.fetched_at > now() - interval '24 hours')::int AS analysed_24h,
-       count(*) FILTER (WHERE a.fetched_at > now() - interval '24 hours'
-                          AND a.report_eligible AND an.relevance_score >= 1)::int AS qualifying,
-       count(DISTINCT s.category) FILTER (WHERE a.fetched_at > now() - interval '24 hours'
-                                            AND a.report_eligible AND an.relevance_score >= 1)::int AS categories
+    `WITH win AS (SELECT ${nextSendDayStart()} AS day)
+     SELECT
+       count(*)::int AS articles_24h,
+       count(an.article_id)::int AS analysed_24h,
+       count(*) FILTER (WHERE a.report_eligible AND an.relevance_score >= 1)::int AS qualifying,
+       count(DISTINCT s.category) FILTER (WHERE a.report_eligible
+                                            AND an.relevance_score >= 1)::int AS categories
      FROM articles a
      JOIN sources s ON s.id = a.source_id
-     LEFT JOIN article_analysis an ON an.article_id = a.id`
+     LEFT JOIN article_analysis an ON an.article_id = a.id
+     CROSS JOIN win w
+     WHERE (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')::date = w.day`
   );
   return rows?.[0] ?? null;
 };
