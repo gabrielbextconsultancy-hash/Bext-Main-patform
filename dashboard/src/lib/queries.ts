@@ -912,3 +912,56 @@ export async function getNextSendPreview(dayStart?: string) {
   const rows = await tryQuery<PreviewRow>(PREVIEW_SQL, [d]);
   return rows ? { day: d, rows } : null;
 }
+
+/* ── What was delivered, as rows rather than prose ─────────────────────────
+ *
+ * The same management shape as the queued table, for articles that have gone
+ * out: score, section, source, and which sheet carried them. Each row can open
+ * that sheet with itself marked, which is the thing a list of links could never
+ * do — see the article in the context the client actually read it in.
+ */
+export interface DeliveredRow {
+  id: string;
+  report_date: string;
+  title: string;
+  url: string;
+  source_name: string;
+  category: string;
+  score: number | null;
+  body_chars: number;
+  sent_at: string | null;
+}
+
+export const DELIVERED_PAGE_SIZE = 20;
+
+export async function getDeliveredRows(page = 1) {
+  const total = Number(
+    (await tryQuery<{ n: string }>(
+      `SELECT count(*)::text AS n
+       FROM report_items ri JOIN reports r ON r.id = ri.report_id
+       WHERE r.status = 'sent'`
+    ))?.[0]?.n ?? 0
+  );
+  const p = Math.max(1, page);
+  const rows = await tryQuery<DeliveredRow>(
+    `SELECT a.id::text,
+            r.report_date::text,
+            a.title,
+            coalesce(a.canonical_url, a.url) AS url,
+            s.name AS source_name,
+            s.category,
+            an.relevance_score AS score,
+            length(coalesce(a.body_text, ''))::int AS body_chars,
+            to_char(r.sent_at AT TIME ZONE 'Australia/Melbourne', 'DD Mon HH24:MI') AS sent_at
+       FROM report_items ri
+       JOIN reports r ON r.id = ri.report_id
+       JOIN articles a ON a.id = ri.article_id
+       JOIN sources s ON s.id = a.source_id
+       LEFT JOIN article_analysis an ON an.article_id = a.id
+      WHERE r.status = 'sent'
+      ORDER BY r.report_date DESC, ri.rank
+      LIMIT $1 OFFSET $2`,
+    [DELIVERED_PAGE_SIZE, (p - 1) * DELIVERED_PAGE_SIZE]
+  );
+  return { rows: rows ?? [], total, page: p };
+}

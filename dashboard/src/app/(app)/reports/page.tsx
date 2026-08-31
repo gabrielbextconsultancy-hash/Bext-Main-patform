@@ -4,6 +4,8 @@ import {
   getHealth,
   getReportReferences,
   getNextSendPreview,
+  getDeliveredRows,
+  DELIVERED_PAGE_SIZE,
 } from '@/lib/queries';
 import { Card, DatabaseDown, Empty } from '@/components/ui';
 import { ReportViewer } from '@/components/ReportViewer';
@@ -88,18 +90,44 @@ const fmtTime = (t: string | null) =>
     : '—';
 
 
-export interface ReportParams { sheet?: string }
+export interface ReportParams {
+  sheet?: string;
+  /** page of the queued preview */ pv?: string;
+  /** page of the delivered table */ dp?: string;
+}
+
+// Twenty a page. The preview ran to 158 rows in one column, which is a list
+// nobody reads to the end of.
+const PREVIEW_PAGE_SIZE = 20;
 
 /** The page body, exported so the merged pipeline page can render it as a tab. */
-export async function ReportsView(_props: { sp?: ReportParams; basePath?: string; extra?: Record<string, string> } = {}) {
+export async function ReportsView({
+  sp = {},
+  basePath = '/reports',
+  extra = {},
+}: {
+  sp?: ReportParams;
+  basePath?: string;
+  extra?: Record<string, string>;
+} = {}) {
+  const pv = Math.max(1, Number(sp.pv ?? 1) || 1);
+  const dp = Math.max(1, Number(sp.dp ?? 1) || 1);
+  // One place that builds page links, so the tab and every other param survive.
+  const pageHref = (key: 'pv' | 'dp', n: number) => {
+    const q = new URLSearchParams({ ...extra });
+    if (key === 'pv') { if (sp.dp) q.set('dp', sp.dp); q.set('pv', String(n)); }
+    else { if (sp.pv) q.set('pv', sp.pv); q.set('dp', String(n)); }
+    return `${basePath}?${q.toString()}`;
+  };
 
 
-  const [reports, ready, health, refs, preview] = await Promise.all([
+  const [reports, ready, health, refs, preview, delivered] = await Promise.all([
     getReports(),
     getPipelineReadiness(),
     getHealth(),
     getReportReferences(),
     getNextSendPreview(),
+    getDeliveredRows(dp),
   ]);
 
   if (!reports) return <DatabaseDown />;
@@ -200,7 +228,7 @@ export async function ReportsView(_props: { sp?: ReportParams; basePath?: string
                     </tr>
                   </thead>
                   <tbody>
-                    {preview.rows.map(r => (
+                    {preview.rows.slice((pv - 1) * PREVIEW_PAGE_SIZE, pv * PREVIEW_PAGE_SIZE).map(r => (
                       <tr key={r.id} className="border-b border-ink-800/60 align-top">
                         <td className="px-2 py-2 tnum text-ink-300">{r.score ?? '–'}</td>
                         <td className="max-w-[32rem] px-2 py-2">
@@ -232,6 +260,23 @@ export async function ReportsView(_props: { sp?: ReportParams; basePath?: string
                   </tbody>
                 </table>
               </div>
+              {preview.rows.length > PREVIEW_PAGE_SIZE && (
+                <div className="mt-4 flex items-center gap-2 text-sm">
+                  {pv > 1 && (
+                    <a href={pageHref('pv', pv - 1)} className="rounded border border-ink-700 px-3 py-1 hover:border-brief-a">
+                      ← prev
+                    </a>
+                  )}
+                  <span className="text-ink-400">
+                    page {pv} of {Math.ceil(preview.rows.length / PREVIEW_PAGE_SIZE)} · {preview.rows.length} queued
+                  </span>
+                  {pv < Math.ceil(preview.rows.length / PREVIEW_PAGE_SIZE) && (
+                    <a href={pageHref('pv', pv + 1)} className="rounded border border-ink-700 px-3 py-1 hover:border-brief-a">
+                      next →
+                    </a>
+                  )}
+                </div>
+              )}
             </>
         ) : (
           <Empty>
@@ -243,9 +288,17 @@ export async function ReportsView(_props: { sp?: ReportParams; basePath?: string
 
       <Card
         title="After — already delivered"
-        subtitle="Opens the exact HTML that was emailed, not a reconstruction of it."
+        subtitle={`${delivered.total} articles the client has received. "View in sheet" opens the emailed report with that article outlined — a marking that exists only here.`}
       >
-        <ReportViewer dates={reports.filter(r => r.status === 'sent').map(r => r.report_date)} />
+        <ReportViewer
+          dates={reports.filter(r => r.status === 'sent').map(r => r.report_date)}
+          rows={delivered.rows}
+          total={delivered.total}
+          page={delivered.page}
+          pageSize={DELIVERED_PAGE_SIZE}
+          prevHref={pageHref('dp', dp - 1)}
+          nextHref={pageHref('dp', dp + 1)}
+        />
       </Card>
 
       {/* Provenance. Deliberately here and not in the emailed sheet: the client

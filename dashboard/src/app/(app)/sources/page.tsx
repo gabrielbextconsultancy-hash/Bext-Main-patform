@@ -12,7 +12,13 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 /** The page body, exported so the merged pipeline page can render it as a tab. */
-export async function SourcesView() {
+export async function SourcesView({
+  // Where a source name should lead. Standalone this is the audit page; inside
+  // the pipeline it is the management tab, so the click stays on the tab strip.
+  articlesHref = (id: number | string) => `/audit?src=${id}`,
+}: {
+  articlesHref?: (id: number | string) => string;
+} = {}) {
   const [sources, summary, tiers] = await Promise.all([
     getSources(),
     getSourceSummary(),
@@ -92,7 +98,17 @@ export async function SourcesView() {
                 {items.map(s => (
                   <tr key={s.id} className={s.active ? '' : 'opacity-45'}>
                     <td className="py-2 pr-4">
-                      <span className="text-ink-100">{s.name}</span>
+                      {/* The third edge of the triangle. Sources explains how a
+                          feed is reached; the management table shows what it
+                          actually produced. Without this the two sat side by
+                          side and had to be joined by hand. */}
+                      <a
+                        href={articlesHref(s.id)}
+                        className="text-ink-100 underline-offset-2 hover:text-brief-a hover:underline"
+                        title="See every article this source produced"
+                      >
+                        {s.name}
+                      </a>
                       {!s.active && (
                         <span className="ml-2 text-[10px] uppercase tracking-wider text-ink-400">
                           inactive

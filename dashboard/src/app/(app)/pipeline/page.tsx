@@ -99,7 +99,9 @@ export default async function PipelinePage({
           these views build lands back on the tab the reader is looking at. */}
       {tab === 'report' && <ReportsView sp={sp} basePath="/pipeline" extra={{ tab: 'report' }} />}
       {tab === 'audit' && <AuditView sp={sp} basePath="/pipeline" extra={{ tab: 'audit' }} />}
-      {tab === 'sources' && <SourcesView />}
+      {tab === 'sources' && (
+        <SourcesView articlesHref={(id) => `/pipeline?tab=audit&src=${id}`} />
+      )}
     </div>
   );
 }
