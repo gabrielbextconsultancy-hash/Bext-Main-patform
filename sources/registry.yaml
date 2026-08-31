@@ -169,18 +169,40 @@ sources:
     url: "https://www.energy.gov/search?page=0&sort_by=date&f%5B0%5D=article_type%3A1&f%5B1%5D=offices_rest%3AEnergy.gov"
     method: rss
     feed_url: "https://www.energy.gov/feed/"
+  - slug: the-australian
+    name: The Australian — Mining & Energy
+    category: Australian News
+    url: "https://www.theaustralian.com.au/business/mining-energy"
+    method: rss
+    active: true
+    email_authoritative: true
+    feed_url: "https://news.google.com/rss/search?q=site%3Atheaustralian.com.au%2Fbusiness%2Fmining-energy+when%3A14d&hl=en-AU&gl=AU&ceid=AU%3Aen"
+    note: >-
+      Subscriber wall: the page returns 200 truncated behind a paywall marker,
+      so no retrieval tier can read it directly. Google News indexes the
+      headlines and links - the route that made Reuters work, needing no
+      account - and returned seven stories in the trailing fortnight on the
+      proving run (31 Aug 2026). Bodies stay paywalled: the scorer judges from
+      the headline and the sheet links the client to the publisher, which is
+      what a subscriber brief should do. Existed in the database but not here
+      until 31 Aug 2026; brought under the registry so the file stays the
+      single source of truth.
   - slug: iea
     name: IEA
     category: International Industry Updates
     url: "https://www.iea.org/news"
-    method: scrape
-    active: false
+    method: rss
+    active: true
+    email_authoritative: true
+    feed_url: "https://news.google.com/rss/search?q=site%3Aiea.org+when%3A14d&hl=en-AU&gl=AU&ceid=AU%3Aen"
     note: >-
-      403 to plain HTTP, to headless Chromium, and to browser-fingerprint
-      impersonation alike — confirmed 22 Aug 2026. A genuine account wall rather
-      than the TLS fingerprinting that DCCEEW and S&P turned out to be. Route is
-      the free IEA newsletter into gabriel.bextconsultancy@gmail.com; see
-      docs/SUBSCRIPTION-SOURCES.md. Inactive so it cannot report false health.
+      403 to plain HTTP, to headless Chromium and to browser-fingerprint
+      impersonation alike, the sitemap included - re-confirmed 31 Aug 2026, so
+      this is an account wall rather than the TLS fingerprinting DCCEEW turned
+      out to be. Google News indexes iea.org and needs no account: seven items
+      in the trailing fortnight on the proving run. Reactivated on that route
+      rather than waiting on the newsletter subscription, which stays the
+      authoritative tier whenever mail arrives.
   - slug: nz-herald-energy
     name: NZ Herald — Energy
     category: International Industry Updates

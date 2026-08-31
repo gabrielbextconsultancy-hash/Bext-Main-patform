@@ -163,11 +163,17 @@ export async function ReportsView({
                 counts everything scored at least 1; the management table's
                 QUEUED then subtracts what the judge held; the Before list adds
                 the reach-back stragglers from the two prior days. */}
+            {/* The gap between Qualifying and the Before list, itemised. Prose
+                saying "they differ by a handful" was true at 3 and a lie at 34;
+                the figures move nightly, so they are computed, not written. */}
             <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
-              Qualifying counts every article scored ≥1 on the day. The management table&rsquo;s
-              QUEUED is this minus anything the judge held; the Before list below applies every
-              send gate and adds unsent stragglers from the two prior days — so the three can
-              differ by a handful, each for a stated reason.
+              Of the {ready.qualifying} qualifying,{' '}
+              <span className="text-amber-300">{ready.held_unverified_age}</span> are waiting for a
+              date to be read from their page and{' '}
+              <span className="text-amber-300">{ready.held_by_judge}</span> were judged reference or
+              off-topic — both refused by the send gate. The Before list is what remains, plus any
+              unsent straggler from the two prior days. The date passes clear the first number
+              through the evening, so the two converge by 05:00.
             </p>
             {pulse && (
               <div className="mt-4">

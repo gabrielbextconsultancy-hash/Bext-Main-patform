@@ -351,6 +351,10 @@ export interface PipelineReadiness {
   analysed_24h: number;
   qualifying: number;
   categories: number;
+  // Why qualifying is larger than the Before list, in figures rather than
+  // prose: an article can score well and still not be sendable tonight.
+  held_unverified_age: number;
+  held_by_judge: number;
 }
 
 /* Readiness counted over the publication DAY the next send covers, not a
@@ -370,7 +374,15 @@ export const getPipelineReadiness = async () => {
        count(an.article_id)::int AS analysed_24h,
        count(*) FILTER (WHERE a.report_eligible AND an.relevance_score >= 1)::int AS qualifying,
        count(DISTINCT s.category) FILTER (WHERE a.report_eligible
-                                            AND an.relevance_score >= 1)::int AS categories
+                                            AND an.relevance_score >= 1)::int AS categories,
+       -- Scored, but its page has not been opened for a date yet, so the send
+       -- gate refuses it: unknown age is not new.
+       count(*) FILTER (WHERE a.report_eligible AND an.relevance_score >= 1
+                          AND a.published_at IS NULL AND a.date_state = 'pending')::int
+         AS held_unverified_age,
+       count(*) FILTER (WHERE a.report_eligible AND an.relevance_score >= 1
+                          AND a.content_kind::text IN ('reference','offtopic'))::int
+         AS held_by_judge
      FROM articles a
      JOIN sources s ON s.id = a.source_id
      LEFT JOIN article_analysis an ON an.article_id = a.id
