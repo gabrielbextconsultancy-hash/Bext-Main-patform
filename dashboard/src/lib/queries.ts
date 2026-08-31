@@ -1029,3 +1029,49 @@ export const getDeliveredGrouped = () =>
                (SELECT min(bl.n) FROM brief_links bl WHERE bl.source_id = s.id) NULLS LAST,
                s.name, ri.rank`
   );
+
+/* ── Source pulse — is each brief link alive right now ─────────────────────
+ *
+ * One query feeding both the Sources tab and the Daily report readiness card,
+ * so the two can never disagree about which links are quiet. "Quiet" means
+ * mapped, active, and zero articles in three days: the fetch may be green
+ * while the source hands back a shell, which is exactly how VicGrid served
+ * forty navigation links and no news - a status only article counts expose.
+ */
+export interface SourcePulse {
+  producing: number;
+  quiet: number;
+  inactive: number;
+  quiet_list: { brief_n: number | null; name: string; method: string; last_article: string | null }[];
+  inactive_list: { brief_n: number | null; name: string; note: string | null }[];
+}
+
+export async function getSourcePulse(): Promise<SourcePulse | null> {
+  const rows = await tryQuery<{
+    brief_n: number | null; name: string; method: string; active: boolean;
+    note: string | null; recent: number; last_article: string | null;
+  }>(
+    `SELECT (SELECT min(bl.n) FROM brief_links bl WHERE bl.source_id = s.id) AS brief_n,
+            s.name, s.method::text AS method, s.active,
+            s.config->>'note' AS note,
+            (SELECT count(*)::int FROM articles a WHERE a.source_id = s.id
+              AND a.fetched_at > now() - interval '3 days') AS recent,
+            to_char((SELECT max(a.fetched_at) FROM articles a WHERE a.source_id = s.id)
+              AT TIME ZONE 'Australia/Melbourne', 'DD Mon') AS last_article
+     FROM sources s`
+  );
+  if (!rows) return null;
+  const active = rows.filter(r => r.active);
+  const quiet = active.filter(r => r.recent === 0);
+  return {
+    producing: active.length - quiet.length,
+    quiet: quiet.length,
+    inactive: rows.length - active.length,
+    quiet_list: quiet
+      .map(r => ({ brief_n: r.brief_n, name: r.name, method: r.method, last_article: r.last_article }))
+      .sort((a, b) => (a.brief_n ?? 99) - (b.brief_n ?? 99)),
+    inactive_list: rows.filter(r => !r.active)
+      .map(r => ({ brief_n: r.brief_n, name: r.name, note: r.note }))
+      .sort((a, b) => (a.brief_n ?? 99) - (b.brief_n ?? 99)),
+  };
+}

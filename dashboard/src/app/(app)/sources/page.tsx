@@ -1,3 +1,5 @@
+import { getSourcePulse } from '@/lib/queries';
+import { SourcePulseCard } from '@/components/SourcePulseCard';
 import { getSources, getSourceSummary, getTierSummary } from '@/lib/queries';
 import { TIER_LABELS } from '@/lib/types';
 import { Card, DatabaseDown, Empty } from '@/components/ui';
@@ -19,6 +21,8 @@ export async function SourcesView({
 }: {
   articlesHref?: (id: number | string) => string;
 } = {}) {
+  const pulse = await getSourcePulse();
+
   const [sources, summary, tiers] = await Promise.all([
     getSources(),
     getSourceSummary(),
@@ -38,6 +42,8 @@ export async function SourcesView({
 
   return (
     <div className="space-y-6">
+      {pulse && <SourcePulseCard pulse={pulse} />}
+
       <Card
         title="Source registry"
         subtitle="Every source named in the Industry Daily Report brief, with the URLs recovered from that document's hyperlinks."

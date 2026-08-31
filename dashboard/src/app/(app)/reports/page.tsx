@@ -4,12 +4,14 @@ import {
   getHealth,
   getReportReferences,
   getNextSendPreview,
+  getSourcePulse,
   getDeliveredGrouped,
 } from '@/lib/queries';
 import { Card, DatabaseDown, Empty } from '@/components/ui';
 import { DeliveredSheets } from '@/components/DeliveredSheets';
 import { EmailPreview } from '@/components/EmailPreview';
 import { QueuedSheet } from '@/components/QueuedSheet';
+import { SourcePulseCard } from '@/components/SourcePulseCard';
 import { SourceReferences } from '@/components/SourceReferences';
 
 /** Next 05:00 Australia/Melbourne, expressed in that zone. */
@@ -110,13 +112,14 @@ export async function ReportsView({
 
 
 
-  const [reports, ready, health, refs, preview, delivered] = await Promise.all([
+  const [reports, ready, health, refs, preview, delivered, pulse] = await Promise.all([
     getReports(),
     getPipelineReadiness(),
     getHealth(),
     getReportReferences(),
     getNextSendPreview(),
     getDeliveredGrouped(),
+    getSourcePulse(),
   ]);
 
   if (!reports) return <DatabaseDown />;
@@ -155,6 +158,11 @@ export async function ReportsView({
               />
               <Stat label="Sections" value={ready.categories} />
             </div>
+            {pulse && (
+              <div className="mt-4">
+                <SourcePulseCard pulse={pulse} />
+              </div>
+            )}
             {gate && (
               <div
                 className={`mt-4 flex items-start gap-2.5 rounded-lg border p-3 text-sm ${
