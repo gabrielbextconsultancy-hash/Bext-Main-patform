@@ -70,6 +70,32 @@ const esc = (s) => String(s == null ? '' : s)
   const inactive = sources.filter(s => !s.active);
   const producing = sources.filter(s => s.active && s.recent > 0);
 
+  const methods = await all(
+    "SELECT method::text AS method, count(*)::int AS n, count(*) FILTER (WHERE active)::int AS act FROM sources GROUP BY 1 ORDER BY 2 DESC");
+  const failing = await one(
+    'SELECT count(*)::int AS n FROM sources WHERE active AND consecutive_failures >= 3');
+
+  // Four real articles from the day being described, one per outcome, so the
+  // example is the system's own work rather than an illustration of it.
+  const example = async (where) => (await all(`
+    SELECT a.title, s.name AS source, an.relevance_score AS score,
+           left(coalesce(an.summary, ''), 220) AS summary,
+           length(coalesce(a.body_text, ''))::int AS body_chars,
+           coalesce(a.content_kind::text, 'unknown') AS kind
+    FROM articles a JOIN sources s ON s.id = a.source_id
+    LEFT JOIN article_analysis an ON an.article_id = a.id
+    WHERE (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')::date
+        = (now() AT TIME ZONE 'Australia/Melbourne')::date
+      AND ${where}
+    ORDER BY an.relevance_score DESC NULLS LAST LIMIT 1`))[0];
+
+  const exSent = await example(
+    "an.relevance_score >= 40 AND length(coalesce(a.body_text,'')) > 400 AND a.published_at IS NOT NULL");
+  const exTeaser = await example(
+    "an.relevance_score >= 1 AND length(coalesce(a.body_text,'')) <= 200");
+  const exZero = await example('an.relevance_score = 0');
+  const exHeld = await example("a.content_kind::text IN ('reference','offtopic')");
+
   const h = [];
   const p = (x) => h.push(x);
 
@@ -159,8 +185,61 @@ const esc = (s) => String(s == null ? '' : s)
     p('<p>Two situations sit behind these. A <b>paywall or account wall</b>, where the publisher will not serve the page to anyone without a subscription &mdash; for those, headlines and links are taken from a public news index instead, so the story still reaches the sheet even though the full text stays behind the wall. And a <b>duplicate</b>, where the brief lists the same page twice under two names; running both would only produce the same article twice.</p>');
   }
 
-  // ── 6. the words the dashboard uses
-  p('<h2>6. The words on the dashboard, in plain terms</h2>');
+  // ── 5b. every source, and how each is read
+  p('<h2>6. The sources in full, and how each is read</h2>');
+  p('<p>The dashboard summarises the registry in five numbers. They mean:</p>');
+  p('<table><tr><th>Figure</th><th>Count</th><th>Meaning</th></tr>');
+  p('<tr><td><b>Total</b></td><td class="n">' + counts.total + '</td><td>Every source the system knows about, including the few switched off.</td></tr>');
+  p('<tr><td><b>Active</b></td><td class="n">' + counts.active + '</td><td>Checked every hour, without exception. This is the figure the sheet&rsquo;s footer counts against.</td></tr>');
+  methods.forEach(m => p('<tr><td><b>' + esc(m.method) + '</b></td><td class="n">' + m.n + '</td><td>' +
+    (m.method === 'rss' ? 'Read from a feed the publisher maintains &mdash; the cleanest route, with dates and summaries supplied.'
+     : m.method === 'scrape' ? 'No feed exists, so the news page itself is read and the article links taken from it.'
+     : m.method === 'sitemap' ? 'The listing page cannot be read by machine, so the site&rsquo;s own index of pages is read instead.'
+     : m.method === 'email' ? 'Delivered by newsletter, because the publisher will not serve the page to a machine at all.'
+     : 'Read by this route.') + '</td></tr>'));
+  p('<tr><td><b>Failing</b></td><td class="n">' + failing.n + '</td><td>Active sources whose last three checks in a row did not succeed. These are investigated; a source failing for days is a fault, not a quiet week.</td></tr>');
+  p('</table>');
+  p('<p>Five routes are tried in order for every source, and the first that works is used: the publisher&rsquo;s feed, a direct read, a full browser render, a signed-in session, and finally a newsletter. A source only counts as unreachable when all five have been exhausted.</p>');
+
+  p('<h3>Every source, as it stands today</h3>');
+  p('<table><tr><th>#</th><th>Source</th><th>Read by</th><th>State</th><th>Articles, 3 days</th></tr>');
+  sources.forEach(x => {
+    const state = !x.active ? '<span class="muted">switched off</span>'
+      : x.recent > 0 ? '<span style="color:#047857">producing</span>'
+      : '<span class="q">quiet</span>';
+    p('<tr><td>' + (x.brief_n != null ? x.brief_n : '&mdash;') + '</td><td>' + esc(x.name)
+      + '</td><td class="muted">' + esc(x.method) + '</td><td>' + state + '</td><td>' + x.recent + '</td></tr>');
+  });
+  p('</table>');
+
+  // ── 5c. a worked example from the day in question
+  p('<h2>7. A worked example &mdash; ' + esc(now.d) + '</h2>');
+  p('<p>Four real articles gathered on this day, one for each outcome. Nothing here is illustrative; these are the system&rsquo;s own decisions, taken automatically.</p>');
+
+  const card = (title, when, a, verdict, why) => {
+    if (!a) return;
+    p('<h3>' + title + '</h3>');
+    p('<table><tr><td style="width:110px" class="muted">Article</td><td><b>' + esc(a.title) + '</b></td></tr>');
+    p('<tr><td class="muted">Source</td><td>' + esc(a.source) + '</td></tr>');
+    p('<tr><td class="muted">Score</td><td>' + (a.score == null ? 'not yet scored' : a.score + ' / 100') + '</td></tr>');
+    p('<tr><td class="muted">Text read</td><td>' + (a.body_chars > 200
+      ? 'the full article &mdash; ' + a.body_chars.toLocaleString() + ' characters'
+      : 'the listing blurb only') + '</td></tr>');
+    if (a.summary) p('<tr><td class="muted">AI summary</td><td>' + esc(a.summary) + '</td></tr>');
+    p('<tr><td class="muted">Outcome</td><td><b>' + verdict + '</b> &mdash; ' + why + '</td></tr></table>');
+  };
+
+  card('A. Gathered, read in full, and sent', null, exSent, 'goes out at 05:00',
+    'scored well, its publication date confirmed from its own page, and it has not been sent before.');
+  card('B. Gathered, but only the blurb could be read', null, exTeaser, 'still sent',
+    'the publisher would not serve the full text to a machine, so the summary is written from the listing blurb. The article is included and linked, but the summary is necessarily thinner. This is what &ldquo;teaser only&rdquo; means on the dashboard.');
+  card('C. Read, and judged not relevant', null, exZero, 'excluded',
+    'scored zero: the AI found nothing bearing on Australian energy, building or climate work. It sits on a page we monitor, which is why it was collected at all.');
+  card('D. Not an article at all', null, exHeld, 'held',
+    'a second AI pass judged this a standing reference page rather than news &mdash; the kind of page that sits permanently on a news section. Held, not deleted, and visible in the record.');
+
+  // ── 8. the words the dashboard uses
+  p('<h2>8. The words on the dashboard, in plain terms</h2>');
   p('<p>The management view labels every article. These are the labels and what each one actually means.</p>');
   p('<h3>What happened to an article</h3>');
   p('<table><tr><th>Word</th><th>Meaning</th></tr>');
@@ -181,7 +260,7 @@ const esc = (s) => String(s == null ? '' : s)
   p('</table>');
 
   // ── 7. what is verifiable
-  p('<h2>7. How any of this can be checked</h2>');
+  p('<h2>9. How any of this can be checked</h2>');
   p('<ul>');
   p('<li><b>A daily audit is produced with every send</b>, listing every article emailed that morning, grouped under the brief link it came from, with the route it was read by. It is stored for every day and can be sent on request.</li>');
   p('<li><b>The management view</b> lists every article of a chosen day &mdash; sent, queued, held or excluded &mdash; each with its score, its source, and the reason for its outcome. Any article can be traced from the brief link, through the fetch, to the exact email it appeared in.</li>');
