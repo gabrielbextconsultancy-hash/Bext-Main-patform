@@ -26,9 +26,14 @@ import { SourcesView } from '../sources/page';
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+// The management table leads, because it is the one view that answers the whole
+// question: what was fetched, what it scored, which section it belongs to,
+// whether it was read in full or only as a teaser, when it arrived, which route
+// brought it, and what became of it. The other two are the same data widened
+// (the report) or narrowed (sources).
 const TABS = [
-  { id: 'report', label: 'Daily report', hint: 'What goes out, and what went' },
-  { id: 'audit', label: 'Day audit', hint: 'Every article, sent or why not' },
+  { id: 'audit', label: 'Management table', hint: 'Every article, scored, sourced, and its fate' },
+  { id: 'report', label: 'Daily report', hint: 'What goes out tomorrow, and what went' },
   { id: 'sources', label: 'Sources', hint: 'What we watch, and how' },
 ] as const;
 
@@ -40,7 +45,7 @@ export default async function PipelinePage({
   searchParams: Promise<Params>;
 }) {
   const sp = await searchParams;
-  const tab = TABS.some(t => t.id === sp.tab) ? sp.tab : 'report';
+  const tab = TABS.some(t => t.id === sp.tab) ? sp.tab : 'audit';
 
   // Carry the current tab's own params across when switching tabs would
   // otherwise drop them — the audit's chosen day survives a trip to Sources.
@@ -48,7 +53,7 @@ export default async function PipelinePage({
     const p = new URLSearchParams();
     p.set('tab', id);
     if (id === 'audit') {
-      for (const k of ['day', 'status', 'src', 'q', 'page'] as const) {
+      for (const k of ['day', 'status', 'src', 'q', 'page', 'section', 'body'] as const) {
         const v = sp[k];
         if (v) p.set(k, v);
       }

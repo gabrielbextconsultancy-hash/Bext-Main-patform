@@ -164,6 +164,7 @@ export interface ManagementRow {
   source_failures: number | null;
   source_active: boolean | null;
   body_chars: number;
+  category: string;
 }
 
 const DISPOSITION_SQL = `
@@ -202,6 +203,9 @@ export const PAGE_SIZE = 50;
 
 export async function getManagementRows(opts: {
   day: string; status?: string; src?: string; q?: string; page?: number;
+  section?: string;
+  /** 'article' = read in full, 'teaser' = only the feed excerpt was available. */
+  body?: string;
 }) {
   const params: unknown[] = [opts.day];
   let where = '';
@@ -217,6 +221,15 @@ export async function getManagementRows(opts: {
     params.push('%' + opts.q + '%');
     where += ` AND a.title ILIKE $${params.length}`;
   }
+  if (opts.section) {
+    params.push(opts.section);
+    where += ` AND s.category = $${params.length}`;
+  }
+  // 200 characters is the same floor the extractor uses to decide it found a
+  // body rather than navigation furniture, so the filter and the pipeline agree
+  // on what "read in full" means.
+  if (opts.body === 'article') where += ` AND length(coalesce(a.body_text, '')) > 200`;
+  if (opts.body === 'teaser') where += ` AND length(coalesce(a.body_text, '')) <= 200`;
   const countRows = await tryQuery<{ n: string }>(
     `SELECT count(*)::text AS n ${MANAGEMENT_FROM}${where}`, params
   );
@@ -226,6 +239,7 @@ export async function getManagementRows(opts: {
   params.push(PAGE_SIZE, (page - 1) * PAGE_SIZE);
   const rows = await tryQuery<ManagementRow>(
     `SELECT a.id::text, a.title, a.url, s.name AS source_name,
+            s.category,
             s.id::text AS source_id,
             s.url AS source_url,
             s.method::text AS source_method,
@@ -271,6 +285,15 @@ export const getDaySources = (day: string) =>
      FROM articles a JOIN sources s ON s.id = a.source_id
      WHERE (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')::date = $1::date
      GROUP BY s.id, s.name ORDER BY count(*) DESC`, [day]
+  );
+
+/** The sections present on a day, with counts, for the filter dropdown. */
+export const getDaySections = (day: string) =>
+  tryQuery<{ category: string; n: string }>(
+    `SELECT s.category, count(*)::text AS n
+     FROM articles a JOIN sources s ON s.id = a.source_id
+     WHERE (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')::date = $1::date
+     GROUP BY s.category ORDER BY count(*) DESC`, [day]
   );
 
 /** The days that have any articles, newest first, for the day chips. */
@@ -464,17 +487,6 @@ export const getReportReferences = () =>
      LIMIT 200`
   );
 
-/** Score distribution, so the panel shows the filter is doing real work. */
-export const getScoreBands = () =>
-  tryQuery<{ band: string; n: number }>(
-    `SELECT CASE WHEN relevance_score >= 80 THEN '80-100'
-                 WHEN relevance_score >= 60 THEN '60-79'
-                 WHEN relevance_score >= 40 THEN '40-59'
-                 ELSE 'below 40' END AS band,
-            count(*)::int AS n
-     FROM article_analysis GROUP BY 1 ORDER BY 1 DESC`
-  );
-
 /** Filters the scoring browser accepts. */
 export interface ScoredFilter {
   q?: string;          // free text over title and summary
@@ -547,13 +559,6 @@ export const getCategories = () =>
   tryQuery<{ category: string }>(
     `SELECT DISTINCT category FROM sources ORDER BY category`
   );
-
-export const getScoredCount = async () => {
-  const rows = await tryQuery<{ n: number }>(
-    `SELECT count(*)::int AS n FROM article_analysis`
-  );
-  return rows?.[0]?.n ?? 0;
-};
 
 // ── Meeting pipeline ─────────────────────────────────────────────────────────
 

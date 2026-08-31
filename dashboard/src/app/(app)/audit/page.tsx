@@ -2,6 +2,7 @@ import {
   getManagementRows,
   getLiveTally,
   getDaySources,
+  getDaySections,
   getAuditDayList,
   PAGE_SIZE,
   type ManagementRow,
@@ -60,6 +61,7 @@ function qs(
 
 export interface AuditParams {
   day?: string; status?: string; src?: string; q?: string; page?: string; t?: string;
+  section?: string; body?: string;
 }
 
 /** The page body, exported so the merged pipeline page can render it as a tab
@@ -84,15 +86,19 @@ export async function AuditView({
     timeZone: 'Australia/Melbourne', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
   });
 
-  const [days, tally, sources, result] = await Promise.all([
+  const [days, tally, sources, sections, result] = await Promise.all([
     getAuditDayList(),
     getLiveTally(day),
     getDaySources(day),
-    getManagementRows({ day, status: sp.status, src: sp.src, q: sp.q, page }),
+    getDaySections(day),
+    getManagementRows({
+      day, status: sp.status, src: sp.src, q: sp.q, page,
+      section: sp.section, body: sp.body,
+    }),
   ]);
   if (days === null || sources === null) return <DatabaseDown />;
 
-  const base = { ...extra, day, status: sp.status, src: sp.src, q: sp.q };
+  const base = { ...extra, day, status: sp.status, src: sp.src, q: sp.q, section: sp.section, body: sp.body };
   const pages = Math.max(1, Math.ceil(result.total / PAGE_SIZE));
 
   const tile = (label: string, n: number, status?: string) => (
@@ -186,13 +192,36 @@ export async function AuditView({
               </option>
             ))}
           </select>
+          <select
+            name="section"
+            defaultValue={sp.section ?? ''}
+            className="rounded-md border border-ink-700 bg-ink-900 px-2 py-1.5 text-sm text-ink-100"
+          >
+            <option value="">every section</option>
+            {(sections ?? []).map((c) => (
+              <option key={c.category} value={c.category}>
+                {c.category} ({c.n})
+              </option>
+            ))}
+          </select>
+          {/* What the summary was written from — the one dimension that says
+              whether an item is worth reading or merely present. */}
+          <select
+            name="body"
+            defaultValue={sp.body ?? ''}
+            className="rounded-md border border-ink-700 bg-ink-900 px-2 py-1.5 text-sm text-ink-100"
+          >
+            <option value="">read in full or teaser</option>
+            <option value="article">read in full</option>
+            <option value="teaser">teaser only</option>
+          </select>
           <button
             type="submit"
             className="rounded-md border border-ink-700 px-3 py-1.5 text-sm text-ink-200 hover:border-brief-a"
           >
             Filter
           </button>
-          {(sp.q || sp.src || sp.status) && (
+          {(sp.q || sp.src || sp.status || sp.section || sp.body) && (
             <a href={qs(basePath, { ...extra, day }, {})} className="text-xs text-ink-400 hover:text-ink-200">
               clear filters
             </a>
@@ -211,6 +240,8 @@ export async function AuditView({
                   <th className="px-2 py-2">Score</th>
                   <th className="px-2 py-2">Article</th>
                   <th className="px-2 py-2">Source</th>
+                  <th className="px-2 py-2">Section</th>
+                  <th className="px-2 py-2">Written from</th>
                   <th className="px-2 py-2">Disposition</th>
                   <th className="px-2 py-2">Fetched</th>
                   <th className="px-2 py-2">Sent / will send</th>
@@ -233,13 +264,7 @@ export async function AuditView({
                       >
                         {r.title}
                       </a>
-                      {/* Written from the article, or from a feed teaser — the
-                          distinction the title alone cannot show. */}
-                      <div className="text-xs text-ink-500">
-                        {r.body_chars > 200
-                          ? `read in full · ${r.body_chars.toLocaleString()} chars`
-                          : 'teaser only'}
-                      </div>
+
                     </td>
                     {/* The source, and how it was reached. A name explains
                         nothing on its own; the route, method and last successful
@@ -291,6 +316,23 @@ export async function AuditView({
                           )}
                         </dl>
                       </details>
+                    </td>
+                    <td className="px-2 py-2">
+                      <a
+                        href={qs(basePath, { ...extra, day }, { section: r.category, page: undefined })}
+                        className="whitespace-nowrap text-xs text-ink-400 hover:text-brief-a"
+                      >
+                        {r.category}
+                      </a>
+                    </td>
+                    <td className="whitespace-nowrap px-2 py-2 text-xs">
+                      {r.body_chars > 200 ? (
+                        <span className="text-green-300">
+                          article · {r.body_chars.toLocaleString()} chars
+                        </span>
+                      ) : (
+                        <span className="text-amber-300">teaser only</span>
+                      )}
                     </td>
                     <td className="px-2 py-2">
                       <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-bold ${CHIP[r.disposition]}`}>

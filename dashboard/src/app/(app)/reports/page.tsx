@@ -2,17 +2,11 @@ import {
   getReports,
   getPipelineReadiness,
   getHealth,
-  getSentArticles,
-  type SentArticle,
-  getScoreBands,
-  getScoredCount,
-  getCategories,
   getReportReferences,
   getNextSendPreview,
 } from '@/lib/queries';
 import { Card, DatabaseDown, Empty } from '@/components/ui';
 import { ReportViewer } from '@/components/ReportViewer';
-import { ScoredBrowser } from '@/components/ScoredBrowser';
 import { SourceReferences } from '@/components/SourceReferences';
 
 /** Next 05:00 Australia/Melbourne, expressed in that zone. */
@@ -93,20 +87,6 @@ const fmtTime = (t: string | null) =>
       })
     : '—';
 
-/**
- * Groups delivered articles by the sheet they went out in. The query already
- * orders by report_date DESC then rank, so insertion order is the display
- * order and a Map preserves it.
- */
-function groupByDate(rows: SentArticle[]): [string, SentArticle[]][] {
-  const byDate = new Map<string, SentArticle[]>();
-  for (const r of rows) {
-    const g = byDate.get(r.report_date);
-    if (g) g.push(r);
-    else byDate.set(r.report_date, [r]);
-  }
-  return [...byDate];
-}
 
 export interface ReportParams { sheet?: string }
 
@@ -114,18 +94,13 @@ export interface ReportParams { sheet?: string }
 export async function ReportsView(_props: { sp?: ReportParams; basePath?: string; extra?: Record<string, string> } = {}) {
 
 
-  const [reports, ready, health, delivered, bands, totalScored, cats, refs, preview] =
-    await Promise.all([
-      getReports(),
-      getPipelineReadiness(),
-      getHealth(),
-      getSentArticles(),
-      getScoreBands(),
-      getScoredCount(),
-      getCategories(),
-      getReportReferences(),
-      getNextSendPreview(),
-    ]);
+  const [reports, ready, health, refs, preview] = await Promise.all([
+    getReports(),
+    getPipelineReadiness(),
+    getHealth(),
+    getReportReferences(),
+    getNextSendPreview(),
+  ]);
 
   if (!reports) return <DatabaseDown />;
 
@@ -298,89 +273,12 @@ export async function ReportsView(_props: { sp?: ReportParams; basePath?: string
         </p>
       </Card>
 
-      {/* What the recipient actually received */}
-      <Card
-        title="Sent to the recipient"
-        subtitle="The articles that actually went out, newest sheet first, in the order they were read. Open the browser for everything scored, sent or not."
-      >
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <ScoredBrowser total={totalScored} categories={(cats ?? []).map(c => c.category)} />
-        </div>
-
-        {bands && bands.length > 0 && (
-          <div className="mb-4 flex flex-wrap gap-2">
-            {bands.map(b => (
-              <span
-                key={b.band}
-                className={`rounded-lg px-2.5 py-1 text-xs tnum ${
-                  b.band === '80-100'
-                    ? 'bg-ok/12 text-ok'
-                    : b.band === 'below 40'
-                      ? 'bg-ink-800 text-ink-400'
-                      : 'bg-progress/12 text-progress'
-                }`}
-              >
-                {b.band}: {b.n}
-              </span>
-            ))}
-          </div>
-        )}
-
-        {!delivered || delivered.length === 0 ? (
-          <Empty>
-            Nothing delivered yet. Articles appear here once a sheet has been sent — the browser
-            above shows everything scored in the meantime.
-          </Empty>
-        ) : (
-          <div className="space-y-5">
-            {groupByDate(delivered).map(([date, items]) => (
-              <section key={date}>
-                <header className="mb-1.5 flex items-baseline gap-2">
-                  <span className="rounded bg-ok/12 px-2 py-0.5 text-[11px] font-medium text-ok">
-                    ✓ sent {date}
-                  </span>
-                  <span className="text-[11px] text-ink-500 tnum">
-                    {items.length} article{items.length === 1 ? '' : 's'}
-                  </span>
-                </header>
-                <ul className="divide-y divide-ink-800/60">
-                  {items.map(a => (
-                    <li key={`${date}-${a.id}`} className="flex gap-3 py-2.5">
-                      <span
-                        className={`mt-0.5 w-9 shrink-0 rounded px-1.5 py-0.5 text-center text-[11px] font-semibold tnum ${
-                          a.relevance_score >= 80
-                            ? 'bg-ok/15 text-ok'
-                            : a.relevance_score >= 40
-                              ? 'bg-progress/15 text-progress'
-                              : 'bg-ink-800 text-ink-500'
-                        }`}
-                      >
-                        {a.relevance_score}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <a
-                          href={a.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-sm text-ink-100 hover:text-progress hover:underline"
-                        >
-                          {a.title}
-                        </a>
-                        <p className="mt-0.5 text-[11px] text-ink-500">
-                          {a.source_name} · {a.category}
-                        </p>
-                        {a.summary && (
-                          <p className="mt-1 text-xs leading-relaxed text-ink-400">{a.summary}</p>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ))}
-          </div>
-        )}
-      </Card>
+      {/* "Sent to the recipient" and its floating score browser stood here.
+          Both are gone. They listed the same articles the management table
+          now carries, in a shape that could not be filtered and never said
+          what an article was written from, why it was held, or which route
+          fetched it. One table answering all of those beats two views that
+          each answer part of one. */}
 
       {/* History */}
       <Card
