@@ -355,6 +355,79 @@
       }
     },
     {
+      "id": "srcload",
+      "name": "Load verification data",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3120,
+        240
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "0SoqGGqUOqbwYTmJ",
+          "name": "BEXT Postgres"
+        }
+      },
+      "alwaysOutputData": true,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH win AS (\n  SELECT (date_trunc('day', now() AT TIME ZONE 'Australia/Melbourne') - interval '1 day')::date AS day\n)\nSELECT (SELECT day::text FROM win) AS day,\n  (SELECT json_agg(x) FROM (\n     SELECT (SELECT min(bl.n) FROM brief_links bl WHERE bl.source_id = s.id) AS brief_n,\n            s.name, s.url, coalesce(s.config->>'feed_url', s.url) AS route,\n            s.method::text AS method, s.active, s.config->>'note' AS note,\n            (SELECT count(*)::int FROM articles a WHERE a.source_id = s.id\n               AND a.fetched_at > now() - interval '3 days') AS recent,\n            to_char((SELECT max(a.fetched_at) FROM articles a WHERE a.source_id = s.id)\n               AT TIME ZONE 'Australia/Melbourne', 'DD Mon') AS last_article\n     FROM sources s ORDER BY 1 NULLS LAST, s.name) x) AS sources,\n  (SELECT coalesce(json_agg(y), '[]'::json) FROM (\n     SELECT (SELECT min(bl.n) FROM brief_links bl WHERE bl.source_id = sx.id) AS brief_n,\n            sx.name AS source_name, a.title, coalesce(a.canonical_url, a.url) AS url,\n            an.relevance_score AS score, length(coalesce(a.body_text, '')) AS body_chars,\n            sx.category\n     FROM report_items ri\n     JOIN reports rp ON rp.id = ri.report_id\n     JOIN articles a ON a.id = ri.article_id\n     JOIN sources sx ON sx.id = a.source_id\n     LEFT JOIN article_analysis an ON an.article_id = a.id\n     WHERE rp.report_date = (now() AT TIME ZONE 'Australia/Melbourne')::date\n       AND rp.status = 'sent'\n     ORDER BY 1 NULLS LAST, ri.rank) y) AS articles"
+      }
+    },
+    {
+      "id": "srcbuild",
+      "name": "Build verification report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        240
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "\n'use strict';\n/**\n * The daily source-verification report, as printable HTML.\n *\n * One implementation used by the 05:00 workflow and any CLI, so the stored\n * artefact and an ad-hoc rebuild cannot disagree. Backtick-free and\n * template-free on purpose: this file is inlined into a Code node.\n *\n * Input shape (all read in one SQL round trip by the workflow):\n *   day       'YYYY-MM-DD'  — the publication day the 05:00 send covered\n *   sources   [{brief_n, name, url, route, method, active, recent, last_article, note}]\n *   articles  [{brief_n, source_name, title, url, score, body_chars, category}]\n */\n\nfunction esc(s) {\n  return String(s == null ? '' : s)\n    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n}\n\nfunction link(url, text) {\n  return '<a href=\"' + esc(url) + '\" style=\"color:#0f766e;text-decoration:none\">'\n    + esc(text || url) + '</a>';\n}\n\nfunction buildSourceReport(day, sources, articles) {\n  var producing = [];\n  var quiet = [];\n  var inactive = [];\n  for (var i = 0; i < sources.length; i++) {\n    var s = sources[i];\n    if (!s.active) inactive.push(s);\n    else if (Number(s.recent) > 0) producing.push(s);\n    else quiet.push(s);\n  }\n\n  var withBody = 0;\n  for (var j = 0; j < articles.length; j++) {\n    if (Number(articles[j].body_chars) > 200) withBody++;\n  }\n\n  var tally = {\n    day: day,\n    sources_producing: producing.length,\n    sources_quiet: quiet.length,\n    sources_inactive: inactive.length,\n    articles_sent: articles.length,\n    written_from_article: withBody,\n  };\n\n  var h = [];\n  h.push('<!doctype html><html><head><meta charset=\"utf-8\">');\n  h.push('<style>');\n  h.push('body{font:13px/1.55 Arial,sans-serif;color:#111827;margin:32px}');\n  h.push('h1{font-size:20px;margin:0 0 2px}h2{font-size:15px;margin:26px 0 8px;border-bottom:2px solid #0f766e;padding-bottom:4px}');\n  h.push('table{border-collapse:collapse;width:100%;font-size:12px}');\n  h.push('th{text-align:left;color:#6b7280;font-size:10px;text-transform:uppercase;letter-spacing:.05em;padding:5px 8px;border-bottom:1px solid #d1d5db}');\n  h.push('td{padding:5px 8px;border-bottom:1px solid #f3f4f6;vertical-align:top}');\n  h.push('.muted{color:#6b7280}.ok{color:#047857}.warn{color:#b45309}.chip{display:inline-block;background:#f3f4f6;border-radius:8px;padding:0 6px;font-size:10px;text-transform:uppercase}');\n  h.push('.box{background:#f0fdfa;border-left:4px solid #0f766e;padding:10px 14px;margin:14px 0}');\n  h.push('</style></head><body>');\n\n  h.push('<div class=\"muted\" style=\"letter-spacing:.14em;font-size:10px\">BEXT CONSULTANCY &middot; SOURCE VERIFICATION</div>');\n  h.push('<h1>Daily source report &mdash; ' + esc(day) + '</h1>');\n  h.push('<div class=\"muted\">Generated beside the 05:00 send it describes. Every article below was emailed; every source below is a link from the Industry Daily brief.</div>');\n\n  h.push('<div class=\"box\"><b>' + tally.articles_sent + '</b> articles sent &middot; <b>'\n    + tally.written_from_article + '</b> written from the full article text &middot; <b>'\n    + tally.sources_producing + '</b> sources producing &middot; <b class=\"warn\">'\n    + tally.sources_quiet + '</b> quiet 3 days &middot; <b class=\"muted\">'\n    + tally.sources_inactive + '</b> inactive</div>');\n\n  // ── what was sent, grouped by the brief link it answers to ────────────────\n  h.push('<h2>Articles sent, by brief link</h2>');\n  h.push('<table><tr><th>#</th><th>Link</th><th>Article sent</th><th>Score</th><th>Written from</th></tr>');\n  var byKey = {};\n  var order = [];\n  for (var k = 0; k < articles.length; k++) {\n    var a = articles[k];\n    var key = (a.brief_n == null ? 'zz' : String(a.brief_n)) + '|' + a.source_name;\n    if (!byKey[key]) { byKey[key] = []; order.push(key); }\n    byKey[key].push(a);\n  }\n  for (var o = 0; o < order.length; o++) {\n    var grp = byKey[order[o]];\n    for (var g = 0; g < grp.length; g++) {\n      var a2 = grp[g];\n      h.push('<tr>'\n        + '<td>' + (g === 0 && a2.brief_n != null ? '#' + a2.brief_n : '') + '</td>'\n        + '<td>' + (g === 0 ? esc(a2.source_name) : '') + '</td>'\n        + '<td>' + link(a2.url, a2.title) + '</td>'\n        + '<td>' + esc(a2.score == null ? '-' : a2.score) + '</td>'\n        + '<td>' + (Number(a2.body_chars) > 200\n            ? '<span class=\"ok\">article &middot; ' + a2.body_chars + ' chars</span>'\n            : '<span class=\"warn\">teaser only</span>') + '</td>'\n        + '</tr>');\n    }\n  }\n  h.push('</table>');\n\n  // ── every source, verified ────────────────────────────────────────────────\n  h.push('<h2>Producing sources (' + producing.length + ')</h2>');\n  h.push('<table><tr><th>#</th><th>Source</th><th>Read from</th><th>Method</th><th>Articles 3d</th></tr>');\n  for (var p = 0; p < producing.length; p++) {\n    var sp = producing[p];\n    h.push('<tr><td>' + (sp.brief_n != null ? '#' + sp.brief_n : '') + '</td>'\n      + '<td>' + esc(sp.name) + '</td>'\n      + '<td>' + link(sp.route || sp.url, (sp.route || sp.url || '').replace(/^https?:\\/\\//, '')) + '</td>'\n      + '<td><span class=\"chip\">' + esc(sp.method) + '</span></td>'\n      + '<td>' + esc(sp.recent) + '</td></tr>');\n  }\n  h.push('</table>');\n\n  h.push('<h2>Quiet 3 days (' + quiet.length + ') &mdash; checked and answering, nothing held</h2>');\n  h.push('<table><tr><th>#</th><th>Source</th><th>Read from</th><th>Method</th><th>Last article held</th></tr>');\n  for (var qq = 0; qq < quiet.length; qq++) {\n    var sq = quiet[qq];\n    h.push('<tr><td>' + (sq.brief_n != null ? '#' + sq.brief_n : '') + '</td>'\n      + '<td>' + esc(sq.name) + '</td>'\n      + '<td>' + link(sq.route || sq.url, (sq.route || sq.url || '').replace(/^https?:\\/\\//, '')) + '</td>'\n      + '<td><span class=\"chip\">' + esc(sq.method) + '</span></td>'\n      + '<td class=\"warn\">' + esc(sq.last_article || 'none held') + '</td></tr>');\n  }\n  h.push('</table>');\n\n  h.push('<h2>Inactive (' + inactive.length + ') &mdash; switched off on purpose</h2>');\n  h.push('<table><tr><th>#</th><th>Source</th><th>Why</th></tr>');\n  for (var n = 0; n < inactive.length; n++) {\n    var si = inactive[n];\n    h.push('<tr><td>' + (si.brief_n != null ? '#' + si.brief_n : '') + '</td>'\n      + '<td>' + esc(si.name) + '</td>'\n      + '<td class=\"muted\">' + esc((si.note || 'no note recorded').slice(0, 220)) + '</td></tr>');\n  }\n  h.push('</table>');\n\n  h.push('<div class=\"muted\" style=\"margin-top:24px;font-size:11px\">Producing / quiet is counted by articles held in the last 3 days, not by fetch status &mdash; a fetch can succeed while a source returns navigation instead of stories. Generated automatically with the 05:00 send.</div>');\n  h.push('</body></html>');\n\n  return { html: h.join('\\n'), tally: tally };\n}\n\n\nconst d = $input.first().json || {};\nconst out = buildSourceReport(String(d.day || ''), d.sources || [], d.articles || []);\nreturn [{ json: { day: d.day, html: out.html, tally: JSON.stringify(out.tally) } }];\n"
+      }
+    },
+    {
+      "id": "srcpdf",
+      "name": "Render verification PDF",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3600,
+        240
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "jsCode": "\nconst d = $input.first().json;\nlet pdf = null;\ntry {\n  const r = await this.helpers.httpRequest({\n    method: 'POST', url: 'http://fetcher:8080/pdf',\n    json: true, timeout: 60000,\n    body: { html: d.html },\n    encoding: 'arraybuffer',\n    returnFullResponse: true,\n  });\n  const body = r.body || r;\n  pdf = Buffer.from(body).toString('base64');\n} catch (e) { /* HTML-only day; the dashboard says so */ }\nreturn [{ json: { day: d.day, html: d.html, tally: d.tally, pdf_b64: pdf } }];\n"
+      }
+    },
+    {
+      "id": "srcsave",
+      "name": "Save verification report",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        3840,
+        240
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "0SoqGGqUOqbwYTmJ",
+          "name": "BEXT Postgres"
+        }
+      },
+      "alwaysOutputData": true,
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO source_reports (day, html, pdf, tally)\nVALUES ($1::date, $2, CASE WHEN $3 = '' THEN NULL ELSE decode($3, 'base64') END, $4::jsonb)\nON CONFLICT (day) DO UPDATE\n  SET html = EXCLUDED.html, pdf = EXCLUDED.pdf, tally = EXCLUDED.tally, created_at = now()",
+        "options": {
+          "queryReplacement": "={{ $json.day }},{{ $json.html }},{{ $json.pdf_b64 || \"\" }},{{ $json.tally }}"
+        }
+      }
+    },
+    {
       "id": "held",
       "name": "Record held report",
       "type": "n8n-nodes-base.postgres",
@@ -640,7 +713,45 @@
       "main": [
         [
           {
+            "node": "Load verification data",
+            "type": "main",
+            "index": 0
+          },
+          {
             "node": "Heartbeat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load verification data": {
+      "main": [
+        [
+          {
+            "node": "Build verification report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build verification report": {
+      "main": [
+        [
+          {
+            "node": "Render verification PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render verification PDF": {
+      "main": [
+        [
+          {
+            "node": "Save verification report",
             "type": "main",
             "index": 0
           }

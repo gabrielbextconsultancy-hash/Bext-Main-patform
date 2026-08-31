@@ -46,7 +46,7 @@ export interface ArchitectureGraph {
 }
 
 export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
-  "generatedAt": "2026-08-31T10:22:15.837Z",
+  "generatedAt": "2026-08-31T11:30:24.907Z",
   "workflowCount": 15,
   "edgeCount": 53,
   "workflows": [
@@ -1048,6 +1048,21 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
           "alwaysOutputData": true
         },
         {
+          "id": "srcload",
+          "name": "Load verification data",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [
+            "article_analysis",
+            "articles",
+            "report_items",
+            "reports",
+            "sources"
+          ],
+          "writes": [],
+          "alwaysOutputData": true
+        },
+        {
           "id": "kuma",
           "name": "Heartbeat",
           "type": "n8n-nodes-base.httpRequest",
@@ -1055,6 +1070,33 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
           "reads": [],
           "writes": [],
           "alwaysOutputData": false
+        },
+        {
+          "id": "srcbuild",
+          "name": "Build verification report",
+          "type": "n8n-nodes-base.code",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "srcpdf",
+          "name": "Render verification PDF",
+          "type": "n8n-nodes-base.code",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "srcsave",
+          "name": "Save verification report",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": true
         },
         {
           "id": "n1",

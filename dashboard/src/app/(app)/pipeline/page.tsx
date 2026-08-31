@@ -1,6 +1,7 @@
 import { ReportsView, type ReportParams } from '../reports/page';
 import { AuditView, type AuditParams } from '../audit/page';
 import { SourcesView } from '../sources/page';
+import { SourceReportButton } from '@/components/SourceReportButton';
 
 /**
  * The news pipeline, on one page.
@@ -64,12 +65,16 @@ export default async function PipelinePage({
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-lg font-semibold text-ink-100">News pipeline</h1>
-        <p className="mt-1 text-sm text-ink-400">
-          Sources feed the day audit; the day audit becomes the 05:00 report. Everything gathered
-          today goes out tomorrow morning.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold text-ink-100">News pipeline</h1>
+          <p className="mt-1 text-sm text-ink-400">
+            Sources feed the day audit; the day audit becomes the 05:00 report. Everything gathered
+            today goes out tomorrow morning.
+          </p>
+        </div>
+        {/* The stored daily fetch-audit PDFs — top right, as asked, on every tab. */}
+        <SourceReportButton />
       </div>
 
       <div className="flex flex-wrap gap-2 border-b border-ink-800 pb-3">

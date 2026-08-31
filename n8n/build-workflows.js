@@ -60,6 +60,13 @@ const RENAMED_FROM = {
   'BEXT Daily News — 6 Teams Card': 'BEXT — Daily News Card',
 };
 
+// The source-verification report builder, shared with any CLI the same way
+// ingest.js is, so the stored artefact and an ad-hoc rebuild cannot disagree.
+const SRCREPORT_SRC = fs
+  .readFileSync(path.join(__dirname, 'lib', 'source-report.js'), 'utf8')
+  .replace(/^module\.exports\s*=\s*\{[\s\S]*?\};?\s*$/m, '')
+  .replace(/^module\.exports\s*=.*$/m, '');
+
 // The tested parser, minus its CommonJS export line, for embedding in a Code node.
 const INGEST_SRC = fs
   .readFileSync(path.join(__dirname, 'lib', 'ingest.js'), 'utf8')
@@ -1446,6 +1453,35 @@ return [{ json: {
 } }];
 `;
 
+// The verification report's code, built beside the send it describes.
+const SRCREPORT_BUILD_CODE = `
+${SRCREPORT_SRC}
+const d = $input.first().json || {};
+const out = buildSourceReport(String(d.day || ''), d.sources || [], d.articles || []);
+return [{ json: { day: d.day, html: out.html, tally: JSON.stringify(out.tally) } }];
+`;
+
+// Rendered by the fetcher's own HTML-to-PDF endpoint - the same service that
+// renders meeting minutes - so the stored PDF is the morning's artefact, not a
+// later re-render from data that has moved. Fail-open: a fetcher outage stores
+// the HTML with no PDF rather than losing the day's report.
+const SRCREPORT_PDF_CODE = `
+const d = $input.first().json;
+let pdf = null;
+try {
+  const r = await this.helpers.httpRequest({
+    method: 'POST', url: 'http://fetcher:8080/pdf',
+    json: true, timeout: 60000,
+    body: { html: d.html },
+    encoding: 'arraybuffer',
+    returnFullResponse: true,
+  });
+  const body = r.body || r;
+  pdf = Buffer.from(body).toString('base64');
+} catch (e) { /* HTML-only day; the dashboard says so */ }
+return [{ json: { day: d.day, html: d.html, tally: d.tally, pdf_b64: pdf } }];
+`;
+
 function dailyReportWorkflow() {
   return {
     name: 'BEXT Daily News — 5 Daily Report',
@@ -2103,6 +2139,72 @@ ON CONFLICT (report_id, article_id) DO NOTHING`,
         },
       },
       {
+        id: 'srcload', name: 'Load verification data', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(3120, 240),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          // One round trip: the covered day, every source with its pulse, and
+          // the articles THIS morning's sheet carried, each tied to the brief
+          // link it answers to.
+          query: `WITH win AS (
+  SELECT (date_trunc('day', now() AT TIME ZONE 'Australia/Melbourne') - interval '1 day')::date AS day
+)
+SELECT (SELECT day::text FROM win) AS day,
+  (SELECT json_agg(x) FROM (
+     SELECT (SELECT min(bl.n) FROM brief_links bl WHERE bl.source_id = s.id) AS brief_n,
+            s.name, s.url, coalesce(s.config->>'feed_url', s.url) AS route,
+            s.method::text AS method, s.active, s.config->>'note' AS note,
+            (SELECT count(*)::int FROM articles a WHERE a.source_id = s.id
+               AND a.fetched_at > now() - interval '3 days') AS recent,
+            to_char((SELECT max(a.fetched_at) FROM articles a WHERE a.source_id = s.id)
+               AT TIME ZONE 'Australia/Melbourne', 'DD Mon') AS last_article
+     FROM sources s ORDER BY 1 NULLS LAST, s.name) x) AS sources,
+  (SELECT coalesce(json_agg(y), '[]'::json) FROM (
+     SELECT (SELECT min(bl.n) FROM brief_links bl WHERE bl.source_id = sx.id) AS brief_n,
+            sx.name AS source_name, a.title, coalesce(a.canonical_url, a.url) AS url,
+            an.relevance_score AS score, length(coalesce(a.body_text, '')) AS body_chars,
+            sx.category
+     FROM report_items ri
+     JOIN reports rp ON rp.id = ri.report_id
+     JOIN articles a ON a.id = ri.article_id
+     JOIN sources sx ON sx.id = a.source_id
+     LEFT JOIN article_analysis an ON an.article_id = a.id
+     WHERE rp.report_date = (now() AT TIME ZONE 'Australia/Melbourne')::date
+       AND rp.status = 'sent'
+     ORDER BY 1 NULLS LAST, ri.rank) y) AS articles`,
+        },
+      },
+      {
+        id: 'srcbuild', name: 'Build verification report', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(3360, 240),
+        onError: 'continueRegularOutput',
+        parameters: { jsCode: SRCREPORT_BUILD_CODE },
+      },
+      {
+        id: 'srcpdf', name: 'Render verification PDF', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(3600, 240),
+        onError: 'continueRegularOutput',
+        parameters: { jsCode: SRCREPORT_PDF_CODE },
+      },
+      {
+        id: 'srcsave', name: 'Save verification report', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(3840, 240),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          query: `INSERT INTO source_reports (day, html, pdf, tally)
+VALUES ($1::date, $2, CASE WHEN $3 = '' THEN NULL ELSE decode($3, 'base64') END, $4::jsonb)
+ON CONFLICT (day) DO UPDATE
+  SET html = EXCLUDED.html, pdf = EXCLUDED.pdf, tally = EXCLUDED.tally, created_at = now()`,
+          options: {
+            queryReplacement: '={{ $json.day }},{{ $json.html }},{{ $json.pdf_b64 || "" }},{{ $json.tally }}',
+          },
+        },
+      },
+      {
         id: 'held', name: 'Record held report', type: 'n8n-nodes-base.postgres',
         typeVersion: 2.5, position: pos(2400, 260),
         credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
@@ -2253,6 +2355,10 @@ VALUES ('daily_report', 'up', $1)`,
       },
       'Send via Graph': { main: [[{ node: 'Mark sent', type: 'main', index: 0 }]] },
       'Mark sent': { main: [[{ node: 'Record result', type: 'main', index: 0 }]] },
+      'Record result': { main: [[{ node: 'Load verification data', type: 'main', index: 0 }]] },
+      'Load verification data': { main: [[{ node: 'Build verification report', type: 'main', index: 0 }]] },
+      'Build verification report': { main: [[{ node: 'Render verification PDF', type: 'main', index: 0 }]] },
+      'Render verification PDF': { main: [[{ node: 'Save verification report', type: 'main', index: 0 }]] },
     },
   };
 }
