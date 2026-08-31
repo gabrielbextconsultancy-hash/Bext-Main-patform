@@ -44,7 +44,7 @@ if (!FROM || !TO || !/^\d{4}-\d{2}-\d{2}$/.test(FROM) || !/^\d{4}-\d{2}-\d{2}$/.
 // not-done and the daily report's audit can see which scores are current.
 const TAG = 'rescore-' + FROM + '-to-' + TO;
 
-const WF = path.join(__dirname, '..', 'n8n', 'workflows', 'BEXT-Article-Analysis.json');
+const WF = path.join(__dirname, '..', 'n8n', 'workflows', 'BEXT-Daily-News-3-Article-Analysis.json');
 const wf = JSON.parse(fs.readFileSync(WF, 'utf8'));
 const codeNode = wf.nodes.find(n => /code/i.test(n.type) && /score|analys/i.test(n.name));
 const PROMPT_LIT = (codeNode.parameters.jsCode.match(/const PROMPT = (".*?");\n/s) || [])[1];

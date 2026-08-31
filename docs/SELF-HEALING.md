@@ -267,7 +267,7 @@ scheduler is caught the same day. Copy each token into the matching
 | Graph Health | 06:00 AEST | 93600s (26h) | `KUMA_PUSH_GRAPH_HEALTH` |
 | Contract Test | 02:00 AEST | 93600s (26h) | `KUMA_PUSH_CONTRACT_TEST` |
 
-**`BEXT — Newsletter Intake` has no push monitor, deliberately.** It is IMAP
+**`BEXT Daily News — 2 Newsletter Intake` has no push monitor, deliberately.** It is IMAP
 triggered, not scheduled, so there is no cadence for it to be dead against — a
 quiet mailbox is not an outage. Giving it a deadman would produce a red tile
 every quiet weekend, and the fastest way to make monitoring useless is to make

@@ -16,11 +16,12 @@ const WORKFLOWS_DIR = path.join(ROOT, 'n8n/workflows');
 const OUT_FILE = path.join(ROOT, 'dashboard/src/lib/architecture.generated.ts');
 
 const DOMAINS = {
-  'BEXT — Source Ingest': 'brief_a',
-  'BEXT — Newsletter Intake': 'brief_a',
-  'BEXT — Article Analysis': 'brief_a',
-  'BEXT — Daily Report': 'brief_a',
-  'BEXT — Daily News Card': 'brief_a',
+  'BEXT Daily News — 1 Source Ingest': 'brief_a',
+  'BEXT Daily News — 2 Newsletter Intake': 'brief_a',
+  'BEXT Daily News — 3 Article Analysis': 'brief_a',
+  'BEXT Daily News — 4 News Quality': 'brief_a',
+  'BEXT Daily News — 5 Daily Report': 'brief_a',
+  'BEXT Daily News — 6 Teams Card': 'brief_a',
   'BEXT — Content Topics': 'content',
   'BEXT — Content Drafts': 'content',
   'BEXT — LinkedIn Publish': 'content',

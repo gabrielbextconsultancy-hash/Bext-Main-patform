@@ -108,7 +108,7 @@ Use `graph/fix-mail-dns.js`.
 ```
 path          Graph /users/{MS_SENDER_UPN}/sendMail, app-only client credentials
 sender        Admin.bext-automation@bextconsultancy.com.au   (Microsoft-signed)
-node          BEXT — Daily Report › "Send via Graph" (Code node)
+node          BEXT Daily News — 5 Daily Report › "Send via Graph" (Code node)
 needs         MS_TENANT_ID, MS_CLIENT_ID, MS_CLIENT_SECRET, MS_SENDER_UPN in n8n's env
 ```
 

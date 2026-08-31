@@ -378,7 +378,7 @@ noticing. **Idempotence deserves a check even when the side effects are invisibl
 
 ## R022b — a require() the sandbox blocks, found before it ran
 
-R022 flagged `require('dns')` in `BEXT — Daily Report`'s deliverability node
+R022 flagged `require('dns')` in `BEXT Daily News — 5 Daily Report`'s deliverability node
 against an allow-list of `crypto,url,https`. That node would have failed at
 runtime with `Module 'dns' is disallowed`, exactly as the `https` upload did.
 
@@ -407,8 +407,8 @@ somewhere in the node, which passed while `URL` was still unbound. It now parses
 the destructuring list and checks each symbol actually used.
 
 The rewritten check immediately found the same latent fault in two other
-workflows — `BEXT — Daily Report` (`Fetch article images`) and
-`BEXT — Newsletter Intake` (`Read the newsletter`) — both using `new URL()` with no
+workflows — `BEXT Daily News — 5 Daily Report` (`Fetch article images`) and
+`BEXT Daily News — 2 Newsletter Intake` (`Read the newsletter`) — both using `new URL()` with no
 `require('url')` at all. Both fixed before they ran.
 
 ### Two lessons
@@ -609,3 +609,27 @@ Rule: after any edit to a report query, the SQL must be PREPAREd against the
 live schema before deploy. Preflight R035 does this for every postgres node in
 the daily report whenever the database is reachable, and `graph/preview-report.js`
 executes the full query end-to-end — run one of them, not neither.
+
+## R036 — a gate that stops good work
+
+The pre-send validator is the only node with the authority to hold the client's
+report. Its first draft counted double-escaped HTML entities across the rendered
+sheet and blocked at four. Replayed against the twelve reports actually sent up
+to 30 Aug, it would have stopped three of them — and every single match was a
+crop parameter inside a publisher's image URL (`?impolicy=...&amp;amp;cropH=`),
+never text a reader sees. The reports it would have killed were fine.
+
+The same replay found a second fault in the same node. The truncation test was
+written `!/[.!?"')\]]$/.test(b)`, and that source is inlined into a Code node
+through a template literal, which ate the backslash: the character class closed
+at the first `]`, the test became "does this end in a bracket", and every summary
+in every report read as truncated. A rule that fires on 100% of everything is not
+a signal, and it went unnoticed because it only produced a note.
+
+Two rules. A check that can block the deliverable must be replayed against output
+already accepted before it ships — preflight R036 runs `n8n/validate-replay.js`,
+which executes the shipped node code over the last twelve sent reports and fails
+if any would have been held. And escapes that must survive two levels of quoting
+do not belong in inlined code: test characters against a list
+(`['.', '!', '?', ...].indexOf(b.slice(-1))`), which cannot be mangled. That is
+R001 wearing different clothes.

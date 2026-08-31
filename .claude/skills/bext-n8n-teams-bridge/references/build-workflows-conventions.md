@@ -93,9 +93,9 @@ scheduled run before activation — the pattern `BEXT — Meeting Intake` alread
 
 | Name | Schedule | State |
 |---|---|---|
-| `BEXT — Source Ingest` | hourly | active |
-| `BEXT — Article Analysis` | 30 min | active |
-| `BEXT — Daily Report` | 05:00 `Australia/Melbourne` | active |
+| `BEXT Daily News — 1 Source Ingest` | hourly | active |
+| `BEXT Daily News — 3 Article Analysis` | 30 min | active |
+| `BEXT Daily News — 5 Daily Report` | 05:00 `Australia/Melbourne` | active |
 | `BEXT — Graph Health` | 06:00 | active |
 | `BEXT — Meeting Intake` | 15 min | **inactive**, holds an older five-field `MEETING_CODE` |
 

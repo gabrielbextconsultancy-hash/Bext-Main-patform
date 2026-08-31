@@ -32,7 +32,7 @@ if (FORCE_DATE && !/^\d{4}-\d{2}-\d{2}$/.test(FORCE_DATE)) {
   console.error('--date must be YYYY-MM-DD'); process.exit(1);
 }
 
-const WF = path.join(__dirname, '..', 'n8n', 'workflows', 'BEXT-Daily-Report.json');
+const WF = path.join(__dirname, '..', 'n8n', 'workflows', 'BEXT-Daily-News-5-Daily-Report.json');
 const wf = JSON.parse(fs.readFileSync(WF, 'utf8'));
 const selectSql = wf.nodes.find(n => n.name === 'Top articles, prior day').parameters.query;
 const renderCode = wf.nodes.find(n => n.name === 'Render HTML').parameters.jsCode;

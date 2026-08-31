@@ -115,7 +115,7 @@ check('R004', 'every generated Code node parses as async', () => {
 // stripping, and the library reaching the node at all.
 check('R005', 'inlined libs are embedded and stripped of their exports', () => {
   const want = [
-    ['BEXT-Source-Ingest', 'n8n/lib/ingest.js', 'parseFeed'],
+    ['BEXT-Daily-News-1-Source-Ingest', 'n8n/lib/ingest.js', 'parseFeed'],
     ['BEXT-Meeting-Intake', 'n8n/lib/meeting-card.js', 'buildMeetingCard'],
     ['BEXT-Meeting-Intake', 'n8n/lib/docx.js', 'dedupeVtt'],
   ];
@@ -171,11 +171,17 @@ check('R009', 'Teams Inbound webhookId is pinned', () => {
 });
 
 // ── R010 ─ project conventions ──────────────────────────────────────────────
-check('R010', 'every workflow is named "BEXT — ..."', () => {
+// Two shapes are legitimate. Standalone work is "BEXT — ...". The six workflows
+// that produce the morning sheet are "BEXT Daily News — N ...", named for the
+// pipeline and numbered for their place in it so n8n's alphabetical list - there
+// are no folders on Community - shows the run in running order. Everything still
+// begins with BEXT, which is what keeps this client's work distinguishable from
+// the other tenant on the same instance.
+check('R010', 'every workflow is named "BEXT — ..." or "BEXT Daily News — N ..."', () => {
   const bad = fs.readdirSync(path.join(ROOT, 'n8n/workflows'))
     .filter(f => f.endsWith('.json'))
     .map(f => JSON.parse(read(`n8n/workflows/${f}`)).name)
-    .filter(n => !n.startsWith('BEXT — '));
+    .filter(n => !/^BEXT — /.test(n) && !/^BEXT Daily News — [1-9] /.test(n));
   return bad.length ? { ok: false, detail: bad.join(', ') } : { ok: true, detail: 'all named' };
 });
 
@@ -732,7 +738,7 @@ if (VPS) {
 // against the real schema through the tunnel, and skips cleanly when no
 // database is reachable rather than failing the build on a closed laptop.
 check('R035', 'daily-report SQL prepares against the live schema', () => {
-  const wf = JSON.parse(read('n8n/workflows/BEXT-Daily-Report.json'));
+  const wf = JSON.parse(read('n8n/workflows/BEXT-Daily-News-5-Daily-Report.json'));
   const queries = wf.nodes
     .filter(n => n.type === 'n8n-nodes-base.postgres' && n.parameters && n.parameters.query)
     .map(n => ({ name: n.name, q: n.parameters.query }));
@@ -758,6 +764,32 @@ check('R035', 'daily-report SQL prepares against the live schema', () => {
     return { ok: true, detail: queries.length + ' queries prepared clean' };
   } catch (e) {
     return { ok: false, detail: 'checker crashed: ' + String(e.message).slice(0, 120) };
+  }
+});
+
+// ── R036 ─ the pre-send validator must not block a report that was fine ─────
+// The validator is the only node that can stop the client deliverable, so its
+// dangerous failure is not missing a flaw — it is inventing one at 05:00 with
+// nobody awake to overrule it. Its first draft did: it counted double-escaped
+// entities across the raw HTML and would have blocked three of the five reports
+// to 30 Aug, every match a crop parameter inside an image URL.
+//
+// n8n/validate-replay.js runs the shipped node code over reports the client
+// actually received. A "would block" verdict there is a false positive by
+// definition, and fails the build.
+check('R036', 'pre-send validator passes every report already sent', () => {
+  try {
+    const out = execFileSync('node', ['n8n/validate-replay.js'],
+      { encoding: 'utf8', cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    const line = out.split(/\r?\n/).filter(l => /^(OK|SKIP|FAIL)/.test(l)).pop() || out;
+    if (line.startsWith('SKIP')) return { ok: true, detail: 'no database reachable — run with the tunnel up to exercise this' };
+    return { ok: true, detail: line.slice(3).trim() + ' sent reports replay clean' };
+  } catch (e) {
+    // A non-zero exit is the harness reporting a blocked report, which is the
+    // regression this check exists for; its stdout carries which day and why.
+    const out = String((e.stdout || '') + (e.stderr || '')).trim();
+    const line = out.split(/\r?\n/).filter(l => /^FAIL/.test(l)).pop();
+    return { ok: false, detail: line ? line.slice(5) : out.slice(-200) };
   }
 });
 

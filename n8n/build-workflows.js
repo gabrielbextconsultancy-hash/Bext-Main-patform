@@ -27,14 +27,34 @@ const TAG = 'BEXT Consultancy';
 // The workflows that between them produce the 05:00 sheet, in the order they
 // run. Tagged together so the pipeline reads as one thing in the n8n list.
 const DAILY_TAG = 'Daily Report';
+
+// Every workflow that produces the 05:00 sheet is named for the pipeline and
+// numbered for its place in it, so the n8n list - which sorts alphabetically and
+// has no folders on Community - shows the six as one run in running order rather
+// than scattered among the eight that do other work. The number is the stage,
+// not a schedule: 1 feeds 3, 3 feeds 4, 4 closes the day before 5 sends it.
 const DAILY_PIPELINE = [
-  'BEXT — Source Ingest',      // hourly: every source down the retrieval ladder
-  'BEXT — Newsletter Intake',  // as mail arrives: the route past account walls
-  'BEXT — Article Analysis',   // every 30 min: relevance scoring
-  'BEXT — News Quality',       // 06:00/12:00/23:50: dates, bodies, links, judge, audit
-  'BEXT — Daily Report',       // 05:00: assemble and send
-  'BEXT — Daily News Card',    // 05:20: the Teams card
+  'BEXT Daily News — 1 Source Ingest',      // hourly: every source down the retrieval ladder
+  'BEXT Daily News — 2 Newsletter Intake',  // as mail arrives: the route past account walls
+  'BEXT Daily News — 3 Article Analysis',   // every 30 min: relevance scoring
+  'BEXT Daily News — 4 News Quality',       // 06:00/12:00/23:50: dates, bodies, links, judge, audit
+  'BEXT Daily News — 5 Daily Report',       // 05:00: validate, assemble and send
+  'BEXT Daily News — 6 Teams Card',         // 05:20: the Teams card
 ];
+
+// What each of those used to be called. deploy() matches an existing workflow by
+// name, so without this a rename would not rename anything: it would create a
+// second workflow and leave the original active - two hourly ingests, two 05:00
+// sends. Consulted only when the new name finds nothing, and harmless to keep
+// once every instance has been renamed.
+const RENAMED_FROM = {
+  'BEXT Daily News — 1 Source Ingest': 'BEXT — Source Ingest',
+  'BEXT Daily News — 2 Newsletter Intake': 'BEXT — Newsletter Intake',
+  'BEXT Daily News — 3 Article Analysis': 'BEXT — Article Analysis',
+  'BEXT Daily News — 4 News Quality': 'BEXT — News Quality',
+  'BEXT Daily News — 5 Daily Report': 'BEXT — Daily Report',
+  'BEXT Daily News — 6 Teams Card': 'BEXT — Daily News Card',
+};
 
 // The tested parser, minus its CommonJS export line, for embedding in a Code node.
 const INGEST_SRC = fs
@@ -514,7 +534,7 @@ return [...a, ...b];
 
 function sourceIngestWorkflow() {
   return {
-    name: 'BEXT — Source Ingest',
+    name: 'BEXT Daily News — 1 Source Ingest',
     settings: { executionOrder: 'v1', timezone: 'Australia/Melbourne', saveExecutionProgress: false },
     nodes: [
       {
@@ -812,7 +832,7 @@ ARTICLES:
 
 function articleAnalysisWorkflow() {
   return {
-    name: 'BEXT — Article Analysis',
+    name: 'BEXT Daily News — 3 Article Analysis',
     settings: { executionOrder: 'v1', timezone: 'Australia/Melbourne' },
     nodes: [
       {
@@ -1156,9 +1176,150 @@ FROM ranked
 WHERE rn <= ${REPORT_MAX_PER_SECTION}
 ORDER BY category, relevance_score DESC, shown_at DESC`;
 
+// The last gate before the client sees it.
+//
+// Everything upstream decides WHICH articles go out. Nothing checked whether
+// what was written about them is fit to read: a summary truncated mid-sentence,
+// an encoding artefact where an apostrophe should be, a body that came back as
+// navigation furniture, forty items whose summaries are all identical because a
+// scoring batch failed the same way.
+//
+// Two passes, deliberately different in authority:
+//
+//   Deterministic checks CAN stop the send. They test facts - is the text
+//   empty, is it mojibake, are the summaries duplicated - and a sheet failing
+//   them is provably broken, not merely disliked.
+//
+//   Gemini ADVISES and never blocks. A model refusing to send the client's
+//   report on a matter of taste, at five in the morning, with nobody awake to
+//   overrule it, is a worse failure than a clumsy sentence going out.
+//
+// And it fails open. If Gemini is unreachable or its quota is spent - which
+// happened on 25 Aug - the sheet still goes, carrying a note that it went
+// unvalidated. A validator that can silence the report is a validator that
+// eventually will.
+const VALIDATE_CODE = `
+const d = $('Render HTML').first().json;
+const items = d.items || [];
+const html = d.html || '';
+
+const problems = [];
+const notes = [];
+
+// What the reader actually sees. Checking the raw HTML instead tests the markup,
+// and markup legitimately carries what prose never would: publisher image URLs
+// arrive already containing &amp;, and escaping those for an attribute yields
+// &amp;amp; inside a src the browser still resolves. Replayed against the five
+// reports to 30 Aug, testing raw HTML would have blocked three - every match a
+// crop parameter in an image URL, none of it text a client reads. A gate that
+// stops a good report is worse than the flaw it was watching for.
+const text = html.replace(/<[^>]*>/g, ' ');
+
+// --- facts, which may stop the send -------------------------------------
+const empty = items.filter(function (i) { return !i.blurb || String(i.blurb).trim().length < 25; });
+if (items.length && empty.length / items.length > 0.3) {
+  problems.push(Math.round(empty.length / items.length * 100) + '% of items have no usable summary');
+}
+
+// Mojibake: UTF-8 read as Latin-1 leaves these signatures behind, and they are
+// the tell that an encoding step was skipped somewhere upstream.
+const mojibake = (text.match(/Ã¢â‚¬|Ã¢|â€œ|â€\u009d|Ã©|Â»|Ã¯Â¿Â½|\uFFFD/g) || []).length;
+if (mojibake > 5) problems.push(mojibake + ' encoding artefacts in the sheet text');
+
+// Entities that escaped twice read as literal text to the client.
+const doubled = (text.match(/&amp;(amp|lt|gt|quot|#39);/g) || []).length;
+if (doubled > 3) problems.push(doubled + ' double-escaped HTML entities in the text');
+
+// The same fault inside markup is cosmetic, so it is reported and not enforced:
+// visible in the health row, unable to hold the sheet.
+const doubledAttr = (html.match(/&amp;(amp|lt|gt|quot|#39);/g) || []).length - doubled;
+if (doubledAttr > 3) notes.push(doubledAttr + ' double-escaped entities in image URLs');
+
+// One failure mode of a broken scoring batch is every summary coming back the
+// same. Distinct summaries should roughly equal item count.
+const distinct = {};
+items.forEach(function (i) { distinct[String(i.blurb || '').slice(0, 80)] = 1; });
+const distinctCount = Object.keys(distinct).length;
+if (items.length > 8 && distinctCount < items.length * 0.6) {
+  problems.push('only ' + distinctCount + ' distinct summaries across ' + items.length + ' items');
+}
+
+// A summary cut mid-word is the signature of a truncated model reply.
+//
+// Tested by character rather than by regex on purpose. This code is inlined into
+// a Code node through a template literal, and a literal eats the backslash in a
+// class like [.!?\] - the class then closes at the first ] and the test matches
+// only text ending in a bracket, which read as "100% truncated" on all twelve
+// reports replayed. Escapes that must survive two levels of quoting are how
+// R001 happened; a plain list of characters cannot be mangled.
+const ENDINGS = ['.', '!', '?', String.fromCharCode(34), String.fromCharCode(39), ')', ']'];
+const truncated = items.filter(function (i) {
+  const b = String(i.blurb || '').trim();
+  return b.length > 40 && ENDINGS.indexOf(b.slice(-1)) === -1;
+});
+if (items.length && truncated.length / items.length > 0.4) {
+  notes.push(truncated.length + ' summaries end mid-sentence');
+}
+
+// --- judgement, which only advises --------------------------------------
+let verdict = 'not run';
+const key = $env.GEMINI_API_KEY;
+if (key && items.length) {
+  try {
+    const sample = items.slice(0, 25).map(function (i, n) {
+      return (n + 1) + '. ' + String(i.blurb || '(no summary)').slice(0, 220);
+    }).join(String.fromCharCode(10));
+    const prompt = 'You are checking an industry news brief before it is emailed to a client in the '
+      + 'Australian energy and building sector. Below are summaries from the sheet.'
+      + String.fromCharCode(10) + String.fromCharCode(10)
+      + 'Answer ONLY with JSON: {"ok": true or false, "issues": ["..."]}'
+      + String.fromCharCode(10)
+      + 'Report an issue only for something a reader would notice as broken: text that is '
+      + 'garbled or truncated, summaries that say nothing about their article, obvious '
+      + 'duplication, or wording that is not English prose. Do not comment on newsworthiness, '
+      + 'relevance or editorial choice - those are decided elsewhere. If the sheet reads '
+      + 'normally, answer {"ok": true, "issues": []}.'
+      + String.fromCharCode(10) + String.fromCharCode(10) + 'SUMMARIES:' + String.fromCharCode(10) + sample;
+
+    const r = await this.helpers.httpRequest({
+      method: 'POST',
+      url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=' + key,
+      json: true, timeout: 60000,
+      headers: { 'Content-Type': 'application/json' },
+      body: {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.1, responseMimeType: 'application/json' },
+      },
+    });
+    const text = (((r || {}).candidates || [])[0] || {}).content
+      ? r.candidates[0].content.parts[0].text : '';
+    const parsed = JSON.parse(text);
+    verdict = parsed.ok ? 'clean' : 'flagged';
+    if (!parsed.ok && Array.isArray(parsed.issues)) {
+      parsed.issues.slice(0, 4).forEach(function (i) { notes.push('reviewer: ' + String(i).slice(0, 140)); });
+    }
+  } catch (e) {
+    verdict = 'unavailable';
+    notes.push('reviewer did not run: ' + String(e.message || e).slice(0, 80));
+  }
+}
+
+const blocked = problems.length > 0;
+const summary = blocked
+  ? 'BLOCKED - ' + problems.join('; ')
+  : 'passed (' + verdict + ')' + (notes.length ? ' - ' + notes.join('; ') : '');
+
+return [{ json: {
+  validation_ok: !blocked,
+  validation_detail: summary.slice(0, 900),
+  validation_verdict: verdict,
+  item_count: items.length,
+} }];
+`;
+
 function dailyReportWorkflow() {
   return {
-    name: 'BEXT — Daily Report',
+    name: 'BEXT Daily News — 5 Daily Report',
     settings: { executionOrder: 'v1', timezone: 'Australia/Melbourne' },
     nodes: [
       {
@@ -1636,7 +1797,9 @@ const recipient = (($env.REPORT_RECIPIENT || '').split(',')
   .join(', ')) || $env.REPORT_SENDER;
 // Built here and kept free of commas: queryReplacement splits on them, which
 // truncated this to a bare item count the first time round.
-const detail = \`Sent \${d.item_count} items to \${recipient} | intro by \${d.generated_by}\`;
+let validation = 'not checked';
+try { validation = $('Validate before send').first().json.validation_detail || validation; } catch (e) {}
+const detail = \`Sent \${d.item_count} items to \${recipient} | intro by \${d.generated_by} | validation: \${validation}\`;
 // The ids of exactly what went into the sheet, so report_items can record it.
 const items = d.sections.flatMap(sec =>
   sec.items.map((it, i) => ({
@@ -1698,6 +1861,46 @@ ON CONFLICT (report_id, article_id) DO NOTHING`,
           options: {
             queryReplacement: '={{ JSON.stringify($("Render HTML").first().json.items) }}',
           },
+        },
+      },
+      {
+        id: 'validate', name: 'Validate before send', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(610, 0),
+        // A validator that crashes must not be able to stop the sheet, so its
+        // own failure is an output, not an exception.
+        onError: 'continueRegularOutput',
+        alwaysOutputData: true,
+        parameters: { jsCode: VALIDATE_CODE },
+      },
+      {
+        id: 'gate', name: 'Fit to send', type: 'n8n-nodes-base.if',
+        typeVersion: 2, position: pos(665, 0),
+        parameters: {
+          conditions: {
+            options: { caseSensitive: true, version: 2 },
+            combinator: 'and',
+            conditions: [{
+              // Missing means the validator never ran; that sends. Only an
+              // explicit false - a fact-based failure - holds the sheet back.
+              leftValue: '={{ $json.validation_ok !== false }}',
+              rightValue: true,
+              operator: { type: 'boolean', operation: 'true', singleValue: true },
+            }],
+          },
+        },
+      },
+      {
+        id: 'held', name: 'Record held report', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(720, 180),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          // The row stays 'rendered', so the ledger does not mark these articles
+          // sent and tomorrow's window carries them forward intact.
+          query: `INSERT INTO integration_health (service, status, detail)
+VALUES ('daily_report', 'degraded'::health_status, $1)`,
+          options: { queryReplacement: '={{ "Report HELD before send: " + $json.validation_detail }}' },
         },
       },
       {
@@ -1821,7 +2024,14 @@ VALUES ('daily_report', 'up', $1)`,
       },
       'Render HTML': { main: [[{ node: 'Save report', type: 'main', index: 0 }]] },
       'Save report': { main: [[{ node: 'Record items sent', type: 'main', index: 0 }]] },
-      'Record items sent': { main: [[{ node: 'Send via Graph', type: 'main', index: 0 }]] },
+      'Record items sent': { main: [[{ node: 'Validate before send', type: 'main', index: 0 }]] },
+      'Validate before send': { main: [[{ node: 'Fit to send', type: 'main', index: 0 }]] },
+      'Fit to send': {
+        main: [
+          [{ node: 'Send via Graph', type: 'main', index: 0 }],
+          [{ node: 'Record held report', type: 'main', index: 0 }],
+        ],
+      },
       'Send via Graph': { main: [[{ node: 'Mark sent', type: 'main', index: 0 }]] },
       'Mark sent': { main: [[{ node: 'Record result', type: 'main', index: 0 }]] },
     },
@@ -2377,7 +2587,7 @@ return [{ json: {
 
 function newsQualityWorkflow() {
   return {
-    name: 'BEXT — News Quality',
+    name: 'BEXT Daily News — 4 News Quality',
     settings: { executionOrder: 'v1', timezone: 'Australia/Melbourne' },
     nodes: [
       {
@@ -4344,10 +4554,13 @@ VALUES ('contract-test', ($1::text)::health_status, $2::text)`,
 // only when Graph is BROKEN — the monitor exactly inverted. It anchors on
 // `Record health`, which runs either way.
 const HEARTBEATS = {
-  'BEXT — Source Ingest':    { anchor: 'Record fetch attempts', env: 'KUMA_PUSH_SOURCE_INGEST' },
-  'BEXT — Article Analysis': { anchor: 'Save analysis',         env: 'KUMA_PUSH_ARTICLE_ANALYSIS' },
-  'BEXT — Daily Report':     { anchor: 'Record result',         env: 'KUMA_PUSH_DAILY_REPORT' },
-  'BEXT — Daily News Card':  { anchor: 'Record result',         env: 'KUMA_PUSH_DAILY_NEWS_CARD' },
+  // Keyed by workflow name, but the env var - and so the Kuma monitor behind it -
+  // deliberately keeps its original name. Renaming a workflow must not orphan the
+  // deadman switch watching it.
+  'BEXT Daily News — 1 Source Ingest':    { anchor: 'Record fetch attempts', env: 'KUMA_PUSH_SOURCE_INGEST' },
+  'BEXT Daily News — 3 Article Analysis': { anchor: 'Save analysis',         env: 'KUMA_PUSH_ARTICLE_ANALYSIS' },
+  'BEXT Daily News — 5 Daily Report':     { anchor: 'Record result',         env: 'KUMA_PUSH_DAILY_REPORT' },
+  'BEXT Daily News — 6 Teams Card':       { anchor: 'Record result',         env: 'KUMA_PUSH_DAILY_NEWS_CARD' },
   'BEXT — Graph Health':     { anchor: 'Record health',         env: 'KUMA_PUSH_GRAPH_HEALTH' },
   'BEXT — Meeting Intake':   { anchor: 'Load processed meetings', env: 'KUMA_PUSH_MEETING_INTAKE' },
   // Self Heal, Contract Test and the three content workflows wire their own
@@ -4387,6 +4600,15 @@ function withHeartbeat(wf) {
   return wf;
 }
 
+// The workflow this one replaces, by its current name or the one it used to
+// carry. Returning the whole record rather than the id lets deploy() say out
+// loud when it is renaming rather than updating.
+function findExisting(list, name) {
+  const rows = list.data || [];
+  return rows.find(w => w.name === name)
+    || (RENAMED_FROM[name] ? rows.find(w => w.name === RENAMED_FROM[name]) : undefined);
+}
+
 async function deploy(input) {
   const wf = withHeartbeat(input);
   const dir = path.join(__dirname, 'workflows');
@@ -4402,14 +4624,17 @@ async function deploy(input) {
     // returns nothing rather than stopping the build.
     try {
       const list = await (await fetch(`${B}/api/v1/workflows?limit=100`, { headers: H })).json();
-      return list.data?.find(w => w.name === wf.name)?.id;
+      return findExisting(list, wf.name)?.id;
     } catch {
       return undefined;
     }
   }
 
   const list = await (await fetch(`${B}/api/v1/workflows?limit=100`, { headers: H })).json();
-  const existing = list.data?.find(w => w.name === wf.name);
+  const existing = findExisting(list, wf.name);
+  if (existing && existing.name !== wf.name) {
+    console.log(`  renaming "${existing.name}" -> "${wf.name}"`);
+  }
 
   const url = existing ? `${B}/api/v1/workflows/${existing.id}` : `${B}/api/v1/workflows`;
   const r = await fetch(url, {
@@ -4594,7 +4819,7 @@ return [{ json: {
  * content hash already deduplicates a story that arrives by both routes.
  */
 const newsletterIntakeWorkflow = () => ({
-  name: 'BEXT — Newsletter Intake',
+  name: 'BEXT Daily News — 2 Newsletter Intake',
   nodes: [
     {
       id: 'imap', name: 'Watch the mailbox', type: 'n8n-nodes-base.emailReadImap',
@@ -4800,7 +5025,7 @@ return [{ json: { ok: true, detail:
  * is committed and the article images are cached.
  */
 const dailyNewsCardWorkflow = () => ({
-  name: 'BEXT — Daily News Card',
+  name: 'BEXT Daily News — 6 Teams Card',
   nodes: [
     {
       id: 'cron', name: 'Daily 05:20 AEST', type: 'n8n-nodes-base.scheduleTrigger',

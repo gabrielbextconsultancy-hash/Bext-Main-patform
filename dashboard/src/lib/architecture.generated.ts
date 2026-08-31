@@ -46,80 +46,10 @@ export interface ArchitectureGraph {
 }
 
 export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
-  "generatedAt": "2026-08-31T03:06:46.280Z",
+  "generatedAt": "2026-08-31T03:37:31.738Z",
   "workflowCount": 15,
   "edgeCount": 53,
   "workflows": [
-    {
-      "slug": "BEXT-Article-Analysis",
-      "name": "BEXT — Article Analysis",
-      "domain": "brief_a",
-      "trigger": {
-        "type": "schedule",
-        "label": "Interval (30m)"
-      },
-      "tablesRead": [
-        "article_analysis",
-        "articles",
-        "sources"
-      ],
-      "tablesWritten": [
-        "article_analysis"
-      ],
-      "nodes": [
-        {
-          "id": "trigger",
-          "name": "Every 30 minutes",
-          "type": "n8n-nodes-base.scheduleTrigger",
-          "actor": "system",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "load",
-          "name": "Load unanalysed",
-          "type": "n8n-nodes-base.postgres",
-          "actor": "system",
-          "reads": [
-            "article_analysis",
-            "articles",
-            "sources"
-          ],
-          "writes": [],
-          "alwaysOutputData": true
-        },
-        {
-          "id": "analyse",
-          "name": "Score with Gemini",
-          "type": "n8n-nodes-base.code",
-          "actor": "ai",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "save",
-          "name": "Save analysis",
-          "type": "n8n-nodes-base.postgres",
-          "actor": "system",
-          "reads": [],
-          "writes": [
-            "article_analysis"
-          ],
-          "alwaysOutputData": true
-        },
-        {
-          "id": "kuma",
-          "name": "Heartbeat",
-          "type": "n8n-nodes-base.httpRequest",
-          "actor": "system",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": false
-        }
-      ]
-    },
     {
       "slug": "BEXT-Content-Actions",
       "name": "BEXT — Content Actions",
@@ -435,149 +365,48 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
       ]
     },
     {
-      "slug": "BEXT-Daily-News-Card",
-      "name": "BEXT — Daily News Card",
+      "slug": "BEXT-Daily-News-1-Source-Ingest",
+      "name": "BEXT Daily News — 1 Source Ingest",
       "domain": "brief_a",
       "trigger": {
         "type": "schedule",
-        "label": "Schedule (20 5 * * *)"
+        "label": "Hourly (1h)"
       },
       "tablesRead": [
-        "article_analysis",
         "articles",
-        "report_items",
-        "reports",
+        "newsletter_messages",
         "sources"
       ],
       "tablesWritten": [
-        "integration_health",
-        "reports"
+        "articles",
+        "sources"
       ],
       "nodes": [
         {
-          "id": "cron",
-          "name": "Daily 05:20 AEST",
+          "id": "trigger",
+          "name": "Every hour",
           "type": "n8n-nodes-base.scheduleTrigger",
-          "actor": "ai",
+          "actor": "system",
           "reads": [],
           "writes": [],
           "alwaysOutputData": false
         },
         {
           "id": "load",
-          "name": "Load the day",
+          "name": "Load active sources",
           "type": "n8n-nodes-base.postgres",
           "actor": "system",
           "reads": [
-            "article_analysis",
             "articles",
-            "report_items",
-            "reports",
+            "newsletter_messages",
             "sources"
           ],
           "writes": [],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "render",
-          "name": "Build card and list",
-          "type": "n8n-nodes-base.code",
-          "actor": "system",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "store",
-          "name": "Store fetch list",
-          "type": "n8n-nodes-base.postgres",
-          "actor": "system",
-          "reads": [],
-          "writes": [
-            "reports"
-          ],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "post",
-          "name": "Post to Teams",
-          "type": "n8n-nodes-base.code",
-          "actor": "system",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "record",
-          "name": "Record result",
-          "type": "n8n-nodes-base.postgres",
-          "actor": "system",
-          "reads": [],
-          "writes": [
-            "integration_health"
-          ],
           "alwaysOutputData": true
         },
         {
-          "id": "kuma",
-          "name": "Heartbeat",
-          "type": "n8n-nodes-base.httpRequest",
-          "actor": "system",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": false
-        }
-      ]
-    },
-    {
-      "slug": "BEXT-Daily-Report",
-      "name": "BEXT — Daily Report",
-      "domain": "brief_a",
-      "trigger": {
-        "type": "schedule",
-        "label": "Schedule (0 5 * * *)"
-      },
-      "tablesRead": [
-        "article_analysis",
-        "articles",
-        "report_items",
-        "reports",
-        "sources"
-      ],
-      "tablesWritten": [
-        "articles",
-        "integration_health",
-        "report_items",
-        "reports"
-      ],
-      "nodes": [
-        {
-          "id": "trigger",
-          "name": "Daily 05:00 AEST",
-          "type": "n8n-nodes-base.scheduleTrigger",
-          "actor": "ai",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "pull",
-          "name": "Top articles, prior day",
-          "type": "n8n-nodes-base.postgres",
-          "actor": "system",
-          "reads": [
-            "article_analysis",
-            "articles",
-            "report_items",
-            "reports",
-            "sources"
-          ],
-          "writes": [],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "brief",
-          "name": "Hermes writes the brief",
+          "id": "fetch",
+          "name": "Fetch and parse",
           "type": "n8n-nodes-base.code",
           "actor": "ai",
           "reads": [],
@@ -585,8 +414,8 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
           "alwaysOutputData": false
         },
         {
-          "id": "deliv",
-          "name": "Check deliverability",
+          "id": "split",
+          "name": "Collect articles",
           "type": "n8n-nodes-base.code",
           "actor": "system",
           "reads": [],
@@ -594,8 +423,8 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
           "alwaysOutputData": false
         },
         {
-          "id": "images",
-          "name": "Fetch article images",
+          "id": "statuses",
+          "name": "Collect statuses",
           "type": "n8n-nodes-base.code",
           "actor": "system",
           "reads": [],
@@ -603,8 +432,8 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
           "alwaysOutputData": false
         },
         {
-          "id": "saveimages",
-          "name": "Save article images",
+          "id": "insert",
+          "name": "Insert articles",
           "type": "n8n-nodes-base.postgres",
           "actor": "system",
           "reads": [],
@@ -614,66 +443,152 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
           "alwaysOutputData": false
         },
         {
-          "id": "render",
-          "name": "Render HTML",
-          "type": "n8n-nodes-base.code",
+          "id": "health",
+          "name": "Record source health",
+          "type": "n8n-nodes-base.postgres",
           "actor": "system",
+          "reads": [],
+          "writes": [
+            "sources"
+          ],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "attempts",
+          "name": "Record fetch attempts",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "kuma",
+          "name": "Heartbeat",
+          "type": "n8n-nodes-base.httpRequest",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        }
+      ]
+    },
+    {
+      "slug": "BEXT-Daily-News-2-Newsletter-Intake",
+      "name": "BEXT Daily News — 2 Newsletter Intake",
+      "domain": "brief_a",
+      "trigger": {
+        "type": "imap",
+        "label": "IMAP (Email Intake)"
+      },
+      "tablesRead": [
+        "sources"
+      ],
+      "tablesWritten": [
+        "articles",
+        "newsletter_messages"
+      ],
+      "nodes": [
+        {
+          "id": "imap",
+          "name": "Watch the mailbox",
+          "type": "n8n-nodes-base.emailReadImap",
+          "actor": "ai",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "classify",
+          "name": "Read the newsletter",
+          "type": "n8n-nodes-base.code",
+          "actor": "ai",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "insert",
+          "name": "Insert articles",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [
+            "sources"
+          ],
+          "writes": [
+            "articles"
+          ],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "seen",
+          "name": "Record the message",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [],
+          "writes": [
+            "newsletter_messages"
+          ],
+          "alwaysOutputData": false
+        }
+      ]
+    },
+    {
+      "slug": "BEXT-Daily-News-3-Article-Analysis",
+      "name": "BEXT Daily News — 3 Article Analysis",
+      "domain": "brief_a",
+      "trigger": {
+        "type": "schedule",
+        "label": "Interval (30m)"
+      },
+      "tablesRead": [
+        "article_analysis",
+        "articles",
+        "sources"
+      ],
+      "tablesWritten": [
+        "article_analysis"
+      ],
+      "nodes": [
+        {
+          "id": "trigger",
+          "name": "Every 30 minutes",
+          "type": "n8n-nodes-base.scheduleTrigger",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "load",
+          "name": "Load unanalysed",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [
+            "article_analysis",
+            "articles",
+            "sources"
+          ],
+          "writes": [],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "analyse",
+          "name": "Score with Gemini",
+          "type": "n8n-nodes-base.code",
+          "actor": "ai",
           "reads": [],
           "writes": [],
           "alwaysOutputData": false
         },
         {
           "id": "save",
-          "name": "Save report",
+          "name": "Save analysis",
           "type": "n8n-nodes-base.postgres",
           "actor": "system",
           "reads": [],
           "writes": [
-            "reports"
-          ],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "items",
-          "name": "Record items sent",
-          "type": "n8n-nodes-base.postgres",
-          "actor": "system",
-          "reads": [
-            "reports"
-          ],
-          "writes": [
-            "report_items"
-          ],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "send",
-          "name": "Send via Graph",
-          "type": "n8n-nodes-base.code",
-          "actor": "system",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "mark",
-          "name": "Mark sent",
-          "type": "n8n-nodes-base.postgres",
-          "actor": "system",
-          "reads": [],
-          "writes": [
-            "reports"
-          ],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "health",
-          "name": "Record result",
-          "type": "n8n-nodes-base.postgres",
-          "actor": "system",
-          "reads": [],
-          "writes": [
-            "integration_health"
+            "article_analysis"
           ],
           "alwaysOutputData": true
         },
@@ -689,226 +604,9 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
       ]
     },
     {
-      "slug": "BEXT-Graph-Health",
-      "name": "BEXT — Graph Health",
-      "domain": "ops",
-      "trigger": {
-        "type": "schedule",
-        "label": "Schedule (0 6 * * *)"
-      },
-      "tablesRead": [
-        "meeting_minutes"
-      ],
-      "tablesWritten": [
-        "integration_health"
-      ],
-      "nodes": [
-        {
-          "id": "trigger",
-          "name": "Daily 06:00",
-          "type": "n8n-nodes-base.scheduleTrigger",
-          "actor": "ai",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "seen",
-          "name": "Load minuted transcripts",
-          "type": "n8n-nodes-base.postgres",
-          "actor": "system",
-          "reads": [
-            "meeting_minutes"
-          ],
-          "writes": [],
-          "alwaysOutputData": true
-        },
-        {
-          "id": "check",
-          "name": "Check Graph",
-          "type": "n8n-nodes-base.code",
-          "actor": "system",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "record",
-          "name": "Record health",
-          "type": "n8n-nodes-base.postgres",
-          "actor": "system",
-          "reads": [],
-          "writes": [
-            "integration_health"
-          ],
-          "alwaysOutputData": true
-        },
-        {
-          "id": "gate",
-          "name": "Only when broken",
-          "type": "n8n-nodes-base.if",
-          "actor": "system",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "kuma",
-          "name": "Heartbeat",
-          "type": "n8n-nodes-base.httpRequest",
-          "actor": "system",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "alert",
-          "name": "Alert by email",
-          "type": "n8n-nodes-base.emailSend",
-          "actor": "ai",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": false
-        }
-      ]
-    },
-    {
-      "slug": "BEXT-LinkedIn-Publish",
-      "name": "BEXT — LinkedIn Publish",
-      "domain": "content",
-      "trigger": {
-        "type": "schedule",
-        "label": "Interval (15m)"
-      },
-      "tablesRead": [],
-      "tablesWritten": [],
-      "nodes": [
-        {
-          "id": "trigger",
-          "name": "Every 15 minutes",
-          "type": "n8n-nodes-base.scheduleTrigger",
-          "actor": "system",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": true
-        },
-        {
-          "id": "due",
-          "name": "Due posts",
-          "type": "n8n-nodes-base.postgres",
-          "actor": "system",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": true
-        },
-        {
-          "id": "kuma",
-          "name": "Heartbeat",
-          "type": "n8n-nodes-base.httpRequest",
-          "actor": "system",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "publish",
-          "name": "Publish or prepare",
-          "type": "n8n-nodes-base.code",
-          "actor": "system",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "record",
-          "name": "Record result",
-          "type": "n8n-nodes-base.postgres",
-          "actor": "system",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": true
-        },
-        {
-          "id": "notify",
-          "name": "Notify Teams",
-          "type": "n8n-nodes-base.code",
-          "actor": "system",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": false
-        }
-      ]
-    },
-    {
-      "slug": "BEXT-Meeting-Intake",
-      "name": "BEXT — Meeting Intake",
-      "domain": "brief_b",
-      "trigger": {
-        "type": "schedule",
-        "label": "Schedule (*/15 * * * *)"
-      },
-      "tablesRead": [
-        "meeting_minutes"
-      ],
-      "tablesWritten": [
-        "meeting_minutes"
-      ],
-      "nodes": [
-        {
-          "id": "trigger",
-          "name": "Every 15 minutes",
-          "type": "n8n-nodes-base.scheduleTrigger",
-          "actor": "system",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "seen",
-          "name": "Load processed meetings",
-          "type": "n8n-nodes-base.postgres",
-          "actor": "system",
-          "reads": [
-            "meeting_minutes"
-          ],
-          "writes": [],
-          "alwaysOutputData": true
-        },
-        {
-          "id": "process",
-          "name": "Transcribe and draft",
-          "type": "n8n-nodes-base.code",
-          "actor": "ai",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "kuma",
-          "name": "Heartbeat",
-          "type": "n8n-nodes-base.httpRequest",
-          "actor": "system",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "record",
-          "name": "Record minutes",
-          "type": "n8n-nodes-base.postgres",
-          "actor": "system",
-          "reads": [],
-          "writes": [
-            "meeting_minutes"
-          ],
-          "alwaysOutputData": false
-        }
-      ]
-    },
-    {
-      "slug": "BEXT-News-Quality",
-      "name": "BEXT — News Quality",
-      "domain": "ops",
+      "slug": "BEXT-Daily-News-4-News-Quality",
+      "name": "BEXT Daily News — 4 News Quality",
+      "domain": "brief_a",
       "trigger": {
         "type": "schedule",
         "label": "Schedule (0 6 * * *)"
@@ -1163,33 +861,54 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
       ]
     },
     {
-      "slug": "BEXT-Newsletter-Intake",
-      "name": "BEXT — Newsletter Intake",
+      "slug": "BEXT-Daily-News-5-Daily-Report",
+      "name": "BEXT Daily News — 5 Daily Report",
       "domain": "brief_a",
       "trigger": {
-        "type": "imap",
-        "label": "IMAP (Email Intake)"
+        "type": "schedule",
+        "label": "Schedule (0 5 * * *)"
       },
       "tablesRead": [
+        "article_analysis",
+        "articles",
+        "report_items",
+        "reports",
         "sources"
       ],
       "tablesWritten": [
         "articles",
-        "newsletter_messages"
+        "integration_health",
+        "report_items",
+        "reports"
       ],
       "nodes": [
         {
-          "id": "imap",
-          "name": "Watch the mailbox",
-          "type": "n8n-nodes-base.emailReadImap",
+          "id": "trigger",
+          "name": "Daily 05:00 AEST",
+          "type": "n8n-nodes-base.scheduleTrigger",
           "actor": "ai",
           "reads": [],
           "writes": [],
           "alwaysOutputData": false
         },
         {
-          "id": "classify",
-          "name": "Read the newsletter",
+          "id": "pull",
+          "name": "Top articles, prior day",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [
+            "article_analysis",
+            "articles",
+            "report_items",
+            "reports",
+            "sources"
+          ],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "brief",
+          "name": "Hermes writes the brief",
           "type": "n8n-nodes-base.code",
           "actor": "ai",
           "reads": [],
@@ -1197,26 +916,445 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
           "alwaysOutputData": false
         },
         {
-          "id": "insert",
-          "name": "Insert articles",
+          "id": "deliv",
+          "name": "Check deliverability",
+          "type": "n8n-nodes-base.code",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "images",
+          "name": "Fetch article images",
+          "type": "n8n-nodes-base.code",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "saveimages",
+          "name": "Save article images",
           "type": "n8n-nodes-base.postgres",
           "actor": "system",
-          "reads": [
-            "sources"
-          ],
+          "reads": [],
           "writes": [
             "articles"
           ],
           "alwaysOutputData": false
         },
         {
-          "id": "seen",
-          "name": "Record the message",
+          "id": "render",
+          "name": "Render HTML",
+          "type": "n8n-nodes-base.code",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "save",
+          "name": "Save report",
           "type": "n8n-nodes-base.postgres",
           "actor": "system",
           "reads": [],
           "writes": [
-            "newsletter_messages"
+            "reports"
+          ],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "items",
+          "name": "Record items sent",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [
+            "reports"
+          ],
+          "writes": [
+            "report_items"
+          ],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "validate",
+          "name": "Validate before send",
+          "type": "n8n-nodes-base.code",
+          "actor": "ai",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "gate",
+          "name": "Fit to send",
+          "type": "n8n-nodes-base.if",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "send",
+          "name": "Send via Graph",
+          "type": "n8n-nodes-base.code",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "held",
+          "name": "Record held report",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [],
+          "writes": [
+            "integration_health"
+          ],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "mark",
+          "name": "Mark sent",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [],
+          "writes": [
+            "reports"
+          ],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "health",
+          "name": "Record result",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [],
+          "writes": [
+            "integration_health"
+          ],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "kuma",
+          "name": "Heartbeat",
+          "type": "n8n-nodes-base.httpRequest",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        }
+      ]
+    },
+    {
+      "slug": "BEXT-Daily-News-6-Teams-Card",
+      "name": "BEXT Daily News — 6 Teams Card",
+      "domain": "brief_a",
+      "trigger": {
+        "type": "schedule",
+        "label": "Schedule (20 5 * * *)"
+      },
+      "tablesRead": [
+        "article_analysis",
+        "articles",
+        "report_items",
+        "reports",
+        "sources"
+      ],
+      "tablesWritten": [
+        "integration_health",
+        "reports"
+      ],
+      "nodes": [
+        {
+          "id": "cron",
+          "name": "Daily 05:20 AEST",
+          "type": "n8n-nodes-base.scheduleTrigger",
+          "actor": "ai",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "load",
+          "name": "Load the day",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [
+            "article_analysis",
+            "articles",
+            "report_items",
+            "reports",
+            "sources"
+          ],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "render",
+          "name": "Build card and list",
+          "type": "n8n-nodes-base.code",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "store",
+          "name": "Store fetch list",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [],
+          "writes": [
+            "reports"
+          ],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "post",
+          "name": "Post to Teams",
+          "type": "n8n-nodes-base.code",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "record",
+          "name": "Record result",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [],
+          "writes": [
+            "integration_health"
+          ],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "kuma",
+          "name": "Heartbeat",
+          "type": "n8n-nodes-base.httpRequest",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        }
+      ]
+    },
+    {
+      "slug": "BEXT-Graph-Health",
+      "name": "BEXT — Graph Health",
+      "domain": "ops",
+      "trigger": {
+        "type": "schedule",
+        "label": "Schedule (0 6 * * *)"
+      },
+      "tablesRead": [
+        "meeting_minutes"
+      ],
+      "tablesWritten": [
+        "integration_health"
+      ],
+      "nodes": [
+        {
+          "id": "trigger",
+          "name": "Daily 06:00",
+          "type": "n8n-nodes-base.scheduleTrigger",
+          "actor": "ai",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "seen",
+          "name": "Load minuted transcripts",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [
+            "meeting_minutes"
+          ],
+          "writes": [],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "check",
+          "name": "Check Graph",
+          "type": "n8n-nodes-base.code",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "record",
+          "name": "Record health",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [],
+          "writes": [
+            "integration_health"
+          ],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "gate",
+          "name": "Only when broken",
+          "type": "n8n-nodes-base.if",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "kuma",
+          "name": "Heartbeat",
+          "type": "n8n-nodes-base.httpRequest",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "alert",
+          "name": "Alert by email",
+          "type": "n8n-nodes-base.emailSend",
+          "actor": "ai",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        }
+      ]
+    },
+    {
+      "slug": "BEXT-LinkedIn-Publish",
+      "name": "BEXT — LinkedIn Publish",
+      "domain": "content",
+      "trigger": {
+        "type": "schedule",
+        "label": "Interval (15m)"
+      },
+      "tablesRead": [],
+      "tablesWritten": [],
+      "nodes": [
+        {
+          "id": "trigger",
+          "name": "Every 15 minutes",
+          "type": "n8n-nodes-base.scheduleTrigger",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "due",
+          "name": "Due posts",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "kuma",
+          "name": "Heartbeat",
+          "type": "n8n-nodes-base.httpRequest",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "publish",
+          "name": "Publish or prepare",
+          "type": "n8n-nodes-base.code",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "record",
+          "name": "Record result",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "notify",
+          "name": "Notify Teams",
+          "type": "n8n-nodes-base.code",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        }
+      ]
+    },
+    {
+      "slug": "BEXT-Meeting-Intake",
+      "name": "BEXT — Meeting Intake",
+      "domain": "brief_b",
+      "trigger": {
+        "type": "schedule",
+        "label": "Schedule (*/15 * * * *)"
+      },
+      "tablesRead": [
+        "meeting_minutes"
+      ],
+      "tablesWritten": [
+        "meeting_minutes"
+      ],
+      "nodes": [
+        {
+          "id": "trigger",
+          "name": "Every 15 minutes",
+          "type": "n8n-nodes-base.scheduleTrigger",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "seen",
+          "name": "Load processed meetings",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [
+            "meeting_minutes"
+          ],
+          "writes": [],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "process",
+          "name": "Transcribe and draft",
+          "type": "n8n-nodes-base.code",
+          "actor": "ai",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "kuma",
+          "name": "Heartbeat",
+          "type": "n8n-nodes-base.httpRequest",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "record",
+          "name": "Record minutes",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [],
+          "writes": [
+            "meeting_minutes"
           ],
           "alwaysOutputData": false
         }
@@ -1300,115 +1438,6 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
       ]
     },
     {
-      "slug": "BEXT-Source-Ingest",
-      "name": "BEXT — Source Ingest",
-      "domain": "brief_a",
-      "trigger": {
-        "type": "schedule",
-        "label": "Hourly (1h)"
-      },
-      "tablesRead": [
-        "articles",
-        "newsletter_messages",
-        "sources"
-      ],
-      "tablesWritten": [
-        "articles",
-        "sources"
-      ],
-      "nodes": [
-        {
-          "id": "trigger",
-          "name": "Every hour",
-          "type": "n8n-nodes-base.scheduleTrigger",
-          "actor": "system",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "load",
-          "name": "Load active sources",
-          "type": "n8n-nodes-base.postgres",
-          "actor": "system",
-          "reads": [
-            "articles",
-            "newsletter_messages",
-            "sources"
-          ],
-          "writes": [],
-          "alwaysOutputData": true
-        },
-        {
-          "id": "fetch",
-          "name": "Fetch and parse",
-          "type": "n8n-nodes-base.code",
-          "actor": "ai",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "split",
-          "name": "Collect articles",
-          "type": "n8n-nodes-base.code",
-          "actor": "system",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "statuses",
-          "name": "Collect statuses",
-          "type": "n8n-nodes-base.code",
-          "actor": "system",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "insert",
-          "name": "Insert articles",
-          "type": "n8n-nodes-base.postgres",
-          "actor": "system",
-          "reads": [],
-          "writes": [
-            "articles"
-          ],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "health",
-          "name": "Record source health",
-          "type": "n8n-nodes-base.postgres",
-          "actor": "system",
-          "reads": [],
-          "writes": [
-            "sources"
-          ],
-          "alwaysOutputData": false
-        },
-        {
-          "id": "attempts",
-          "name": "Record fetch attempts",
-          "type": "n8n-nodes-base.postgres",
-          "actor": "system",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": true
-        },
-        {
-          "id": "kuma",
-          "name": "Heartbeat",
-          "type": "n8n-nodes-base.httpRequest",
-          "actor": "system",
-          "reads": [],
-          "writes": [],
-          "alwaysOutputData": false
-        }
-      ]
-    },
-    {
       "slug": "BEXT-Teams-Inbound",
       "name": "BEXT — Teams Inbound",
       "domain": "brief_b",
@@ -1460,117 +1489,309 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
   ],
   "edges": [
     {
-      "from": "BEXT-Article-Analysis",
-      "to": "BEXT-Content-Drafts",
-      "table": "article_analysis",
-      "domain": "cross_domain"
-    },
-    {
-      "from": "BEXT-Article-Analysis",
-      "to": "BEXT-Content-Topics",
-      "table": "article_analysis",
-      "domain": "cross_domain"
-    },
-    {
-      "from": "BEXT-Article-Analysis",
-      "to": "BEXT-Daily-News-Card",
-      "table": "article_analysis",
-      "domain": "brief_a"
-    },
-    {
-      "from": "BEXT-Article-Analysis",
-      "to": "BEXT-Daily-Report",
-      "table": "article_analysis",
-      "domain": "brief_a"
-    },
-    {
-      "from": "BEXT-Article-Analysis",
-      "to": "BEXT-News-Quality",
-      "table": "article_analysis",
-      "domain": "cross_domain"
-    },
-    {
       "from": "BEXT-Content-Topics",
       "to": "BEXT-Content-Drafts",
       "table": "content_topics",
       "domain": "content"
     },
     {
-      "from": "BEXT-Daily-News-Card",
-      "to": "BEXT-Daily-Report",
-      "table": "reports",
-      "domain": "brief_a"
-    },
-    {
-      "from": "BEXT-Daily-News-Card",
-      "to": "BEXT-News-Quality",
-      "table": "reports",
-      "domain": "cross_domain"
-    },
-    {
-      "from": "BEXT-Daily-Report",
-      "to": "BEXT-Article-Analysis",
-      "table": "articles",
-      "domain": "brief_a"
-    },
-    {
-      "from": "BEXT-Daily-Report",
+      "from": "BEXT-Daily-News-1-Source-Ingest",
       "to": "BEXT-Content-Drafts",
       "table": "articles",
       "domain": "cross_domain"
     },
     {
-      "from": "BEXT-Daily-Report",
+      "from": "BEXT-Daily-News-1-Source-Ingest",
       "to": "BEXT-Content-Topics",
       "table": "articles",
       "domain": "cross_domain"
     },
     {
-      "from": "BEXT-Daily-Report",
+      "from": "BEXT-Daily-News-1-Source-Ingest",
+      "to": "BEXT-Content-Topics",
+      "table": "sources",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-Daily-News-1-Source-Ingest",
+      "to": "BEXT-Daily-News-2-Newsletter-Intake",
+      "table": "sources",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-1-Source-Ingest",
+      "to": "BEXT-Daily-News-3-Article-Analysis",
+      "table": "articles",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-1-Source-Ingest",
+      "to": "BEXT-Daily-News-3-Article-Analysis",
+      "table": "sources",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-1-Source-Ingest",
+      "to": "BEXT-Daily-News-4-News-Quality",
+      "table": "articles",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-1-Source-Ingest",
+      "to": "BEXT-Daily-News-4-News-Quality",
+      "table": "sources",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-1-Source-Ingest",
+      "to": "BEXT-Daily-News-5-Daily-Report",
+      "table": "articles",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-1-Source-Ingest",
+      "to": "BEXT-Daily-News-5-Daily-Report",
+      "table": "sources",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-1-Source-Ingest",
+      "to": "BEXT-Daily-News-6-Teams-Card",
+      "table": "articles",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-1-Source-Ingest",
+      "to": "BEXT-Daily-News-6-Teams-Card",
+      "table": "sources",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-2-Newsletter-Intake",
+      "to": "BEXT-Content-Drafts",
+      "table": "articles",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-Daily-News-2-Newsletter-Intake",
+      "to": "BEXT-Content-Topics",
+      "table": "articles",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-Daily-News-2-Newsletter-Intake",
+      "to": "BEXT-Daily-News-1-Source-Ingest",
+      "table": "articles",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-2-Newsletter-Intake",
+      "to": "BEXT-Daily-News-1-Source-Ingest",
+      "table": "newsletter_messages",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-2-Newsletter-Intake",
+      "to": "BEXT-Daily-News-3-Article-Analysis",
+      "table": "articles",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-2-Newsletter-Intake",
+      "to": "BEXT-Daily-News-4-News-Quality",
+      "table": "articles",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-2-Newsletter-Intake",
+      "to": "BEXT-Daily-News-5-Daily-Report",
+      "table": "articles",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-2-Newsletter-Intake",
+      "to": "BEXT-Daily-News-6-Teams-Card",
+      "table": "articles",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-3-Article-Analysis",
+      "to": "BEXT-Content-Drafts",
+      "table": "article_analysis",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-Daily-News-3-Article-Analysis",
+      "to": "BEXT-Content-Topics",
+      "table": "article_analysis",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-Daily-News-3-Article-Analysis",
+      "to": "BEXT-Daily-News-4-News-Quality",
+      "table": "article_analysis",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-3-Article-Analysis",
+      "to": "BEXT-Daily-News-5-Daily-Report",
+      "table": "article_analysis",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-3-Article-Analysis",
+      "to": "BEXT-Daily-News-6-Teams-Card",
+      "table": "article_analysis",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-4-News-Quality",
+      "to": "BEXT-Content-Drafts",
+      "table": "article_analysis",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-Daily-News-4-News-Quality",
+      "to": "BEXT-Content-Drafts",
+      "table": "articles",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-Daily-News-4-News-Quality",
+      "to": "BEXT-Content-Topics",
+      "table": "article_analysis",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-Daily-News-4-News-Quality",
+      "to": "BEXT-Content-Topics",
+      "table": "articles",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-Daily-News-4-News-Quality",
+      "to": "BEXT-Daily-News-1-Source-Ingest",
+      "table": "articles",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-4-News-Quality",
+      "to": "BEXT-Daily-News-3-Article-Analysis",
+      "table": "article_analysis",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-4-News-Quality",
+      "to": "BEXT-Daily-News-3-Article-Analysis",
+      "table": "articles",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-4-News-Quality",
+      "to": "BEXT-Daily-News-5-Daily-Report",
+      "table": "article_analysis",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-4-News-Quality",
+      "to": "BEXT-Daily-News-5-Daily-Report",
+      "table": "articles",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-4-News-Quality",
+      "to": "BEXT-Daily-News-6-Teams-Card",
+      "table": "article_analysis",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-4-News-Quality",
+      "to": "BEXT-Daily-News-6-Teams-Card",
+      "table": "articles",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-4-News-Quality",
+      "to": "BEXT-Self-Heal",
+      "table": "incidents",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-Daily-News-5-Daily-Report",
+      "to": "BEXT-Content-Drafts",
+      "table": "articles",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-Daily-News-5-Daily-Report",
+      "to": "BEXT-Content-Topics",
+      "table": "articles",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-Daily-News-5-Daily-Report",
       "to": "BEXT-Content-Topics",
       "table": "report_items",
       "domain": "cross_domain"
     },
     {
-      "from": "BEXT-Daily-Report",
-      "to": "BEXT-Daily-News-Card",
+      "from": "BEXT-Daily-News-5-Daily-Report",
+      "to": "BEXT-Daily-News-1-Source-Ingest",
       "table": "articles",
       "domain": "brief_a"
     },
     {
-      "from": "BEXT-Daily-Report",
-      "to": "BEXT-Daily-News-Card",
+      "from": "BEXT-Daily-News-5-Daily-Report",
+      "to": "BEXT-Daily-News-3-Article-Analysis",
+      "table": "articles",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-5-Daily-Report",
+      "to": "BEXT-Daily-News-4-News-Quality",
+      "table": "articles",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-5-Daily-Report",
+      "to": "BEXT-Daily-News-4-News-Quality",
       "table": "report_items",
       "domain": "brief_a"
     },
     {
-      "from": "BEXT-Daily-Report",
-      "to": "BEXT-Daily-News-Card",
+      "from": "BEXT-Daily-News-5-Daily-Report",
+      "to": "BEXT-Daily-News-4-News-Quality",
       "table": "reports",
       "domain": "brief_a"
     },
     {
-      "from": "BEXT-Daily-Report",
-      "to": "BEXT-News-Quality",
+      "from": "BEXT-Daily-News-5-Daily-Report",
+      "to": "BEXT-Daily-News-6-Teams-Card",
       "table": "articles",
-      "domain": "cross_domain"
+      "domain": "brief_a"
     },
     {
-      "from": "BEXT-Daily-Report",
-      "to": "BEXT-News-Quality",
+      "from": "BEXT-Daily-News-5-Daily-Report",
+      "to": "BEXT-Daily-News-6-Teams-Card",
       "table": "report_items",
-      "domain": "cross_domain"
+      "domain": "brief_a"
     },
     {
-      "from": "BEXT-Daily-Report",
-      "to": "BEXT-News-Quality",
+      "from": "BEXT-Daily-News-5-Daily-Report",
+      "to": "BEXT-Daily-News-6-Teams-Card",
       "table": "reports",
-      "domain": "cross_domain"
+      "domain": "brief_a"
     },
     {
-      "from": "BEXT-Daily-Report",
-      "to": "BEXT-Source-Ingest",
-      "table": "articles",
+      "from": "BEXT-Daily-News-6-Teams-Card",
+      "to": "BEXT-Daily-News-4-News-Quality",
+      "table": "reports",
+      "domain": "brief_a"
+    },
+    {
+      "from": "BEXT-Daily-News-6-Teams-Card",
+      "to": "BEXT-Daily-News-5-Daily-Report",
+      "table": "reports",
       "domain": "brief_a"
     },
     {
@@ -1580,202 +1801,10 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
       "domain": "cross_domain"
     },
     {
-      "from": "BEXT-News-Quality",
-      "to": "BEXT-Article-Analysis",
-      "table": "article_analysis",
-      "domain": "cross_domain"
-    },
-    {
-      "from": "BEXT-News-Quality",
-      "to": "BEXT-Article-Analysis",
-      "table": "articles",
-      "domain": "cross_domain"
-    },
-    {
-      "from": "BEXT-News-Quality",
-      "to": "BEXT-Content-Drafts",
-      "table": "article_analysis",
-      "domain": "cross_domain"
-    },
-    {
-      "from": "BEXT-News-Quality",
-      "to": "BEXT-Content-Drafts",
-      "table": "articles",
-      "domain": "cross_domain"
-    },
-    {
-      "from": "BEXT-News-Quality",
-      "to": "BEXT-Content-Topics",
-      "table": "article_analysis",
-      "domain": "cross_domain"
-    },
-    {
-      "from": "BEXT-News-Quality",
-      "to": "BEXT-Content-Topics",
-      "table": "articles",
-      "domain": "cross_domain"
-    },
-    {
-      "from": "BEXT-News-Quality",
-      "to": "BEXT-Daily-News-Card",
-      "table": "article_analysis",
-      "domain": "cross_domain"
-    },
-    {
-      "from": "BEXT-News-Quality",
-      "to": "BEXT-Daily-News-Card",
-      "table": "articles",
-      "domain": "cross_domain"
-    },
-    {
-      "from": "BEXT-News-Quality",
-      "to": "BEXT-Daily-Report",
-      "table": "article_analysis",
-      "domain": "cross_domain"
-    },
-    {
-      "from": "BEXT-News-Quality",
-      "to": "BEXT-Daily-Report",
-      "table": "articles",
-      "domain": "cross_domain"
-    },
-    {
-      "from": "BEXT-News-Quality",
-      "to": "BEXT-Self-Heal",
-      "table": "incidents",
-      "domain": "ops"
-    },
-    {
-      "from": "BEXT-News-Quality",
-      "to": "BEXT-Source-Ingest",
-      "table": "articles",
-      "domain": "cross_domain"
-    },
-    {
-      "from": "BEXT-Newsletter-Intake",
-      "to": "BEXT-Article-Analysis",
-      "table": "articles",
-      "domain": "brief_a"
-    },
-    {
-      "from": "BEXT-Newsletter-Intake",
-      "to": "BEXT-Content-Drafts",
-      "table": "articles",
-      "domain": "cross_domain"
-    },
-    {
-      "from": "BEXT-Newsletter-Intake",
-      "to": "BEXT-Content-Topics",
-      "table": "articles",
-      "domain": "cross_domain"
-    },
-    {
-      "from": "BEXT-Newsletter-Intake",
-      "to": "BEXT-Daily-News-Card",
-      "table": "articles",
-      "domain": "brief_a"
-    },
-    {
-      "from": "BEXT-Newsletter-Intake",
-      "to": "BEXT-Daily-Report",
-      "table": "articles",
-      "domain": "brief_a"
-    },
-    {
-      "from": "BEXT-Newsletter-Intake",
-      "to": "BEXT-News-Quality",
-      "table": "articles",
-      "domain": "cross_domain"
-    },
-    {
-      "from": "BEXT-Newsletter-Intake",
-      "to": "BEXT-Source-Ingest",
-      "table": "articles",
-      "domain": "brief_a"
-    },
-    {
-      "from": "BEXT-Newsletter-Intake",
-      "to": "BEXT-Source-Ingest",
-      "table": "newsletter_messages",
-      "domain": "brief_a"
-    },
-    {
       "from": "BEXT-Self-Heal",
-      "to": "BEXT-News-Quality",
+      "to": "BEXT-Daily-News-4-News-Quality",
       "table": "incidents",
-      "domain": "ops"
-    },
-    {
-      "from": "BEXT-Source-Ingest",
-      "to": "BEXT-Article-Analysis",
-      "table": "articles",
-      "domain": "brief_a"
-    },
-    {
-      "from": "BEXT-Source-Ingest",
-      "to": "BEXT-Article-Analysis",
-      "table": "sources",
-      "domain": "brief_a"
-    },
-    {
-      "from": "BEXT-Source-Ingest",
-      "to": "BEXT-Content-Drafts",
-      "table": "articles",
       "domain": "cross_domain"
-    },
-    {
-      "from": "BEXT-Source-Ingest",
-      "to": "BEXT-Content-Topics",
-      "table": "articles",
-      "domain": "cross_domain"
-    },
-    {
-      "from": "BEXT-Source-Ingest",
-      "to": "BEXT-Content-Topics",
-      "table": "sources",
-      "domain": "cross_domain"
-    },
-    {
-      "from": "BEXT-Source-Ingest",
-      "to": "BEXT-Daily-News-Card",
-      "table": "articles",
-      "domain": "brief_a"
-    },
-    {
-      "from": "BEXT-Source-Ingest",
-      "to": "BEXT-Daily-News-Card",
-      "table": "sources",
-      "domain": "brief_a"
-    },
-    {
-      "from": "BEXT-Source-Ingest",
-      "to": "BEXT-Daily-Report",
-      "table": "articles",
-      "domain": "brief_a"
-    },
-    {
-      "from": "BEXT-Source-Ingest",
-      "to": "BEXT-Daily-Report",
-      "table": "sources",
-      "domain": "brief_a"
-    },
-    {
-      "from": "BEXT-Source-Ingest",
-      "to": "BEXT-News-Quality",
-      "table": "articles",
-      "domain": "cross_domain"
-    },
-    {
-      "from": "BEXT-Source-Ingest",
-      "to": "BEXT-News-Quality",
-      "table": "sources",
-      "domain": "cross_domain"
-    },
-    {
-      "from": "BEXT-Source-Ingest",
-      "to": "BEXT-Newsletter-Intake",
-      "table": "sources",
-      "domain": "brief_a"
     }
   ]
 };

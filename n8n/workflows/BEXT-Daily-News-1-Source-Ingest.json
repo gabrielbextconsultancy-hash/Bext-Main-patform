@@ -1,5 +1,5 @@
 {
-  "name": "BEXT — Source Ingest",
+  "name": "BEXT Daily News — 1 Source Ingest",
   "settings": {
     "executionOrder": "v1",
     "timezone": "Australia/Melbourne",

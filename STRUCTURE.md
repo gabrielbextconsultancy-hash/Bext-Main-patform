@@ -26,7 +26,7 @@ The repo is the source of truth — never the n8n UI.
 
 | Engagement | Draft | Architecture | Final | State |
 |---|---|---|---|---|
-| A — Industry Daily Report | 11 Aug ✓ | — | 18 Aug | Pipeline live: `BEXT — Source Ingest` / `Article Analysis` / `Daily Report` (05:00 AEST) |
+| A — Industry Daily Report | 11 Aug ✓ | — | 18 Aug | Pipeline live: `BEXT Daily News — 1 Source Ingest` / `Article Analysis` / `Daily Report` (05:00 AEST) |
 | B — Business Structure Efficiency | 11 Aug ✓ (proposal live) | 25 Aug | 8 Sep | Assessment drafted; zero integration code yet |
 | C — LinkedIn Blog Generation | — | — | — | Fortnightly: news feed → 3 ranked topics → 2 drafts → human approval → post. Engine built: `BEXT — Content Topics` / `Content Drafts` / `LinkedIn Publish`, craft lib in `n8n/lib/linkedin/`. Dashboard `/content` pending. Brief PDF (18 Aug) not yet ingested |
 
