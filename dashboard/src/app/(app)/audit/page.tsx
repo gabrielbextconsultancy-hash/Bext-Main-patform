@@ -57,12 +57,16 @@ function qs(base: Record<string, string | undefined>, patch: Record<string, stri
 export default async function AuditPage({
   searchParams,
 }: {
-  searchParams: Promise<{ day?: string; status?: string; src?: string; q?: string; page?: string }>;
+  searchParams: Promise<{ day?: string; status?: string; src?: string; q?: string; page?: string; t?: string }>;
 }) {
   const sp = await searchParams;
   const { today, nextSend } = melbourne();
   const day = sp.day ?? today;
   const page = Math.max(1, Number(sp.page ?? 1) || 1);
+
+  const renderedAt = new Date().toLocaleString('en-AU', {
+    timeZone: 'Australia/Melbourne', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  });
 
   const [days, tally, sources, result] = await Promise.all([
     getAuditDayList(),
@@ -93,11 +97,26 @@ export default async function AuditPage({
   return (
     <div className="space-y-5">
       <Card title="Daily report — management table">
-        <p className="text-sm text-ink-300">
-          Every article of the day, live: what was fetched, what each scored, what went out and
-          when, what waits for the next 05:00, and what is held — with the brief link each source
-          answers to. Queued items go out {nextSend}.
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <p className="max-w-3xl text-sm text-ink-300">
+            Every article of the day, live: what was fetched, what each scored, what went out and
+            when, what waits for the next 05:00, and what is held — with the brief link each source
+            answers to. Queued items go out {nextSend}.
+          </p>
+          {/* The page reads the database on every load, so refreshing is the whole
+              mechanism — no cache to bust. The stamp makes the freshness checkable
+              rather than a claim: ingest lands hourly, scoring within the half hour. */}
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="text-xs text-ink-400">read at {renderedAt}</span>
+            <a
+              href={qs(base, { t: String(Date.now()) })}
+              className="rounded-md border border-ink-700 px-3 py-1.5 text-sm text-ink-200
+                         hover:border-brief-a hover:text-brief-a"
+            >
+              ↻ Refresh
+            </a>
+          </div>
+        </div>
 
         <div className="mt-3 flex flex-wrap gap-2">
           {(days ?? []).map((d) => (
