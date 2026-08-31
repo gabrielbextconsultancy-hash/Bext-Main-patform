@@ -4,11 +4,10 @@ import {
   getHealth,
   getReportReferences,
   getNextSendPreview,
-  getDeliveredRows,
-  DELIVERED_PAGE_SIZE,
+  getDeliveredGrouped,
 } from '@/lib/queries';
 import { Card, DatabaseDown, Empty } from '@/components/ui';
-import { ReportViewer } from '@/components/ReportViewer';
+import { DeliveredSheets } from '@/components/DeliveredSheets';
 import { EmailPreview } from '@/components/EmailPreview';
 import { SourceReferences } from '@/components/SourceReferences';
 
@@ -94,7 +93,6 @@ const fmtTime = (t: string | null) =>
 export interface ReportParams {
   sheet?: string;
   /** page of the queued preview */ pv?: string;
-  /** page of the delivered table */ dp?: string;
 }
 
 // Twenty a page. The preview ran to 158 rows in one column, which is a list
@@ -112,12 +110,10 @@ export async function ReportsView({
   extra?: Record<string, string>;
 } = {}) {
   const pv = Math.max(1, Number(sp.pv ?? 1) || 1);
-  const dp = Math.max(1, Number(sp.dp ?? 1) || 1);
   // One place that builds page links, so the tab and every other param survive.
-  const pageHref = (key: 'pv' | 'dp', n: number) => {
+  const pageHref = (_key: 'pv', n: number) => {
     const q = new URLSearchParams({ ...extra });
-    if (key === 'pv') { if (sp.dp) q.set('dp', sp.dp); q.set('pv', String(n)); }
-    else { if (sp.pv) q.set('pv', sp.pv); q.set('dp', String(n)); }
+    q.set('pv', String(n));
     return `${basePath}?${q.toString()}`;
   };
 
@@ -128,7 +124,7 @@ export async function ReportsView({
     getHealth(),
     getReportReferences(),
     getNextSendPreview(),
-    getDeliveredRows(dp),
+    getDeliveredGrouped(),
   ]);
 
   if (!reports) return <DatabaseDown />;
@@ -301,17 +297,9 @@ export async function ReportsView({
 
       <Card
         title="After — already delivered"
-        subtitle={`${delivered.total} articles the client has received. "View in sheet" opens the emailed report with that article outlined — a marking that exists only here.`}
+        subtitle={`${delivered?.length ?? 0} articles the client has received, grouped the way the brief reads: day, then the filtered link, then what it contributed. "View in sheet" opens the emailed report with that article outlined — a marking that exists only here.`}
       >
-        <ReportViewer
-          dates={reports.filter(r => r.status === 'sent').map(r => r.report_date)}
-          rows={delivered.rows}
-          total={delivered.total}
-          page={delivered.page}
-          pageSize={DELIVERED_PAGE_SIZE}
-          prevHref={pageHref('dp', dp - 1)}
-          nextHref={pageHref('dp', dp + 1)}
-        />
+        <DeliveredSheets rows={delivered ?? []} />
       </Card>
 
       {/* Provenance. Deliberately here and not in the emailed sheet: the client

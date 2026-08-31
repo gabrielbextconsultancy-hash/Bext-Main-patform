@@ -972,20 +972,24 @@ export interface DeliveredRow {
   score: number | null;
   body_chars: number;
   sent_at: string | null;
+  // The grouping the operator reads the archive by: the brief's numbered link
+  // first, then how that source is actually reached.
+  source_id: string;
+  brief_n: number | null;
+  source_method: string | null;
+  source_route: string | null;
 }
 
-export const DELIVERED_PAGE_SIZE = 20;
-
-export async function getDeliveredRows(page = 1) {
-  const total = Number(
-    (await tryQuery<{ n: string }>(
-      `SELECT count(*)::text AS n
-       FROM report_items ri JOIN reports r ON r.id = ri.report_id
-       WHERE r.status = 'sent'`
-    ))?.[0]?.n ?? 0
-  );
-  const p = Math.max(1, page);
-  const rows = await tryQuery<DeliveredRow>(
+/**
+ * Everything delivered, ordered for the day -> source -> article accordion.
+ *
+ * Deliberately unpaginated: the archive groups under collapsed day sections, so
+ * the page never shows more than one day's rows at once, and pagination on top
+ * of accordions makes the reader do the same work twice. Bounded by the 60-day
+ * report list the archive keeps anyway.
+ */
+export const getDeliveredGrouped = () =>
+  tryQuery<DeliveredRow>(
     `SELECT a.id::text,
             r.report_date::text,
             a.title,
@@ -994,16 +998,18 @@ export async function getDeliveredRows(page = 1) {
             s.category,
             an.relevance_score AS score,
             length(coalesce(a.body_text, ''))::int AS body_chars,
-            to_char(r.sent_at AT TIME ZONE 'Australia/Melbourne', 'DD Mon HH24:MI') AS sent_at
+            to_char(r.sent_at AT TIME ZONE 'Australia/Melbourne', 'DD Mon HH24:MI') AS sent_at,
+            s.id::text AS source_id,
+            (SELECT min(bl.n) FROM brief_links bl WHERE bl.source_id = s.id) AS brief_n,
+            s.method::text AS source_method,
+            coalesce(s.config->>'feed_url', s.url) AS source_route
        FROM report_items ri
        JOIN reports r ON r.id = ri.report_id
        JOIN articles a ON a.id = ri.article_id
        JOIN sources s ON s.id = a.source_id
        LEFT JOIN article_analysis an ON an.article_id = a.id
       WHERE r.status = 'sent'
-      ORDER BY r.report_date DESC, ri.rank
-      LIMIT $1 OFFSET $2`,
-    [DELIVERED_PAGE_SIZE, (p - 1) * DELIVERED_PAGE_SIZE]
+      ORDER BY r.report_date DESC,
+               (SELECT min(bl.n) FROM brief_links bl WHERE bl.source_id = s.id) NULLS LAST,
+               s.name, ri.rank`
   );
-  return { rows: rows ?? [], total, page: p };
-}
