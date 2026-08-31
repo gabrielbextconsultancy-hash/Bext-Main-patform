@@ -652,3 +652,30 @@ every time a node is renamed, which is why it is a check and not a lesson.
 Related: when a deploy fails, the exported JSON has already been written. The
 repo is then ahead of the instance, and `git status` looks clean. Read the
 deploy output, not the file.
+
+## R038 — Number(null) is 0, and the two pages disagreed
+
+The day audit and the dashboard both decide what happened to an article, in two
+languages. They are meant to apply the same gates, which means they can quietly
+stop applying the same gates.
+
+They had. `buildDayAudit` tested `Number(r.score) === 0` before it tested for a
+null score — and `Number(null)` is `0`, so every article still waiting for the
+scorer was filed as EXCLUDED, "score 0 — no energy/building/climate bearing".
+The QUEUED branch written on the next line was unreachable, which is exactly why
+nobody noticed: the intent was in the file, correctly, and never ran.
+
+On 31 Aug the stored audit said 139 excluded and 50 queued; the dashboard said
+30 excluded and 159 queued, for the same day, from the same rows. The dashboard
+was right — its SQL used `coalesce(relevance_score, -1) = 0`, which null never
+matches. The operator saw both numbers and asked which to believe.
+
+Two rules. Test for absent before testing for zero, in any language where the
+coercion is silent. And where the same decision exists twice, assert the two
+agree rather than trusting that they do: preflight R038 runs both over the same
+live day and compares all four dispositions.
+
+`node n8n/rebuild-audit.js` rebuilds the current audit day on demand rather than
+waiting for the 23:50 pass, reusing the shipped SELECT, the shipped UPSERT and
+the same `day-audit.js` the Code node inlines — so the CLI and the workflow
+cannot drift into disagreeing either.

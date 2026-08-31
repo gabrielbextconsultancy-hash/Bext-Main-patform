@@ -824,6 +824,65 @@ check('R037', 'no connection names a node that does not exist', () => {
     : { ok: true, detail: 'every wire lands on a real node' };
 });
 
+// ── R038 ─ the audit and the dashboard must agree about the same day ───
+// Two implementations decide what happened to an article: DISPOSITION_SQL in the
+// dashboard, and buildDayAudit in JavaScript for the stored audit. They are
+// meant to be the same rules, so they can quietly stop being the same rules.
+//
+// They did. Number(null) is 0, so an unscored article fell into the score-0
+// branch and the audit called it "no energy/building/climate bearing" while the
+// dashboard called it "awaiting scoring". On 31 Aug that was 139 excluded
+// against 30 - a 109-article disagreement about a day the client can read from
+// both pages. The QUEUED branch beneath it was unreachable, which is how it
+// survived being written down correctly.
+//
+// This runs both against the same live day and compares the tallies.
+check('R038', 'stored audit and dashboard agree on every disposition', () => {
+  const script = [
+    "require('dotenv').config();",
+    "const fs=require('fs');const path=require('path');const {Client}=require('pg');",
+    "const {buildDayAudit}=require('./n8n/lib/day-audit.js');",
+    "const wf=JSON.parse(fs.readFileSync('n8n/workflows/BEXT-Daily-News-4-News-Quality.json','utf8'));",
+    "const nd=n=>wf.nodes.find(x=>x.name===n);",
+    "const bl=(nd('Build day audit').parameters.jsCode.match(/const BRIEF_LINKS = (\\[[\\s\\S]*?\\]);/)||[])[1];",
+    "(async()=>{",
+    " const c=new Client({host:process.env.PG_HOST,port:+process.env.PG_PORT,database:process.env.PG_DB,user:process.env.PG_USER,password:process.env.PG_PASSWORD,connectionTimeoutMillis:4000});",
+    " try{await c.connect();}catch(e){console.log('SKIP');process.exit(0);}",
+    " const {rows}=await c.query(nd('Load audit data').parameters.query);",
+    " const d=rows[0]||{};",
+    " const js=buildDayAudit(String(d.day||''),d.sources||[],d.articles||[],bl?JSON.parse(bl):[]).tally;",
+    // The dashboard's own CASE, kept here as the other side of the comparison.
+    " const DISP=\"CASE WHEN sent.report_date IS NOT NULL THEN 'SENT'\"",
+    "  +\" WHEN a.content_kind IN ('reference','offtopic') THEN 'HELD'\"",
+    "  +\" WHEN a.date_state = 'none' AND coalesce(an.relevance_score,-1) = 0 THEN 'HELD'\"",
+    "  +\" WHEN NOT a.report_eligible THEN 'HELD'\"",
+    "  +\" WHEN coalesce(an.relevance_score,-1) = 0 THEN 'EXCLUDED' ELSE 'QUEUED' END\";",
+    " const q=await c.query('SELECT '+DISP+\" AS k, count(*)::int n FROM articles a JOIN sources s ON s.id=a.source_id\"",
+    "  +' LEFT JOIN article_analysis an ON an.article_id=a.id'",
+    "  +' LEFT JOIN LATERAL (SELECT rp.report_date::text FROM report_items ri JOIN reports rp ON rp.id=ri.report_id'",
+    "  +\"   WHERE ri.article_id=a.id AND rp.status='sent' LIMIT 1) sent ON true\"",
+    "  +\" WHERE (coalesce(a.published_at,a.fetched_at) AT TIME ZONE 'Australia/Melbourne')::date = $1::date\"",
+    "  +' GROUP BY 1',[d.day]);",
+    " const sql={sent:0,queued:0,held:0,excluded:0};",
+    " q.rows.forEach(r=>{sql[r.k.toLowerCase()]=r.n;});",
+    " const diff=['sent','queued','held','excluded'].filter(k=>js[k]!==sql[k])",
+    "   .map(k=>k+': audit '+js[k]+' vs dashboard '+sql[k]);",
+    " await c.end();",
+    " console.log(diff.length?('FAIL '+d.day+' - '+diff.join('; ')):('OK '+d.day));",
+    "})();",
+  ].join('');
+  try {
+    const out = execFileSync('node', ['-e', script], { encoding: 'utf8', cwd: ROOT, stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    const line = out.split(/\r?\n/).filter(l => /^(OK|SKIP|FAIL)/.test(l)).pop() || out;
+    if (line.startsWith('SKIP')) return { ok: true, detail: 'no database reachable \u2014 run with the tunnel up to exercise this' };
+    if (line.startsWith('FAIL')) return { ok: false, detail: line.slice(5) };
+    return { ok: true, detail: 'both agree on ' + line.slice(3) };
+  } catch (e) {
+    const out = String((e.stdout || '') + (e.stderr || '')).trim();
+    return { ok: false, detail: out.slice(-220) || String(e.message).slice(0, 160) };
+  }
+});
+
 // ── report ──────────────────────────────────────────────────────────────────
 const failed = results.filter(r => !r.ok);
 if (JSON_OUT) {

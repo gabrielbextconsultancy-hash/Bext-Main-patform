@@ -26,16 +26,25 @@ function auditPath(u) {
 
 function buildDayAudit(day, sources, articles, briefLinks) {
   // Disposition, in gate order — the same order the report applies them.
+  //
+  // "Not yet scored" is tested FIRST among the score rules, because Number(null)
+  // is 0: an unscored article fell into the score-0 branch and was reported as
+  // "no energy/building/climate bearing", which made the line below it dead code
+  // and the audit disagree with the dashboard on the same day — 139 excluded
+  // against 30, the difference being 109 articles still waiting for the scorer.
+  // The dashboard's SQL was right (coalesce(score, -1) = 0 never matches null);
+  // this is the JavaScript half catching up.
+  var scored = function (r) { return r.score !== null && r.score !== undefined && r.score !== ''; };
   var tally = { fetched: articles.length, sent: 0, queued: 0, held: 0, excluded: 0 };
   var items = articles.map(function (r) {
     var k, why;
     if (r.sent_in) { k = 'SENT'; why = 'sent in the ' + r.sent_in + ' report'; }
     else if (r.kind === 'reference') { k = 'HELD'; why = 'standing reference page (judge)'; }
     else if (r.kind === 'offtopic') { k = 'HELD'; why = 'off-topic article, not industry news (judge)'; }
-    else if (r.ds === 'none' && Number(r.score) === 0) { k = 'HELD'; why = 'website furniture (no date, score 0)'; }
+    else if (r.ds === 'none' && scored(r) && Number(r.score) === 0) { k = 'HELD'; why = 'website furniture (no date, score 0)'; }
     else if (r.elig === false) { k = 'HELD'; why = 'stale-dated (older than 14 days)'; }
+    else if (!scored(r)) { k = 'QUEUED'; why = 'awaiting scoring, then the next report'; }
     else if (Number(r.score) === 0) { k = 'EXCLUDED'; why = 'score 0 - no energy/building/climate bearing'; }
-    else if (r.score === null || r.score === undefined) { k = 'QUEUED'; why = 'awaiting scoring, then the next report'; }
     else { k = 'QUEUED'; why = 'goes out in the next 05:00 report'; }
     tally[k.toLowerCase()]++;
     var o = {}; for (var key in r) o[key] = r[key];
