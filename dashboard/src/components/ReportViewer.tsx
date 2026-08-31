@@ -147,7 +147,13 @@ export function ReportViewer({
   const [src, setSrc] = useState<string | null>(null);
   useEffect(() => {
     if (!marked) { setSrc(null); return; }
-    const u = URL.createObjectURL(new Blob([marked], { type: 'text/html' }));
+    // charset is not optional: a blob URL carries no HTTP headers, so without it
+    // the iframe guesses Latin-1 and every en-dash in the sheet renders as
+    // "â€”" — mojibake the operator saw, in the viewer only. The emailed sheet
+    // was always fine; Graph sends it with a proper content type. The old
+    // srcDoc path inherited the parent page's UTF-8, which is why this only
+    // appeared when the viewer moved to blob URLs for fragment scrolling.
+    const u = URL.createObjectURL(new Blob([marked], { type: 'text/html;charset=utf-8' }));
     setSrc(target ? `${u}#${HIGHLIGHT_ID}` : u);
     return () => URL.revokeObjectURL(u);
   }, [marked, target]);
@@ -160,15 +166,23 @@ export function ReportViewer({
         {dates.length === 0 ? (
           <p className="text-sm text-ink-400">No reports to open yet.</p>
         ) : (
-          dates.slice(0, 10).map(d => (
-            <button
-              key={d}
-              onClick={() => load(d)}
-              className="rounded-lg border border-ink-700 bg-ink-850 px-3 py-1.5 text-xs text-ink-100 transition hover:border-ink-600"
-            >
-              Open {d}
-            </button>
-          ))
+          dates.slice(0, 10).map(d => {
+            // The archive is filed by SEND date, but the sheet inside covers the
+            // day before - a button saying "31 Aug" that opens "Sunday 30 August"
+            // reads as a bug. Say both, so the reader is never surprised.
+            const covered = new Date(d + 'T00:00:00');
+            covered.setDate(covered.getDate() - 1);
+            const cov = covered.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+            return (
+              <button
+                key={d}
+                onClick={() => load(d)}
+                className="rounded-lg border border-ink-700 bg-ink-850 px-3 py-1.5 text-xs text-ink-100 transition hover:border-ink-600"
+              >
+                Sent {d} · covers {cov}
+              </button>
+            );
+          })
         )}
       </div>
 
