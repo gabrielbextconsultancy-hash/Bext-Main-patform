@@ -295,6 +295,63 @@ function looksLikeArticle(html) {
 }
 
 /**
+ * The article's own text, pulled from its page.
+ *
+ * The feed excerpt averages three hundred characters and often ends in "The
+ * post ... appeared first on", so the scorer was judging relevance from a
+ * headline and two sentences. This reads the body: the paragraphs inside the
+ * article element where the publisher marks one, otherwise the densest block
+ * of paragraphs on the page, which is what an article page is.
+ *
+ * Deliberately simple and defensive. It runs inside a Code node against pages
+ * whose markup we do not control, so it must never throw and never return
+ * navigation furniture: a result under 200 characters is treated as no result
+ * rather than shipped as content.
+ */
+function extractBody(html) {
+  if (!html) return null;
+  var doc = String(html);
+
+  // Scripts, styles and templates carry text that is not prose.
+  doc = doc.replace(/<script[\s\S]*?<\/script>/gi, ' ')
+           .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+           .replace(/<noscript[\s\S]*?<\/noscript>/gi, ' ')
+           .replace(/<!--[\s\S]*?-->/g, ' ');
+
+  // Prefer the region the publisher marked as the article.
+  var region = null;
+  var m = doc.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i);
+  if (m && m[1] && m[1].length > 400) region = m[1];
+  if (!region) {
+    m = doc.match(/<div[^>]+class=["'][^"']*(?:entry-content|article-body|post-content|story-body|articleBody)[^"']*["'][^>]*>([\s\S]*?)<\/div>\s*(?:<\/div>|<footer|<aside)/i);
+    if (m && m[1] && m[1].length > 400) region = m[1];
+  }
+  if (!region) region = doc;
+
+  // Paragraphs are where prose lives. Headings are kept as sentence breaks so
+  // a subheading does not weld two paragraphs into one run-on line.
+  var parts = [];
+  var re = /<(p|h2|h3|li)\b[^>]*>([\s\S]*?)<\/\1>/gi;
+  var hit;
+  while ((hit = re.exec(region)) !== null) {
+    var text = strip(hit[2]);
+    if (!text) continue;
+    // Boilerplate that appears inside paragraph tags on nearly every site.
+    if (/^(share|tweet|advertisement|related|read more|sign up|subscribe|follow us)\b/i.test(text)) continue;
+    if (text.length < 40) continue;
+    parts.push(text);
+    if (parts.join(' ').length > 12000) break;
+  }
+
+  var body = parts.join('\n\n').replace(/\s+\n/g, '\n').trim();
+  // WordPress appends this to syndicated copy; it is the feed talking, not the
+  // article, and leaving it in taught the scorer to read boilerplate.
+  body = body.replace(/The post .{0,120}appeared first on .{0,80}?\.?\s*$/i, '').trim();
+  if (body.length < 200) return null;
+  return body.slice(0, 12000);
+}
+
+/**
  * Markdown [headline](url) pairs, as plain anchors parseIndex can read.
  *
  * Firecrawl's html capture can be the pre-hydration shell even when the render
@@ -475,4 +532,4 @@ function normalise(raw, source) {
     }));
 }
 
-module.exports = { parseFeed, parseIndex, normalise, contentHash, passesFilter, strip, absolute, cleanSyndicatedTitle, dateFromUrl, parseSitemap, publishedFromHtml, looksLikeArticle, anchorsFromMarkdown };
+module.exports = { parseFeed, parseIndex, normalise, contentHash, passesFilter, strip, absolute, cleanSyndicatedTitle, dateFromUrl, parseSitemap, publishedFromHtml, looksLikeArticle, anchorsFromMarkdown, extractBody };

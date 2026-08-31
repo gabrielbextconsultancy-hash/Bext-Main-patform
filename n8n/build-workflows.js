@@ -820,7 +820,11 @@ function articleAnalysisWorkflow() {
           operation: 'executeQuery',
           // Batched at 40 to stay inside the free tier's rate limit and keep any
           // single model call small enough to stay coherent.
-          query: `SELECT a.id, a.title, a.summary_raw, s.name AS source_name, s.category
+          query: `SELECT a.id, a.title, s.name AS source_name, s.category,
+       -- The article's own text where the quality pass has read it, the feed
+       -- excerpt otherwise. Judging relevance from a headline and two sentences
+       -- is what the body column exists to end.
+       coalesce(nullif(a.body_text, ''), a.summary_raw) AS summary_raw
 FROM articles a
 JOIN sources s ON s.id = a.source_id
 LEFT JOIN article_analysis an ON an.article_id = a.id
@@ -848,7 +852,10 @@ const payload = rows.map(r => ({
   source: r.source_name,
   category: r.category,
   title: r.title,
-  excerpt: (r.summary_raw || '').slice(0, 600),
+  // 2500, not 600. Six hundred was the length of a feed teaser; the body runs
+  // to thousands, and the passage that decides relevance is often below the
+  // fold - a scheme named in paragraph four, a dollar figure in paragraph six.
+  excerpt: (r.summary_raw || '').slice(0, 2500),
 }));
 
 // Gemini drops the connection often enough that a single attempt is not
@@ -1993,6 +2000,8 @@ const worker = async () => {
 
     let state = 'none';
     let published = null;
+    let body = null;
+    let bodyState = 'none';
     try {
       const r = await helpers.httpRequest({
         method: 'POST', url: SCRAPLING, json: true, timeout: 30000,
@@ -2000,14 +2009,28 @@ const worker = async () => {
       });
       if (!r || r.status === 429 || r.status === 503 || !r.ok) {
         state = 'blocked';
+        bodyState = 'blocked';
       } else {
         published = publishedFromHtml(r.html || '', a.url);
         state = published ? 'found' : 'none';
+        // The article's own text, from the page we already have open. The feed
+        // excerpt averages three hundred characters and often ends in "The post
+        // ... appeared first on"; the scorer was judging relevance, and writing
+        // the client's summaries, from that scrap.
+        body = extractBody(r.html || '');
+        bodyState = body ? 'found' : 'none';
       }
     } catch (e) {
       state = 'blocked';
+      bodyState = 'blocked';
     }
-    updates.push({ id: Number(a.id), published_at: published, date_state: state });
+    updates.push({
+      id: Number(a.id), published_at: published, date_state: state,
+      body_text: body, body_state: bodyState,
+      // An article scored from the teaser and since given its full text must be
+      // judged again, or the body is stored and never read.
+      rescore: !!(body && a.already_scored),
+    });
   }
 };
 
@@ -2016,13 +2039,18 @@ await Promise.all(Array.from({ length: lanes }, worker));
 
 const found = updates.filter(u => u.date_state === 'found').length;
 const blocked = updates.filter(u => u.date_state === 'blocked').length;
+const bodies = updates.filter(u => u.body_state === 'found').length;
+const rescore = updates.filter(u => u.rescore).length;
 
 return [{ json: {
   date_updates: JSON.stringify(updates),
+  rescore_ids: JSON.stringify(updates.filter(u => u.rescore).map(u => u.id)),
   considered: queue.length,
   resolved: found,
   blocked: blocked,
-  detail: 'dated ' + found + ', blocked ' + blocked + ', of ' + queue.length + ' opened',
+  bodies: bodies,
+  detail: 'dated ' + found + ', bodies ' + bodies + ', rescore ' + rescore
+    + ', blocked ' + blocked + ', of ' + queue.length + ' opened',
 } }];
 `;
 
@@ -2274,10 +2302,16 @@ function newsQualityWorkflow() {
         alwaysOutputData: true,
         parameters: {
           operation: 'executeQuery',
-          query: `SELECT a.id, a.url
+          query: `SELECT a.id, a.url,
+       (a.published_at IS NULL) AS needs_date,
+       (a.body_state = 'pending' OR a.body_state = 'blocked') AS needs_body,
+       (an.article_id IS NOT NULL) AS already_scored
 FROM articles a
-WHERE a.published_at IS NULL
-  AND (a.date_state = 'pending' OR a.date_state = 'blocked')
+LEFT JOIN article_analysis an ON an.article_id = a.id
+WHERE (
+        (a.published_at IS NULL AND (a.date_state = 'pending' OR a.date_state = 'blocked'))
+     OR (a.body_state = 'pending' OR a.body_state = 'blocked')
+      )
   -- Bounded to what could still reach a report. The archive is not worth
   -- opening: a 2022 article gains nothing from an accurate date now.
   AND a.fetched_at > now() - interval '5 days'
@@ -2302,6 +2336,8 @@ LIMIT 250`,
           query: `UPDATE articles a
 SET published_at = coalesce(v.published_at, a.published_at),
     date_state   = v.date_state::article_date_state,
+    body_text    = coalesce(v.body_text, a.body_text),
+    body_state   = v.body_state::article_body_state,
     -- Reading the real date can prove an article is archive material. Hold it
     -- the moment that becomes known, rather than leaving it to look current
     -- until someone notices: undated archive pages dated by fetch time are how
@@ -2317,7 +2353,8 @@ SET published_at = coalesce(v.published_at, a.published_at),
           WHERE ri.article_id = a.id AND r.status = 'sent')
       THEN false ELSE a.report_eligible END
 FROM (SELECT * FROM json_to_recordset($1::json)
-      AS x(id bigint, published_at timestamptz, date_state text)) v
+      AS x(id bigint, published_at timestamptz, date_state text,
+           body_text text, body_state text)) v
 WHERE a.id = v.id`,
           options: { queryReplacement: '={{ $json.date_updates }}' },
         },
@@ -2469,6 +2506,22 @@ WHERE NOT EXISTS (
         parameters: { jsCode: DOCTOR_PAGE_CODE },
       },
       {
+        id: 'rescore', name: 'Requeue rescored articles', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(340, 160),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          // Deleting the analysis row returns the article to the scorer's queue,
+          // which reads what has never been scored. It is judged again within
+          // the half-hour, this time from the article rather than the teaser.
+          // report_items is untouched, so an article already sent stays sent.
+          query: `DELETE FROM article_analysis
+WHERE article_id IN (SELECT x.id FROM json_to_recordset($1::json) AS x(id bigint))`,
+          options: { queryReplacement: '={{ $json.rescore_ids }}' },
+        },
+      },
+      {
         id: 'audload', name: 'Load audit data', type: 'n8n-nodes-base.postgres',
         typeVersion: 2.5, position: pos(560, 480),
         credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
@@ -2530,7 +2583,8 @@ ON CONFLICT (day) DO UPDATE SET tally = EXCLUDED.tally, html = EXCLUDED.html, up
       'Three times daily AEST': { main: [[{ node: 'Articles missing a date', type: 'main', index: 0 }]] },
       'Articles missing a date': { main: [[{ node: 'Read publish dates', type: 'main', index: 0 }]] },
       'Read publish dates': { main: [[{ node: 'Save publish dates', type: 'main', index: 0 }]] },
-      'Save publish dates': { main: [[{ node: 'Undated pages to judge', type: 'main', index: 0 }]] },
+      'Save publish dates': { main: [[{ node: 'Requeue rescored articles', type: 'main', index: 0 }]] },
+      'Requeue rescored articles': { main: [[{ node: 'Undated pages to judge', type: 'main', index: 0 }]] },
       'Undated pages to judge': { main: [[{ node: 'News or reference', type: 'main', index: 0 }]] },
       'News or reference': { main: [[{ node: 'Save the verdict', type: 'main', index: 0 }]] },
       'Save the verdict': { main: [[{ node: 'Record coverage', type: 'main', index: 0 }]] },

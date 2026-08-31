@@ -46,9 +46,9 @@ export interface ArchitectureGraph {
 }
 
 export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
-  "generatedAt": "2026-08-29T02:49:54.267Z",
+  "generatedAt": "2026-08-31T02:42:40.053Z",
   "workflowCount": 15,
-  "edgeCount": 48,
+  "edgeCount": 53,
   "workflows": [
     {
       "slug": "BEXT-Article-Analysis",
@@ -922,6 +922,7 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
         "sources"
       ],
       "tablesWritten": [
+        "article_analysis",
         "articles",
         "incidents",
         "integration_health"
@@ -942,6 +943,7 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
           "type": "n8n-nodes-base.postgres",
           "actor": "system",
           "reads": [
+            "article_analysis",
             "articles"
           ],
           "writes": [],
@@ -967,6 +969,19 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
           ],
           "writes": [
             "articles"
+          ],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "rescore",
+          "name": "Requeue rescored articles",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "ai",
+          "reads": [
+            "article_analysis"
+          ],
+          "writes": [
+            "article_analysis"
           ],
           "alwaysOutputData": true
         },
@@ -1524,7 +1539,19 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
     {
       "from": "BEXT-News-Quality",
       "to": "BEXT-Article-Analysis",
+      "table": "article_analysis",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-News-Quality",
+      "to": "BEXT-Article-Analysis",
       "table": "articles",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-News-Quality",
+      "to": "BEXT-Content-Drafts",
+      "table": "article_analysis",
       "domain": "cross_domain"
     },
     {
@@ -1536,13 +1563,31 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
     {
       "from": "BEXT-News-Quality",
       "to": "BEXT-Content-Topics",
+      "table": "article_analysis",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-News-Quality",
+      "to": "BEXT-Content-Topics",
       "table": "articles",
       "domain": "cross_domain"
     },
     {
       "from": "BEXT-News-Quality",
       "to": "BEXT-Daily-News-Card",
+      "table": "article_analysis",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-News-Quality",
+      "to": "BEXT-Daily-News-Card",
       "table": "articles",
+      "domain": "cross_domain"
+    },
+    {
+      "from": "BEXT-News-Quality",
+      "to": "BEXT-Daily-Report",
+      "table": "article_analysis",
       "domain": "cross_domain"
     },
     {
