@@ -804,3 +804,75 @@ export const getReportArticles = (reportId: number) =>
       ORDER BY ri.category, ri.rank`,
     [reportId]
   );
+
+/* ── The next send, before it happens ──────────────────────────────────────
+ *
+ * The delivered sheets show what the client received. This shows what they are
+ * about to receive, using the same gates the report itself applies: the window
+ * and its two-day reach-back, the gather cutoff at midnight, the exactly-once
+ * ledger, and the four inclusion rules.
+ *
+ * The gates are duplicated here rather than shared, because the report's copy
+ * lives inside an n8n Code node and the dashboard cannot import it. That is
+ * exactly how the audit and the dashboard drifted apart (R038), so the shape is
+ * kept deliberately close to the original and `day_start` is a parameter, which
+ * lets preflight run both over the same day and compare.
+ */
+export interface PreviewRow {
+  id: string;
+  title: string;
+  url: string;
+  source_name: string;
+  category: string;
+  score: number | null;
+  body_chars: number;
+  fetched_at: string;
+}
+
+const PREVIEW_SQL = `
+  WITH win AS (SELECT $1::date AS day_start)
+  SELECT a.id::text,
+         a.title,
+         coalesce(a.canonical_url, a.url) AS url,
+         s.name AS source_name,
+         s.category,
+         an.relevance_score AS score,
+         length(coalesce(a.body_text, ''))::int AS body_chars,
+         to_char(a.fetched_at AT TIME ZONE 'Australia/Melbourne', 'DD Mon HH24:MI') AS fetched_at
+    FROM articles a
+    JOIN sources s ON s.id = a.source_id
+    LEFT JOIN article_analysis an ON an.article_id = a.id
+   CROSS JOIN win w
+   WHERE (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')
+           >= w.day_start - interval '2 days'
+     AND (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')
+           <  w.day_start + interval '1 day'
+     AND (a.fetched_at AT TIME ZONE 'Australia/Melbourne')
+           <  w.day_start + interval '1 day'
+     AND NOT EXISTS (
+       SELECT 1 FROM report_items ri JOIN reports r ON r.id = ri.report_id
+        WHERE ri.article_id = a.id AND r.status = 'sent')
+     AND (coalesce(s.config->>'always_relevant', '') = 'true'
+          OR coalesce(an.relevance_score, 0) >= 1)
+     AND coalesce(a.content_kind::text, '') NOT IN ('reference', 'offtopic')
+     AND NOT (a.date_state = 'none' AND coalesce(an.relevance_score, 0) = 0)
+     AND a.report_eligible
+   ORDER BY s.category, coalesce(an.relevance_score, 0) DESC,
+            coalesce(a.published_at, a.fetched_at) DESC`;
+
+/** The publication day the NEXT 05:00 send will cover.
+ *
+ *  Before 05:00 the next run still covers yesterday; after it, today. Shifting
+ *  back five hours and truncating expresses that in one term. */
+export const nextSendDayStart = () =>
+  `date_trunc('day', (now() AT TIME ZONE 'Australia/Melbourne') - interval '5 hours')::date`;
+
+export async function getNextSendPreview(dayStart?: string) {
+  const day = dayStart
+    ? [dayStart]
+    : (await tryQuery<{ d: string }>(`SELECT ${nextSendDayStart()}::text AS d`))?.[0]?.d;
+  const d = Array.isArray(day) ? day[0] : day;
+  if (!d) return null;
+  const rows = await tryQuery<PreviewRow>(PREVIEW_SQL, [d]);
+  return rows ? { day: d, rows } : null;
+}

@@ -8,6 +8,7 @@ import {
   getScoredCount,
   getCategories,
   getReportReferences,
+  getNextSendPreview,
 } from '@/lib/queries';
 import { Card, DatabaseDown, Empty } from '@/components/ui';
 import { ReportViewer } from '@/components/ReportViewer';
@@ -107,17 +108,28 @@ function groupByDate(rows: SentArticle[]): [string, SentArticle[]][] {
   return [...byDate];
 }
 
-export default async function ReportsPage() {
-  const [reports, ready, health, delivered, bands, totalScored, cats, refs] = await Promise.all([
-    getReports(),
-    getPipelineReadiness(),
-    getHealth(),
-    getSentArticles(),
-    getScoreBands(),
-    getScoredCount(),
-    getCategories(),
-    getReportReferences(),
-  ]);
+export default async function ReportsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ sheet?: string }>;
+}) {
+  const sp = await searchParams;
+  // Default to the preview: what is about to go out is the thing worth checking
+  // before 05:00. The delivered archive is one click away and never changes.
+  const before = (sp.sheet ?? 'before') !== 'after';
+
+  const [reports, ready, health, delivered, bands, totalScored, cats, refs, preview] =
+    await Promise.all([
+      getReports(),
+      getPipelineReadiness(),
+      getHealth(),
+      getSentArticles(),
+      getScoreBands(),
+      getScoredCount(),
+      getCategories(),
+      getReportReferences(),
+      getNextSendPreview(),
+    ]);
 
   if (!reports) return <DatabaseDown />;
 
@@ -191,12 +203,97 @@ export default async function ReportsPage() {
         )}
       </Card>
 
-      {/* What was actually delivered */}
+      {/* Two halves of one question: what is about to go, and what went.
+          A plain link toggle rather than client state — the page is server
+          rendered on every request, so the URL is the only state it needs. */}
       <Card
         title="Delivered sheets"
-        subtitle="Opens the exact HTML that was emailed, not a reconstruction of it."
+        subtitle={
+          before
+            ? `Before — the ${preview?.rows.length ?? 0} articles queued for the next 05:00 send. Nothing here has been emailed yet.`
+            : 'After — opens the exact HTML that was emailed, not a reconstruction of it.'
+        }
       >
-        <ReportViewer dates={reports.filter(r => r.status === 'sent').map(r => r.report_date)} />
+        <div className="mb-4 inline-flex rounded-lg border border-ink-700 p-0.5">
+          <a
+            href="/reports?sheet=before"
+            className={`rounded-md px-3 py-1.5 text-sm ${
+              before ? 'bg-ink-750 font-semibold text-ink-100' : 'text-ink-400 hover:text-ink-200'
+            }`}
+          >
+            Before — goes out tomorrow
+          </a>
+          <a
+            href="/reports?sheet=after"
+            className={`rounded-md px-3 py-1.5 text-sm ${
+              !before ? 'bg-ink-750 font-semibold text-ink-100' : 'text-ink-400 hover:text-ink-200'
+            }`}
+          >
+            After — already delivered
+          </a>
+        </div>
+
+        {before ? (
+          preview && preview.rows.length > 0 ? (
+            <>
+              <p className="mb-3 text-xs text-ink-400">
+                Covering the {preview.day} publication day. Everything gathered today waits for
+                tomorrow&rsquo;s 05:00 — nothing fetched today is sent today.
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-ink-700 text-left text-[10px] uppercase tracking-wide text-ink-400">
+                      <th className="px-2 py-2">Score</th>
+                      <th className="px-2 py-2">Article</th>
+                      <th className="px-2 py-2">Section</th>
+                      <th className="px-2 py-2">Written from</th>
+                      <th className="px-2 py-2">Fetched</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {preview.rows.map(r => (
+                      <tr key={r.id} className="border-b border-ink-800/60 align-top">
+                        <td className="px-2 py-2 tnum text-ink-300">{r.score ?? '–'}</td>
+                        <td className="max-w-[32rem] px-2 py-2">
+                          <a
+                            href={r.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-medium text-brief-a hover:underline"
+                          >
+                            {r.title}
+                          </a>
+                          <div className="text-xs text-ink-500">{r.source_name}</div>
+                        </td>
+                        <td className="px-2 py-2 text-xs text-ink-400">{r.category}</td>
+                        {/* The distinction the sheet itself cannot show: a summary
+                            written from the article, or from a feed teaser. */}
+                        <td className="whitespace-nowrap px-2 py-2 text-xs">
+                          {r.body_chars > 200 ? (
+                            <span className="text-ok">article · {r.body_chars.toLocaleString()} chars</span>
+                          ) : (
+                            <span className="text-warn">teaser only</span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-2 text-xs text-ink-400">
+                          {r.fetched_at}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          ) : (
+            <Empty>
+              Nothing is queued for the next send yet — articles gathered today appear here as the
+              scorer works through them.
+            </Empty>
+          )
+        ) : (
+          <ReportViewer dates={reports.filter(r => r.status === 'sent').map(r => r.report_date)} />
+        )}
       </Card>
 
       {/* Provenance. Deliberately here and not in the emailed sheet: the client
