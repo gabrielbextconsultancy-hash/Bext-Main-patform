@@ -46,7 +46,7 @@ export interface ArchitectureGraph {
 }
 
 export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
-  "generatedAt": "2026-08-31T04:30:58.296Z",
+  "generatedAt": "2026-08-31T07:14:30.016Z",
   "workflowCount": 15,
   "edgeCount": 53,
   "workflows": [
@@ -539,7 +539,7 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
       "domain": "brief_a",
       "trigger": {
         "type": "schedule",
-        "label": "Interval (30m)"
+        "label": "Interval (15m)"
       },
       "tablesRead": [
         "article_analysis",
@@ -552,7 +552,7 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
       "nodes": [
         {
           "id": "trigger",
-          "name": "Every 30 minutes",
+          "name": "Every 15 minutes",
           "type": "n8n-nodes-base.scheduleTrigger",
           "actor": "system",
           "reads": [],
@@ -732,6 +732,7 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
           "type": "n8n-nodes-base.postgres",
           "actor": "system",
           "reads": [
+            "article_analysis",
             "articles",
             "sources"
           ],

@@ -862,9 +862,20 @@ function articleAnalysisWorkflow() {
     settings: { executionOrder: 'v1', timezone: 'Australia/Melbourne' },
     nodes: [
       {
-        id: 'trigger', name: 'Every 30 minutes', type: 'n8n-nodes-base.scheduleTrigger',
+        id: 'trigger', name: 'Every 15 minutes', type: 'n8n-nodes-base.scheduleTrigger',
         typeVersion: 1.2, position: pos(-320, 0),
-        parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 30 }] } },
+        // Fifteen minutes, not thirty and emphatically not six hours.
+        //
+        // Each run is a SINGLE Gemini call carrying the whole batch, so running
+        // more often costs one call per run, not one per article. Scoring is
+        // also the step every later gate waits on: an unscored article cannot
+        // qualify, so a backlog at 05:00 is silently a shorter report.
+        //
+        // The arithmetic that settles the interval: 1,019 articles arrived on
+        // 31 Aug against a normal 215. At 40 every thirty minutes that backlog
+        // needs ten hours; at up to 100 every fifteen it needs under three, and
+        // the day closes with the scorer ahead of the fetchers.
+        parameters: { rule: { interval: [{ field: 'minutes', minutesInterval: 15 }] } },
       },
       {
         // R015: a SELECT that matches nothing emits nothing, and the Code node
@@ -887,8 +898,19 @@ FROM articles a
 JOIN sources s ON s.id = a.source_id
 LEFT JOIN article_analysis an ON an.article_id = a.id
 WHERE an.article_id IS NULL
+-- Newest first, so the day still open is scored before older stragglers: an
+-- article that misses its own 05:00 is carried by the two-day reach-back, but
+-- one that misses the reach-back is lost.
 ORDER BY a.fetched_at DESC
-LIMIT 40`,
+-- The batch is ONE Gemini call, so size costs tokens rather than requests, and
+-- doubling it on a backlog does not double the quota spent. Forty clears an
+-- ordinary day comfortably; a burst - 1,019 articles arrived on 31 Aug against
+-- a normal 215 - would have taken ten hours at that rate, which is most of the
+-- time between the burst and the send.
+LIMIT (SELECT CASE WHEN count(*) > 200 THEN 100 ELSE 40 END
+       FROM articles a2
+       LEFT JOIN article_analysis an2 ON an2.article_id = a2.id
+       WHERE an2.article_id IS NULL)`,
           options: {},
         },
       },
@@ -998,7 +1020,7 @@ ON CONFLICT (article_id) DO NOTHING`,
       },
     ],
     connections: {
-      'Every 30 minutes': { main: [[{ node: 'Load unanalysed', type: 'main', index: 0 }]] },
+      'Every 15 minutes': { main: [[{ node: 'Load unanalysed', type: 'main', index: 0 }]] },
       'Load unanalysed': { main: [[{ node: 'Score with Gemini', type: 'main', index: 0 }]] },
       'Score with Gemini': { main: [[{ node: 'Save analysis', type: 'main', index: 0 }]] },
     },
@@ -2845,9 +2867,15 @@ WHERE a.id = v.id`,
 SELECT 'news_quality',
        -- Cast, or the insert dies: the column is the health_status enum and a
        -- bare CASE yields text. Two quality passes were lost to exactly this.
-       (CASE WHEN c.quiet > 0 OR c.undated > 20 THEN 'degraded' ELSE 'up' END)::health_status,
+       (CASE WHEN c.quiet > 0 OR c.undated > 20 OR c.unscored > 0
+             THEN 'degraded' ELSE 'up' END)::health_status,
        'fetched 24h ' || c.fetched || ' · dated ' || c.dated || ' · undated ' || c.undated
          || ' · wrong-day corrected ' || c.corrected || ' · quiet sources ' || c.quiet
+         -- The closing day's unscored count. Scoring is what every later gate
+         -- waits on, so an article the scorer never reached is not held or
+         -- excluded, it is simply absent - and a short report looks like a
+         -- quiet news day rather than a queue that did not drain.
+         || ' · unscored on the closing day ' || c.unscored
 FROM (
   SELECT
     (SELECT count(*) FROM articles WHERE fetched_at > now() - interval '24 hours') AS fetched,
@@ -2855,6 +2883,13 @@ FROM (
        AND published_at IS NOT NULL) AS dated,
     (SELECT count(*) FROM articles WHERE fetched_at > now() - interval '24 hours'
        AND published_at IS NULL) AS undated,
+    -- Counted on the publication day the pass is closing, which is the set the
+    -- 05:00 report will draw from.
+    (SELECT count(*) FROM articles a3
+       LEFT JOIN article_analysis an3 ON an3.article_id = a3.id
+      WHERE an3.article_id IS NULL
+        AND (coalesce(a3.published_at, a3.fetched_at) AT TIME ZONE 'Australia/Melbourne')::date
+            = ((now() AT TIME ZONE 'Australia/Melbourne') - interval '6 hours')::date) AS unscored,
     -- Articles whose real publication day differs from the day we first saw
     -- them: precisely the ones that would have gone into the wrong report.
     (SELECT count(*) FROM articles

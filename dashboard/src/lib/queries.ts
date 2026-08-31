@@ -165,6 +165,16 @@ export interface ManagementRow {
   source_active: boolean | null;
   body_chars: number;
   category: string;
+  // Everything the detail window shows about one article, so opening it costs
+  // no second query: the row already travelled with the page.
+  summary: string | null;
+  analysed_at: string | null;
+  model: string | null;
+  topics: string[] | null;
+  published_at: string | null;
+  content_kind: string | null;
+  date_state: string | null;
+  brief_url: string | null;
 }
 
 const DISPOSITION_SQL = `
@@ -240,6 +250,16 @@ export async function getManagementRows(opts: {
   const rows = await tryQuery<ManagementRow>(
     `SELECT a.id::text, a.title, a.url, s.name AS source_name,
             s.category,
+            an.summary,
+            to_char(an.analysed_at AT TIME ZONE 'Australia/Melbourne', 'DD Mon HH24:MI') AS analysed_at,
+            an.model,
+            an.topics,
+            to_char(a.published_at AT TIME ZONE 'Australia/Melbourne', 'DD Mon YYYY HH24:MI') AS published_at,
+            a.content_kind::text,
+            a.date_state::text,
+            -- The brief's own hyperlink for this source, which is the document
+            -- the client signed off on — not the feed we happen to poll.
+            (SELECT bl.url FROM brief_links bl WHERE bl.source_id = s.id ORDER BY bl.n LIMIT 1) AS brief_url,
             s.id::text AS source_id,
             s.url AS source_url,
             s.method::text AS source_method,
@@ -270,8 +290,15 @@ export async function getLiveTally(day: string) {
     `SELECT ${DISPOSITION_SQL} AS disposition, count(*)::text AS n
      ${MANAGEMENT_FROM} GROUP BY 1`, [day]
   );
-  const t = { fetched: 0, SENT: 0, QUEUED: 0, HELD: 0, EXCLUDED: 0 } as Record<string, number>;
+  const t = { fetched: 0, SENT: 0, QUEUED: 0, HELD: 0, EXCLUDED: 0, analysed: 0 } as Record<string, number>;
   for (const r of rows ?? []) { t[r.disposition] = Number(r.n); t.fetched += Number(r.n); }
+  // Scoring is the step everything else waits on: an article the scorer has not
+  // reached cannot qualify, so "fetched" without "analysed" beside it reads as
+  // more readiness than there is.
+  const an = await tryQuery<{ n: string }>(
+    `SELECT count(an.article_id)::text AS n ${MANAGEMENT_FROM}`, [day]
+  );
+  t.analysed = Number(an?.[0]?.n ?? 0);
   return t;
 }
 

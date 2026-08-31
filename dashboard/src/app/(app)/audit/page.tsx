@@ -8,6 +8,7 @@ import {
   type ManagementRow,
 } from '@/lib/queries';
 import { Card, DatabaseDown, Empty } from '@/components/ui';
+import { ArticleDetails } from '@/components/ArticleDetails';
 
 export const dynamic = 'force-dynamic';
 
@@ -159,6 +160,13 @@ export async function AuditView({
         {/* Disposition tiles double as filters; the active one highlights. */}
         <div className="mt-4 flex flex-wrap gap-2">
           {tile('fetched this day', tally.fetched, undefined)}
+          {tile(
+            tally.analysed === tally.fetched
+              ? 'analysed — all of them'
+              : `analysed — ${tally.fetched - tally.analysed} still queued for the scorer`,
+            tally.analysed,
+            undefined,
+          )}
           {tile('sent', tally.SENT, 'SENT')}
           {tile(`queued — go out ${nextSend}`, tally.QUEUED, 'QUEUED')}
           {tile('held', tally.HELD, 'HELD')}
@@ -276,46 +284,7 @@ export async function AuditView({
                       >
                         {r.brief_n ? `#${r.brief_n} · ` : ''}{r.source_name}
                       </a>
-                      <details className="mt-0.5">
-                        <summary className="cursor-pointer list-none text-[11px] text-ink-500 hover:text-ink-300">
-                          view more details
-                        </summary>
-                        <dl className="mt-1 space-y-0.5 text-[11px] text-ink-400">
-                          <div>
-                            <dt className="inline text-ink-500">method </dt>
-                            <dd className="inline">{r.source_method ?? '—'}</dd>
-                          </div>
-                          <div>
-                            <dt className="inline text-ink-500">last fetch </dt>
-                            <dd className="inline">{r.source_last_fetch ?? 'never'}</dd>
-                          </div>
-                          <div>
-                            <dt className="inline text-ink-500">status </dt>
-                            <dd className="inline">
-                              {r.source_active === false
-                                ? 'inactive'
-                                : (r.source_failures ?? 0) > 0
-                                  ? `${r.source_failures} consecutive failures`
-                                  : 'healthy'}
-                            </dd>
-                          </div>
-                          {r.source_route && (
-                            <div className="truncate">
-                              <dt className="inline text-ink-500">route </dt>
-                              <dd className="inline">
-                                <a
-                                  href={r.source_route}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="hover:text-brief-a hover:underline"
-                                >
-                                  {r.source_route.replace(/^https?:\/\//, '').slice(0, 44)}
-                                </a>
-                              </dd>
-                            </div>
-                          )}
-                        </dl>
-                      </details>
+                      <ArticleDetails row={r} />
                     </td>
                     <td className="px-2 py-2">
                       <a

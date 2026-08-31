@@ -7,7 +7,7 @@
   "nodes": [
     {
       "id": "trigger",
-      "name": "Every 30 minutes",
+      "name": "Every 15 minutes",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
@@ -19,7 +19,7 @@
           "interval": [
             {
               "field": "minutes",
-              "minutesInterval": 30
+              "minutesInterval": 15
             }
           ]
         }
@@ -43,7 +43,7 @@
       },
       "parameters": {
         "operation": "executeQuery",
-        "query": "SELECT a.id, a.title, s.name AS source_name, s.category,\n       -- The article's own text where the quality pass has read it, the feed\n       -- excerpt otherwise. Judging relevance from a headline and two sentences\n       -- is what the body column exists to end.\n       coalesce(nullif(a.body_text, ''), a.summary_raw) AS summary_raw\nFROM articles a\nJOIN sources s ON s.id = a.source_id\nLEFT JOIN article_analysis an ON an.article_id = a.id\nWHERE an.article_id IS NULL\nORDER BY a.fetched_at DESC\nLIMIT 40",
+        "query": "SELECT a.id, a.title, s.name AS source_name, s.category,\n       -- The article's own text where the quality pass has read it, the feed\n       -- excerpt otherwise. Judging relevance from a headline and two sentences\n       -- is what the body column exists to end.\n       coalesce(nullif(a.body_text, ''), a.summary_raw) AS summary_raw\nFROM articles a\nJOIN sources s ON s.id = a.source_id\nLEFT JOIN article_analysis an ON an.article_id = a.id\nWHERE an.article_id IS NULL\n-- Newest first, so the day still open is scored before older stragglers: an\n-- article that misses its own 05:00 is carried by the two-day reach-back, but\n-- one that misses the reach-back is lost.\nORDER BY a.fetched_at DESC\n-- The batch is ONE Gemini call, so size costs tokens rather than requests, and\n-- doubling it on a backlog does not double the quota spent. Forty clears an\n-- ordinary day comfortably; a burst - 1,019 articles arrived on 31 Aug against\n-- a normal 215 - would have taken ten hours at that rate, which is most of the\n-- time between the burst and the send.\nLIMIT (SELECT CASE WHEN count(*) > 200 THEN 100 ELSE 40 END\n       FROM articles a2\n       LEFT JOIN article_analysis an2 ON an2.article_id = a2.id\n       WHERE an2.article_id IS NULL)",
         "options": {}
       }
     },
@@ -118,7 +118,7 @@
     }
   ],
   "connections": {
-    "Every 30 minutes": {
+    "Every 15 minutes": {
       "main": [
         [
           {
