@@ -27,6 +27,15 @@ export function SourcePulseCard({ pulse }: { pulse: SourcePulse }) {
         </span>
       </div>
 
+      {/* What the three states MEAN, on the card rather than in a wiki: the
+          numbers are only useful if the reader knows quiet is not failure. */}
+      <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
+        Producing = at least one article held from the last 3 days. Quiet = checked and
+        answering, but no articles held — a publisher that posts occasionally, a listing that
+        hands back navigation instead of stories, or history cleared by a prune. Inactive =
+        switched off in the registry on purpose; the reason is recorded beside it.
+      </p>
+
       {pulse.quiet > 0 && (
         <details className="mt-2">
           <summary className="cursor-pointer text-xs text-amber-300/80 hover:text-amber-300">
@@ -37,7 +46,9 @@ export function SourcePulseCard({ pulse }: { pulse: SourcePulse }) {
               <li key={q.name}>
                 {q.brief_n ? `#${q.brief_n} · ` : ''}{q.name}
                 <span className="text-ink-500">
-                  {' '}[{q.method}] · last article {q.last_article ?? 'never'}
+                  {' '}[{q.method}] · {q.last_article
+                    ? `last article held ${q.last_article}`
+                    : 'no articles held'} · checked {q.last_checked ?? 'never'}
                 </span>
               </li>
             ))}

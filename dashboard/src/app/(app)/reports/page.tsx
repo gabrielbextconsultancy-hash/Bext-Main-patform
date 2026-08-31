@@ -158,6 +158,17 @@ export async function ReportsView({
               />
               <Stat label="Sections" value={ready.categories} />
             </div>
+            {/* The three numbers a reader will compare are deliberately
+                different sets, and unlabelled they read as a bug: Qualifying
+                counts everything scored at least 1; the management table's
+                QUEUED then subtracts what the judge held; the Before list adds
+                the reach-back stragglers from the two prior days. */}
+            <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
+              Qualifying counts every article scored ≥1 on the day. The management table&rsquo;s
+              QUEUED is this minus anything the judge held; the Before list below applies every
+              send gate and adds unsent stragglers from the two prior days — so the three can
+              differ by a handful, each for a stated reason.
+            </p>
             {pulse && (
               <div className="mt-4">
                 <SourcePulseCard pulse={pulse} />

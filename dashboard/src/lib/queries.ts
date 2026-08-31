@@ -1042,7 +1042,8 @@ export interface SourcePulse {
   producing: number;
   quiet: number;
   inactive: number;
-  quiet_list: { brief_n: number | null; name: string; method: string; last_article: string | null }[];
+  quiet_list: { brief_n: number | null; name: string; method: string;
+    last_article: string | null; last_checked: string | null }[];
   inactive_list: { brief_n: number | null; name: string; note: string | null }[];
 }
 
@@ -1050,6 +1051,7 @@ export async function getSourcePulse(): Promise<SourcePulse | null> {
   const rows = await tryQuery<{
     brief_n: number | null; name: string; method: string; active: boolean;
     note: string | null; recent: number; last_article: string | null;
+    last_checked: string | null;
   }>(
     `SELECT (SELECT min(bl.n) FROM brief_links bl WHERE bl.source_id = s.id) AS brief_n,
             s.name, s.method::text AS method, s.active,
@@ -1057,7 +1059,11 @@ export async function getSourcePulse(): Promise<SourcePulse | null> {
             (SELECT count(*)::int FROM articles a WHERE a.source_id = s.id
               AND a.fetched_at > now() - interval '3 days') AS recent,
             to_char((SELECT max(a.fetched_at) FROM articles a WHERE a.source_id = s.id)
-              AT TIME ZONE 'Australia/Melbourne', 'DD Mon') AS last_article
+              AT TIME ZONE 'Australia/Melbourne', 'DD Mon') AS last_article,
+            -- The fetcher's last visit, distinct from the last article HELD:
+            -- pruning deletes article history, so "none held" must never read
+            -- as "never checked".
+            to_char(s.last_fetch_at AT TIME ZONE 'Australia/Melbourne', 'DD Mon HH24:MI') AS last_checked
      FROM sources s`
   );
   if (!rows) return null;
@@ -1068,7 +1074,8 @@ export async function getSourcePulse(): Promise<SourcePulse | null> {
     quiet: quiet.length,
     inactive: rows.length - active.length,
     quiet_list: quiet
-      .map(r => ({ brief_n: r.brief_n, name: r.name, method: r.method, last_article: r.last_article }))
+      .map(r => ({ brief_n: r.brief_n, name: r.name, method: r.method,
+        last_article: r.last_article, last_checked: r.last_checked }))
       .sort((a, b) => (a.brief_n ?? 99) - (b.brief_n ?? 99)),
     inactive_list: rows.filter(r => !r.active)
       .map(r => ({ brief_n: r.brief_n, name: r.name, note: r.note }))
