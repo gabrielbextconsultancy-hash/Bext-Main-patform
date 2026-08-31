@@ -905,6 +905,9 @@ export interface PreviewRow {
   score: number | null;
   body_chars: number;
   fetched_at: string;
+  // The publisher's own date where one was read; null means the page was
+  // opened and carries none (the unverified never reach this query).
+  published_at: string | null;
 }
 
 const PREVIEW_SQL = `
@@ -916,7 +919,8 @@ const PREVIEW_SQL = `
          s.category,
          an.relevance_score AS score,
          length(coalesce(a.body_text, ''))::int AS body_chars,
-         to_char(a.fetched_at AT TIME ZONE 'Australia/Melbourne', 'DD Mon HH24:MI') AS fetched_at
+         to_char(a.fetched_at AT TIME ZONE 'Australia/Melbourne', 'DD Mon HH24:MI') AS fetched_at,
+         to_char(a.published_at AT TIME ZONE 'Australia/Melbourne', 'DD Mon HH24:MI') AS published_at
     FROM articles a
     JOIN sources s ON s.id = a.source_id
     LEFT JOIN article_analysis an ON an.article_id = a.id

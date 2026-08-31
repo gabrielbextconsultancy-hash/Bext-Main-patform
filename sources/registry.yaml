@@ -416,8 +416,18 @@ sources:
     name: VicGrid
     category: Industry Updates
     url: "https://www.vicgrid.com.au/about/news"
-    method: scrape
-    requires_browser: true
+    method: sitemap
+    feed_url: "https://www.vicgrid.com.au/sitemap.xml"
+    filter:
+      path_contains:
+        - /about/news/news-stories/
+    note: >-
+      The news listing renders its stories client-side, so every retrieval tier
+      returns the page shell - 40 links of site navigation, zero stories. The
+      operator caught it when a fees-and-charges page turned up as an article.
+      The Squiz sitemap is plain XML and names all the stories; the path filter
+      keeps section pages out. Same remedy as S&P (see spglobal-latest-news).
+      Changed 31 Aug 2026.
   - slug: sec-victoria
     name: SEC Victoria
     category: Industry Updates

@@ -9,6 +9,7 @@ import {
 import { Card, DatabaseDown, Empty } from '@/components/ui';
 import { DeliveredSheets } from '@/components/DeliveredSheets';
 import { EmailPreview } from '@/components/EmailPreview';
+import { QueuedSheet } from '@/components/QueuedSheet';
 import { SourceReferences } from '@/components/SourceReferences';
 
 /** Next 05:00 Australia/Melbourne, expressed in that zone. */
@@ -92,12 +93,9 @@ const fmtTime = (t: string | null) =>
 
 export interface ReportParams {
   sheet?: string;
-  /** page of the queued preview */ pv?: string;
 }
 
-// Twenty a page. The preview ran to 158 rows in one column, which is a list
-// nobody reads to the end of.
-const PREVIEW_PAGE_SIZE = 20;
+
 
 /** The page body, exported so the merged pipeline page can render it as a tab. */
 export async function ReportsView({
@@ -109,13 +107,7 @@ export async function ReportsView({
   basePath?: string;
   extra?: Record<string, string>;
 } = {}) {
-  const pv = Math.max(1, Number(sp.pv ?? 1) || 1);
-  // One place that builds page links, so the tab and every other param survive.
-  const pageHref = (_key: 'pv', n: number) => {
-    const q = new URLSearchParams({ ...extra });
-    q.set('pv', String(n));
-    return `${basePath}?${q.toString()}`;
-  };
+
 
 
   const [reports, ready, health, refs, preview, delivered] = await Promise.all([
@@ -212,86 +204,10 @@ export async function ReportsView({
         <div className="mb-4">
           <EmailPreview />
         </div>
-        {preview && preview.rows.length > 0 ? (
-            <>
-              <p className="mb-3 text-xs text-ink-400">
-                Covering the {preview.day} publication day. Everything gathered today waits for
-                tomorrow&rsquo;s 05:00 — nothing fetched today is sent today.
-              </p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-ink-700 text-left text-[10px] uppercase tracking-wide text-ink-400">
-                      <th className="px-2 py-2">Score</th>
-                      <th className="px-2 py-2">Article</th>
-                      <th className="px-2 py-2">Section</th>
-                      <th className="px-2 py-2">Written from</th>
-                      <th className="px-2 py-2">Fetched</th>
-                      <th className="px-2 py-2">In the sheet</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {preview.rows.slice((pv - 1) * PREVIEW_PAGE_SIZE, pv * PREVIEW_PAGE_SIZE).map(r => (
-                      <tr key={r.id} className="border-b border-ink-800/60 align-top">
-                        <td className="px-2 py-2 tnum text-ink-300">{r.score ?? '–'}</td>
-                        <td className="max-w-[32rem] px-2 py-2">
-                          <a
-                            href={r.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="font-medium text-brief-a hover:underline"
-                          >
-                            {r.title}
-                          </a>
-                          <div className="text-xs text-ink-500">{r.source_name}</div>
-                        </td>
-                        <td className="px-2 py-2 text-xs text-ink-400">{r.category}</td>
-                        {/* The distinction the sheet itself cannot show: a summary
-                            written from the article, or from a feed teaser. */}
-                        <td className="whitespace-nowrap px-2 py-2 text-xs">
-                          {r.body_chars > 200 ? (
-                            <span className="text-ok">article · {r.body_chars.toLocaleString()} chars</span>
-                          ) : (
-                            <span className="text-warn">teaser only</span>
-                          )}
-                        </td>
-                        <td className="whitespace-nowrap px-2 py-2 text-xs text-ink-400">
-                          {r.fetched_at}
-                        </td>
-                        {/* The same jump the delivered table has, one day
-                            earlier: open tomorrow's rendered sheet with this
-                            article outlined, before anything is sent. */}
-                        <td className="px-2 py-2">
-                          <EmailPreview target={r.url} compact />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              {preview.rows.length > PREVIEW_PAGE_SIZE && (
-                <div className="mt-4 flex items-center gap-2 text-sm">
-                  {pv > 1 && (
-                    <a href={pageHref('pv', pv - 1)} className="rounded border border-ink-700 px-3 py-1 hover:border-brief-a">
-                      ← prev
-                    </a>
-                  )}
-                  <span className="text-ink-400">
-                    page {pv} of {Math.ceil(preview.rows.length / PREVIEW_PAGE_SIZE)} · {preview.rows.length} queued
-                  </span>
-                  {pv < Math.ceil(preview.rows.length / PREVIEW_PAGE_SIZE) && (
-                    <a href={pageHref('pv', pv + 1)} className="rounded border border-ink-700 px-3 py-1 hover:border-brief-a">
-                      next →
-                    </a>
-                  )}
-                </div>
-              )}
-            </>
+        {preview ? (
+          <QueuedSheet rows={preview.rows} day={preview.day} />
         ) : (
-          <Empty>
-            Nothing is queued for the next send yet — articles gathered today appear here as the
-            scorer works through them.
-          </Empty>
+          <Empty>Preview unavailable — the database could not be read.</Empty>
         )}
       </Card>
 
