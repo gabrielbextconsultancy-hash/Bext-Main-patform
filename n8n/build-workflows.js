@@ -1185,6 +1185,14 @@ ranked AS (
     -- tomorrow's 05:00, whatever day the publisher put on it.
     AND (a.fetched_at AT TIME ZONE 'Australia/Melbourne')
           <  w.day_start + interval '1 day'
+    -- Age must be VERIFIED before an article may send. An undated article
+    -- whose page has not been opened yet has an unknown age that defaults to
+    -- "today", and unknown is not new: a October 2025 explainer from The
+    -- Conversation reached the queue exactly this way, with a read body and an
+    -- unread date. 'pending' means unverified, so it waits - the two-day
+    -- reach-back carries it once the date pass has run. Articles whose pages
+    -- genuinely carry no date ('none') have at least been opened and checked.
+    AND NOT (a.published_at IS NULL AND a.date_state = 'pending')
     -- The ledger. An article that already went out in a report that actually
     -- sent is never repeated; one recorded against a report that failed to send
     -- is still owed to the reader, so status is checked rather than presence.

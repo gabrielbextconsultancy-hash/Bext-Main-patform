@@ -54,7 +54,36 @@ function groupRows(rows: DeliveredRow[]): DayGroup[] {
 }
 
 export function DeliveredSheets({ rows }: { rows: DeliveredRow[] }) {
-  const groups = useMemo(() => groupRows(rows), [rows]);
+  // Filters run client-side: every delivered row is already on the page for
+  // the accordion, so filtering is instant and needs no round trip. The list
+  // modal shows the same filtered set flat - the "just show me everything
+  // matching" escape hatch from clicking through accordions.
+  const [q, setQ] = useState('');
+  const [srcF, setSrcF] = useState('');
+  const [secF, setSecF] = useState('');
+  const [dayF, setDayF] = useState('');
+  const [listOpen, setListOpen] = useState(false);
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return rows.filter(r =>
+      (!needle || r.title.toLowerCase().includes(needle)) &&
+      (!srcF || r.source_id === srcF) &&
+      (!secF || r.category === secF) &&
+      (!dayF || r.report_date === dayF)
+    );
+  }, [rows, q, srcF, secF, dayF]);
+
+  const options = useMemo(() => ({
+    sources: [...new Map(rows.map(r => [r.source_id,
+      (r.brief_n ? `#${r.brief_n} · ` : '') + r.source_name])).entries()]
+      .sort((a, b) => a[1].localeCompare(b[1])),
+    sections: [...new Set(rows.map(r => r.category))].sort(),
+    days: [...new Set(rows.map(r => r.report_date))].sort().reverse(),
+  }), [rows]);
+
+  const filtering = !!(q.trim() || srcF || secF || dayF);
+  const groups = useMemo(() => groupRows(filtered), [filtered]);
 
   const [open, setOpen] = useState<string | null>(null);
   const [html, setHtml] = useState<string | null>(null);
@@ -76,7 +105,7 @@ export function DeliveredSheets({ rows }: { rows: DeliveredRow[] }) {
   };
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(null);
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { setOpen(null); setListOpen(false); } };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
@@ -93,17 +122,63 @@ export function DeliveredSheets({ rows }: { rows: DeliveredRow[] }) {
     return () => URL.revokeObjectURL(u);
   }, [marked, target]);
 
-  if (groups.length === 0) {
+  if (rows.length === 0) {
     return <p className="text-sm text-ink-400">Nothing delivered yet.</p>;
   }
 
+  const inputCls =
+    'rounded-md border border-ink-700 bg-ink-900 px-2 py-1.5 text-sm text-ink-100';
+
   return (
     <>
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <input
+          type="search"
+          value={q}
+          onChange={e => setQ(e.target.value)}
+          placeholder="search delivered titles…"
+          className={`w-56 ${inputCls} placeholder:text-ink-500 focus:border-brief-a focus:outline-none`}
+        />
+        <select value={dayF} onChange={e => setDayF(e.target.value)} className={inputCls}>
+          <option value="">every send date</option>
+          {options.days.map(d => <option key={d} value={d}>{d}</option>)}
+        </select>
+        <select value={srcF} onChange={e => setSrcF(e.target.value)} className={`max-w-[20rem] ${inputCls}`}>
+          <option value="">every source</option>
+          {options.sources.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+        </select>
+        <select value={secF} onChange={e => setSecF(e.target.value)} className={inputCls}>
+          <option value="">every section</option>
+          {options.sections.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+        {filtering && (
+          <button
+            onClick={() => { setQ(''); setSrcF(''); setSecF(''); setDayF(''); }}
+            className="text-xs text-ink-400 hover:text-ink-200"
+          >
+            clear
+          </button>
+        )}
+        {/* The flat escape hatch: everything matching, one window, no clicking
+            through day and source levels to find it. */}
+        <button
+          onClick={() => setListOpen(true)}
+          className="ml-auto rounded-md border border-brief-a/40 bg-brief-a/10 px-3 py-1.5 text-sm
+                     font-medium text-brief-a transition hover:bg-brief-a/20"
+        >
+          View all {filtered.length} as a list →
+        </button>
+      </div>
+
+      {groups.length === 0 && (
+        <p className="text-sm text-ink-400">Nothing matches these filters.</p>
+      )}
+
       <div className="space-y-2">
         {groups.map((g, gi) => (
           <details
             key={g.date}
-            open={gi === 0}
+            open={gi === 0 || filtering}
             className="rounded-lg border border-ink-800 bg-ink-850/40"
           >
             <summary className="flex cursor-pointer flex-wrap items-baseline gap-3 px-4 py-3">
@@ -199,6 +274,75 @@ export function DeliveredSheets({ rows }: { rows: DeliveredRow[] }) {
           </details>
         ))}
       </div>
+
+      {listOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setListOpen(false)}
+        >
+          <div
+            className="flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-ink-700 bg-ink-900"
+            onClick={e => e.stopPropagation()}
+          >
+            <header className="flex items-center justify-between border-b border-ink-800 px-5 py-3">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.14em] text-ink-400">Delivered — flat list</p>
+                <p className="text-sm font-semibold text-ink-100">
+                  {filtered.length} article{filtered.length === 1 ? '' : 's'}
+                  {filtering ? ' matching the filters' : ' across every sheet'}
+                </p>
+              </div>
+              <button
+                onClick={() => setListOpen(false)}
+                className="rounded-lg border border-ink-700 px-3 py-1 text-xs text-ink-300 hover:text-ink-100"
+              >
+                Close (Esc)
+              </button>
+            </header>
+            <div className="overflow-y-auto px-4 py-2">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-ink-900">
+                  <tr className="border-b border-ink-700 text-left text-[10px] uppercase tracking-wide text-ink-500">
+                    <th className="px-2 py-2">Score</th>
+                    <th className="px-2 py-2">Article</th>
+                    <th className="px-2 py-2">Source</th>
+                    <th className="px-2 py-2">Section</th>
+                    <th className="px-2 py-2">Sent</th>
+                    <th className="px-2 py-2">In the sheet</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map(r => (
+                    <tr key={`l-${r.report_date}-${r.id}`} className="border-b border-ink-800/50 align-top">
+                      <td className="px-2 py-2 tnum text-ink-300">{r.score ?? '–'}</td>
+                      <td className="max-w-[24rem] px-2 py-2">
+                        <a href={r.url} target="_blank" rel="noreferrer"
+                           className="font-medium text-brief-a hover:underline">
+                          {r.title}
+                        </a>
+                      </td>
+                      <td className="max-w-[12rem] px-2 py-2 text-xs text-ink-400">
+                        {(r.brief_n ? `#${r.brief_n} · ` : '') + r.source_name}
+                      </td>
+                      <td className="whitespace-nowrap px-2 py-2 text-xs text-ink-400">{r.category}</td>
+                      <td className="whitespace-nowrap px-2 py-2 text-xs text-ink-300">{r.report_date}</td>
+                      <td className="px-2 py-2">
+                        <button
+                          onClick={() => { setListOpen(false); load(r.report_date, r.url); }}
+                          className="whitespace-nowrap rounded-md border border-ink-700 px-2.5 py-1 text-xs
+                                     text-ink-200 transition hover:border-brief-a hover:text-brief-a"
+                        >
+                          View in sheet →
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {open && (
         <div
