@@ -1812,8 +1812,16 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
 // The sheet goes out at 05:00 covering the day before, so the heading and the
 // subject line name the day being reported on, not the morning it was sent.
 // Dating it "Saturday" when every item is from Friday reads as a stale report.
-const coverage = new Date(Date.now() - 86400000).toLocaleDateString('en-AU',
-  { weekday:'long', day:'numeric', month:'long', year:'numeric', timeZone:'Australia/Melbourne' });
+// covered_day lets a caller state which day this sheet is FOR. The 05:00 run
+// never sets it and keeps the yesterday default; the dashboard's pre-send
+// preview does, because it renders tomorrow's sheet today and would otherwise
+// head it with the wrong day - it showed "Sunday 30 August" over a queue of
+// Monday's articles.
+const coverage = d.covered_day
+  ? new Date(d.covered_day + 'T12:00:00').toLocaleDateString('en-AU',
+      { weekday:'long', day:'numeric', month:'long', year:'numeric', timeZone:'Australia/Melbourne' })
+  : new Date(Date.now() - 86400000).toLocaleDateString('en-AU',
+      { weekday:'long', day:'numeric', month:'long', year:'numeric', timeZone:'Australia/Melbourne' });
 
 // The date each item carries, in Melbourne time. Where the source published no
 // machine-readable date we show when we picked it up and say so, rather than

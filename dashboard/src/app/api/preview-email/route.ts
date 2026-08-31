@@ -55,8 +55,14 @@ export async function GET() {
     }
     const sections = ORDER.filter(n => byCat.has(n)).map(n => ({ name: n, items: byCat.get(n) }));
 
+    // The day this preview is FOR. Without it the renderer heads the sheet with
+    // "yesterday", which is right at 05:00 and a day out for a preview.
+    const coveredDay = (await query<{ d: string }>(
+      "SELECT date_trunc('day', now() AT TIME ZONE 'Australia/Melbourne')::date::text AS d"))[0]?.d;
+
     const d = {
       sections, empty: false, item_count: rows.length,
+      covered_day: coveredDay,
       sources_monitored: rows[0].sources_monitored,
       audit_tally: rows[0].audit_tally ?? null,
       unscored_in_window: rows[0].unscored_in_window ?? 0,
