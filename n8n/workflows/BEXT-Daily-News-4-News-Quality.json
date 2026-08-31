@@ -401,7 +401,7 @@
       "alwaysOutputData": true,
       "parameters": {
         "operation": "executeQuery",
-        "query": "INSERT INTO day_audits (day, tally, html, updated_at)\nSELECT x.day::date, x.tally::jsonb, x.html, now()\nFROM json_to_recordset($1::json) AS x(day text, tally text, html text)\nON CONFLICT (day) DO UPDATE SET tally = EXCLUDED.tally, html = EXCLUDED.html, updated_at = now()",
+        "query": "INSERT INTO day_audits (day, tally, html, updated_at)\nSELECT x.day::date, x.tally::jsonb, x.html, now()\nFROM json_to_recordset($1::json) AS x(day text, tally text, html text)\nON CONFLICT (day) DO UPDATE SET tally = EXCLUDED.tally, html = EXCLUDED.html, updated_at = now()\n-- The audit is rebuilt three times a day and overwrites itself each time, so a\n-- run that produced nothing - a failed load, a query that returned no rows -\n-- would replace a complete day with an empty one, on the page the client reads.\n-- An empty tally may only land on a day that is already empty; otherwise the\n-- previous build stands and the next pass tries again.\nWHERE (EXCLUDED.tally::jsonb->>'fetched')::int > 0\n   OR coalesce((day_audits.tally->>'fetched')::int, 0) = 0",
         "options": {
           "queryReplacement": "={{ JSON.stringify([{ day: $json.day, tally: $json.tally, html: $json.html }]) }}"
         }

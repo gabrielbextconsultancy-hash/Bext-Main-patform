@@ -1129,8 +1129,22 @@ ranked AS (
   -- on 25 Aug 2026 — sixteen of twenty-six examples were fetched all along.
   WHERE (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')
           >= w.day_start - interval '2 days'
+    -- The day closes at midnight, and the report that goes out at 05:00 covers
+    -- the day BEFORE it — never its own. The bound used to be now(), so the
+    -- 05:00 run swept in whatever had been fetched since midnight and sent it
+    -- the same morning: 38 of the 117 items on 28 Aug, 2 of the 8 on 31 Aug.
+    -- An article fetched at 02:01 today waits for tomorrow's 05:00, which is
+    -- what makes "the 24-hour window" an honest description of the sheet.
     AND (coalesce(a.published_at, a.fetched_at) AT TIME ZONE 'Australia/Melbourne')
-          <  (now() AT TIME ZONE 'Australia/Melbourne')
+          <  w.day_start + interval '1 day'
+    -- And it must have been GATHERED before today began, not merely published
+    -- earlier. The line above bounds the news day; this one bounds the sweep.
+    -- Without it a piece published on the 30th but fetched at 02:01 on the 31st
+    -- still went out at 05:01 that same morning — which is exactly what the
+    -- screenshot showed. Everything collected inside today's 24 hours waits for
+    -- tomorrow's 05:00, whatever day the publisher put on it.
+    AND (a.fetched_at AT TIME ZONE 'Australia/Melbourne')
+          <  w.day_start + interval '1 day'
     -- The ledger. An article that already went out in a report that actually
     -- sent is never repeated; one recorded against a report that failed to send
     -- is still owed to the reader, so status is checked rather than presence.
@@ -3082,7 +3096,14 @@ WHERE a.id = v.id`,
           query: `INSERT INTO day_audits (day, tally, html, updated_at)
 SELECT x.day::date, x.tally::jsonb, x.html, now()
 FROM json_to_recordset($1::json) AS x(day text, tally text, html text)
-ON CONFLICT (day) DO UPDATE SET tally = EXCLUDED.tally, html = EXCLUDED.html, updated_at = now()`,
+ON CONFLICT (day) DO UPDATE SET tally = EXCLUDED.tally, html = EXCLUDED.html, updated_at = now()
+-- The audit is rebuilt three times a day and overwrites itself each time, so a
+-- run that produced nothing - a failed load, a query that returned no rows -
+-- would replace a complete day with an empty one, on the page the client reads.
+-- An empty tally may only land on a day that is already empty; otherwise the
+-- previous build stands and the next pass tries again.
+WHERE (EXCLUDED.tally::jsonb->>'fetched')::int > 0
+   OR coalesce((day_audits.tally->>'fetched')::int, 0) = 0`,
           options: { queryReplacement: '={{ JSON.stringify([{ day: $json.day, tally: $json.tally, html: $json.html }]) }}' },
         },
       },
