@@ -173,18 +173,58 @@ export async function ReportsView({
                 counts everything scored at least 1; the management table's
                 QUEUED then subtracts what the judge held; the Before list adds
                 the reach-back stragglers from the two prior days. */}
-            {/* The gap between Qualifying and the Before list, itemised. Prose
-                saying "they differ by a handful" was true at 3 and a lie at 34;
-                the figures move nightly, so they are computed, not written. */}
-            <p className="mt-2 text-[11px] leading-relaxed text-ink-500">
-              Of the {ready.qualifying} scored ≥1,{' '}
-              <span className="text-amber-300">{ready.held_unverified_age}</span> are waiting for a
-              date to be read from their page and{' '}
-              <span className="text-amber-300">{ready.held_by_judge}</span> were judged reference or
-              off-topic — both refused by the send gate. The Before list is what remains, plus any
-              unsent straggler from the two prior days — {willSend} right now. The date passes
-              clear the first number through the evening, so the two converge by 05:00.
-            </p>
+            {/* A STATIC brief. The four tiles above carry the live figures;
+                this explains what they mean and why two of them differ. Numbers
+                woven into the prose made the explanation itself look like it
+                was changing meaning each time it was read - so the sentences
+                say nothing that could go stale, and the tiles say everything
+                that moves. */}
+            <details className="mt-3">
+              <summary className="cursor-pointer text-[11px] text-ink-400 hover:text-ink-200">
+                what these four numbers mean
+              </summary>
+              <dl className="mt-2 space-y-1.5 text-[11px] leading-relaxed text-ink-500">
+                <div>
+                  <dt className="inline font-semibold text-ink-300">Fetched this day — </dt>
+                  <dd className="inline">
+                    every article gathered for the publication day the next 05:00 send covers.
+                    Gathering is broad on purpose: a listing cannot be judged until it is read.
+                  </dd>
+                </div>
+                <div>
+                  <dt className="inline font-semibold text-ink-300">Analysed — </dt>
+                  <dd className="inline">
+                    how many of those the scorer has read and judged. The scorer runs every
+                    fifteen minutes, so this climbs towards the first number through the day.
+                  </dd>
+                </div>
+                <div>
+                  <dt className="inline font-semibold text-ink-300">Scored ≥1 — </dt>
+                  <dd className="inline">
+                    those with any relevance to energy, building or climate. This is the
+                    scorer&rsquo;s measure of the day, not a send list.
+                  </dd>
+                </div>
+                <div>
+                  <dt className="inline font-semibold text-ink-300">Will send now — </dt>
+                  <dd className="inline">
+                    what would actually be emailed if the send ran this moment: scored, with a
+                    publication date verified from its own page, not judged a reference or
+                    off-topic page, not sent before, and inside the window — plus any article
+                    from the two prior days that has still never gone out.
+                  </dd>
+                </div>
+                <div className="pt-1">
+                  <dt className="inline font-semibold text-ink-300">Why the last two differ — </dt>
+                  <dd className="inline">
+                    almost always articles whose pages have not yet been opened for a
+                    publication date. An unknown age is not treated as new, so they wait. The
+                    date passes run through the evening and the day closes at 23:50, by which
+                    time each has either joined the send or been dated out of it.
+                  </dd>
+                </div>
+              </dl>
+            </details>
             {pulse && (
               <div className="mt-4">
                 <SourcePulseCard pulse={pulse} />
