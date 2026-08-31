@@ -42,6 +42,10 @@ const client = new Client({
     // Firecrawl renders this source's client-side JavaScript. Carried explicitly:
     // the seeder drops unknown keys, which is how feed_url once vanished.
     if (s.firecrawl) config.firecrawl = true;
+    // A publication whose whole output is this industry. Its articles bypass
+    // the score-0 and not-news gates: for a dedicated trade title those gates
+    // can only produce false negatives.
+    if (s.always_relevant) config.always_relevant = true;
     if (s.session_site) config.session_site = s.session_site;
     if (s.filter) config.filter = s.filter;
     if (s.note) config.note = s.note;

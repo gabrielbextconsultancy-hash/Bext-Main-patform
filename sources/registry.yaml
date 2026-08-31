@@ -524,6 +524,11 @@ sources:
     url: "https://reneweconomy.com.au/"
     method: rss
     feed_url: "https://reneweconomy.com.au/feed/"
+    # A dedicated Australian renewables title: its entire output is this
+    # industry. Ninety-nine of its last hundred articles cleared every gate on
+    # merit; the flag makes that a rule rather than the scorer's good opinion,
+    # so an odd column or conference write-up cannot silently drop.
+    always_relevant: true
   - slug: reneweconomy-leitch
     name: RenewEconomy — David Leitch
     category: Industry Updates

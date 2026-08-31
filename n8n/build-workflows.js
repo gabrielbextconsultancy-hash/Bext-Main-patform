@@ -1081,13 +1081,19 @@ ranked AS (
     -- coalesce, because any comparison against NULL is false. Scoring can fail
     -- as a batch — the Gemini daily quota was exhausted on 25 Aug 2026 — and a
     -- null score must rank last, not vanish from the sheet unremarked.
-    AND coalesce(an.relevance_score, 0) >= ${REPORT_EMAIL_MIN}
+    AND (coalesce(s.config->>'always_relevant','') = 'true'
+         OR coalesce(an.relevance_score, 0) >= ${REPORT_EMAIL_MIN})
     -- A standing reference page is not news of any day. "Declared Wholesale Gas
     -- Market (DWGM)", "Integrated System Plan (ISP)" and "IT change and release
     -- management" are real pages about real subjects, they score well, and a
     -- daily briefing that carries them looks broken. Judged once and stored;
     -- anything the model would not commit on stays 'unknown' and still goes out.
-    AND a.content_kind NOT IN ('reference', 'offtopic')
+    -- A dedicated trade title's articles bypass the not-news and score-0 gates:
+    -- for a publication whose whole output is this industry those gates can
+    -- only produce false negatives. The real score is still stored and shown -
+    -- the flag changes what is sent, never what is recorded.
+    AND (coalesce(s.config->>'always_relevant','') = 'true'
+         OR a.content_kind NOT IN ('reference', 'offtopic'))
     -- Website furniture, not news. Opening the page found no publication date
     -- anywhere AND the scorer found nothing relevant in it — failing both tests
     -- at once is what separates "Legal notice and disclaimer", "Subscribe to our
