@@ -108,6 +108,7 @@ export function QueuedSheet({ rows, day }: { rows: PreviewRow[]; day: string }) 
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-ink-700 text-left text-[10px] uppercase tracking-wide text-ink-400">
+              <th className="px-2 py-2">#</th>
               <th className="px-2 py-2">Score</th>
               <th className="px-2 py-2">Article</th>
               <th className="px-2 py-2">Section</th>
@@ -118,15 +119,20 @@ export function QueuedSheet({ rows, day }: { rows: PreviewRow[]; day: string }) 
             </tr>
           </thead>
           <tbody>
-            {shown.map(r => (
+            {shown.map((r, i) => (
               <tr key={r.id} className="border-b border-ink-800/60 align-top">
+                {/* Position in the FILTERED queue, so "article 23" means the
+                    same thing to two people looking at the same filters. */}
+                <td className="px-2 py-2 tnum text-ink-500">{(page - 1) * PAGE + i + 1}</td>
                 <td className="px-2 py-2 tnum text-ink-300">{r.score ?? '–'}</td>
                 <td className="max-w-[28rem] px-2 py-2">
                   <a href={r.url} target="_blank" rel="noreferrer"
                      className="font-medium text-brief-a hover:underline">
                     {r.title}
                   </a>
-                  <div className="text-xs text-ink-500">{r.source_name}</div>
+                  <div className="text-xs text-ink-500">
+                    {r.brief_n ? `#${r.brief_n} · ` : ''}{r.source_name}
+                  </div>
                 </td>
                 <td className="whitespace-nowrap px-2 py-2 text-xs text-ink-400">{r.category}</td>
                 {/* The publisher's own word on when this is from — the column

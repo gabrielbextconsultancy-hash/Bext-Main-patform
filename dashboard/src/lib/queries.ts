@@ -908,6 +908,9 @@ export interface PreviewRow {
   // The publisher's own date where one was read; null means the page was
   // opened and carries none (the unverified never reach this query).
   published_at: string | null;
+  // The brief's numbered link this source answers to, so a queued row can be
+  // checked against the client's own PDF.
+  brief_n: number | null;
 }
 
 const PREVIEW_SQL = `
@@ -920,7 +923,8 @@ const PREVIEW_SQL = `
          an.relevance_score AS score,
          length(coalesce(a.body_text, ''))::int AS body_chars,
          to_char(a.fetched_at AT TIME ZONE 'Australia/Melbourne', 'DD Mon HH24:MI') AS fetched_at,
-         to_char(a.published_at AT TIME ZONE 'Australia/Melbourne', 'DD Mon HH24:MI') AS published_at
+         to_char(a.published_at AT TIME ZONE 'Australia/Melbourne', 'DD Mon HH24:MI') AS published_at,
+         (SELECT min(bl.n) FROM brief_links bl WHERE bl.source_id = s.id) AS brief_n
     FROM articles a
     JOIN sources s ON s.id = a.source_id
     LEFT JOIN article_analysis an ON an.article_id = a.id
