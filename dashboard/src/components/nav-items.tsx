@@ -68,24 +68,14 @@ export const NAV: NavEntry[] = [
     live: true,
     icon: icon(<><path d="M9 11l3 3 8-8" /><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9" /></>),
   },
+  // Sources, Day Audit and Daily Report were three entries and three pages.
+  // They are one question asked at three depths — what we watch, what we
+  // gathered, what goes out — so they are one page with three tabs. The old
+  // routes still resolve; they are simply no longer separate destinations.
   {
-    href: '/sources',
-    label: 'Sources',
-    hint: 'News pipeline & retrieval routes',
-    live: true,
-    icon: icon(<><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18z" /></>),
-  },
-  {
-    href: '/audit',
-    label: 'Day Audit',
-    hint: 'Brief links → every article, sent or why not',
-    live: true,
-    icon: icon(<><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" /><rect x="9" y="3" width="6" height="4" rx="1" /><path d="M9 12l2 2 4-4" /></>),
-  },
-  {
-    href: '/reports',
-    label: 'Daily Report',
-    hint: 'Send results, readiness & references',
+    href: '/pipeline',
+    label: 'News Pipeline',
+    hint: 'Sources, day audit & the 05:00 report',
     live: true,
     icon: icon(<><path d="M4 4h16v16H4z" /><path d="M8 9h8M8 13h8M8 17h5" /></>),
   },

@@ -47,19 +47,35 @@ function melbourne() {
   return { today, nextSend };
 }
 
-function qs(base: Record<string, string | undefined>, patch: Record<string, string | undefined>) {
+function qs(
+  path: string,
+  base: Record<string, string | undefined>,
+  patch: Record<string, string | undefined>,
+) {
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries({ ...base, ...patch })) if (v) p.set(k, v);
   const s = p.toString();
-  return s ? `/audit?${s}` : '/audit';
+  return s ? `${path}?${s}` : path;
 }
 
-export default async function AuditPage({
-  searchParams,
+export interface AuditParams {
+  day?: string; status?: string; src?: string; q?: string; page?: string; t?: string;
+}
+
+/** The page body, exported so the merged pipeline page can render it as a tab
+ *  without this view and that one drifting into two implementations. */
+export async function AuditView({
+  sp,
+  basePath = '/audit',
+  // Params the host page needs kept on every link this view builds — the merged
+  // pipeline page passes its tab here, so filtering or paging does not silently
+  // navigate away from the tab the reader is on.
+  extra = {},
 }: {
-  searchParams: Promise<{ day?: string; status?: string; src?: string; q?: string; page?: string; t?: string }>;
+  sp: AuditParams;
+  basePath?: string;
+  extra?: Record<string, string>;
 }) {
-  const sp = await searchParams;
   const { today, nextSend } = melbourne();
   const day = sp.day ?? today;
   const page = Math.max(1, Number(sp.page ?? 1) || 1);
@@ -76,13 +92,13 @@ export default async function AuditPage({
   ]);
   if (days === null || sources === null) return <DatabaseDown />;
 
-  const base = { day, status: sp.status, src: sp.src, q: sp.q };
+  const base = { ...extra, day, status: sp.status, src: sp.src, q: sp.q };
   const pages = Math.max(1, Math.ceil(result.total / PAGE_SIZE));
 
   const tile = (label: string, n: number, status?: string) => (
     <a
       key={label}
-      href={qs(base, { status, page: undefined })}
+      href={qs(basePath, base, { status, page: undefined })}
       className={`flex-1 rounded-lg border px-3 py-2 ${
         (sp.status ?? '') === (status ?? '')
           ? 'border-brief-a bg-brief-a/10'
@@ -109,7 +125,7 @@ export default async function AuditPage({
           <div className="flex shrink-0 items-center gap-2">
             <span className="text-xs text-ink-400">read at {renderedAt}</span>
             <a
-              href={qs(base, { t: String(Date.now()) })}
+              href={qs(basePath, base, { t: String(Date.now()) })}
               className="rounded-md border border-ink-700 px-3 py-1.5 text-sm text-ink-200
                          hover:border-brief-a hover:text-brief-a"
             >
@@ -122,7 +138,7 @@ export default async function AuditPage({
           {(days ?? []).map((d) => (
             <a
               key={d.day}
-              href={qs({ ...base, status: undefined, src: undefined, q: undefined }, { day: d.day, page: undefined })}
+              href={qs(basePath, { ...base, status: undefined, src: undefined, q: undefined }, { day: d.day, page: undefined })}
               className={`rounded-full border px-3 py-1 text-xs ${
                 d.day === day
                   ? 'border-brief-a bg-brief-a/10 text-brief-a'
@@ -144,8 +160,11 @@ export default async function AuditPage({
         </div>
 
         {/* Search + source filter. A plain GET form: no client code to break. */}
-        <form method="get" action="/audit" className="mt-4 flex flex-wrap items-center gap-2">
+        <form method="get" action={basePath} className="mt-4 flex flex-wrap items-center gap-2">
           <input type="hidden" name="day" value={day} />
+          {Object.entries(extra).map(([k, v]) => (
+            <input key={k} type="hidden" name={k} value={v} />
+          ))}
           {sp.status ? <input type="hidden" name="status" value={sp.status} /> : null}
           <input
             type="search"
@@ -174,7 +193,7 @@ export default async function AuditPage({
             Filter
           </button>
           {(sp.q || sp.src || sp.status) && (
-            <a href={qs({ day }, {})} className="text-xs text-ink-400 hover:text-ink-200">
+            <a href={qs(basePath, { ...extra, day }, {})} className="text-xs text-ink-400 hover:text-ink-200">
               clear filters
             </a>
           )}
@@ -243,13 +262,13 @@ export default async function AuditPage({
         {pages > 1 && (
           <div className="mt-4 flex items-center gap-2 text-sm">
             {page > 1 && (
-              <a href={qs(base, { page: String(page - 1) })} className="rounded border border-ink-700 px-3 py-1 hover:border-brief-a">
+              <a href={qs(basePath, base, { page: String(page - 1) })} className="rounded border border-ink-700 px-3 py-1 hover:border-brief-a">
                 ← prev
               </a>
             )}
             <span className="text-ink-400">page {page} of {pages}</span>
             {page < pages && (
-              <a href={qs(base, { page: String(page + 1) })} className="rounded border border-ink-700 px-3 py-1 hover:border-brief-a">
+              <a href={qs(basePath, base, { page: String(page + 1) })} className="rounded border border-ink-700 px-3 py-1 hover:border-brief-a">
                 next →
               </a>
             )}
@@ -258,4 +277,14 @@ export default async function AuditPage({
       </Card>
     </div>
   );
+}
+
+/** The standalone /audit route. The merged pipeline page renders AuditView
+ *  directly, so both entry points share one implementation. */
+export default async function AuditPage({
+  searchParams,
+}: {
+  searchParams: Promise<AuditParams>;
+}) {
+  return <AuditView sp={await searchParams} />;
 }

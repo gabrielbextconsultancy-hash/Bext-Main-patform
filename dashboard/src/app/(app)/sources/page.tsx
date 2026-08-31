@@ -11,7 +11,8 @@ const STATUS_STYLE: Record<string, string> = {
   never_run: 'text-ink-400',
 };
 
-export default async function Sources() {
+/** The page body, exported so the merged pipeline page can render it as a tab. */
+export async function SourcesView() {
   const [sources, summary, tiers] = await Promise.all([
     getSources(),
     getSourceSummary(),
@@ -208,4 +209,10 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: 'ba
       <p className="mt-0.5 text-[11px] uppercase tracking-wider text-ink-400">{label}</p>
     </div>
   );
+}
+
+
+/** The standalone /sources route. */
+export default async function Sources() {
+  return <SourcesView />;
 }

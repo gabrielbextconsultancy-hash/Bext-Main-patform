@@ -108,12 +108,23 @@ function groupByDate(rows: SentArticle[]): [string, SentArticle[]][] {
   return [...byDate];
 }
 
-export default async function ReportsPage({
-  searchParams,
+export interface ReportParams { sheet?: string }
+
+/** The page body, exported so the merged pipeline page can render it as a tab. */
+export async function ReportsView({
+  sp,
+  basePath = '/reports',
+  extra = {},
 }: {
-  searchParams: Promise<{ sheet?: string }>;
+  sp: ReportParams;
+  basePath?: string;
+  extra?: Record<string, string>;
 }) {
-  const sp = await searchParams;
+  // One place that builds the toggle links, so the host page's params survive.
+  const sheetLink = (v: string) => {
+    const p = new URLSearchParams({ ...extra, sheet: v });
+    return `${basePath}?${p.toString()}`;
+  };
   // Default to the preview: what is about to go out is the thing worth checking
   // before 05:00. The delivered archive is one click away and never changes.
   const before = (sp.sheet ?? 'before') !== 'after';
@@ -216,7 +227,7 @@ export default async function ReportsPage({
       >
         <div className="mb-4 inline-flex rounded-lg border border-ink-700 p-0.5">
           <a
-            href="/reports?sheet=before"
+            href={sheetLink('before')}
             className={`rounded-md px-3 py-1.5 text-sm ${
               before ? 'bg-ink-750 font-semibold text-ink-100' : 'text-ink-400 hover:text-ink-200'
             }`}
@@ -224,7 +235,7 @@ export default async function ReportsPage({
             Before — goes out tomorrow
           </a>
           <a
-            href="/reports?sheet=after"
+            href={sheetLink('after')}
             className={`rounded-md px-3 py-1.5 text-sm ${
               !before ? 'bg-ink-750 font-semibold text-ink-100' : 'text-ink-400 hover:text-ink-200'
             }`}
@@ -471,4 +482,14 @@ function Stat({
       <p className="mt-0.5 text-[11px] uppercase tracking-wider text-ink-400">{label}</p>
     </div>
   );
+}
+
+
+/** The standalone /reports route. */
+export default async function ReportsPage({
+  searchParams,
+}: {
+  searchParams: Promise<ReportParams>;
+}) {
+  return <ReportsView sp={await searchParams} />;
 }
