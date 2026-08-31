@@ -45,6 +45,13 @@ Memory is the constraint that bites here: 8 GB, two clients. Ollama already carr
 because memory pressure once took SSH and BOTH n8n instances down. Kuma is capped at 256m for the
 same reason — the monitor must never cause the outage it is watching for.
 The dashboard reads Postgres directly from server components, so **new data appears without a deploy**.
+Code changes do need one: it deploys from `.github/workflows/deploy.yml` on push to `main`.
+
+The **fetcher** (`http://fetcher:8080` inside the network, `127.0.0.1:8080` through the tunnel) is
+on the daily critical path in two ways beyond retrieval: `/pdf` renders the fetch-audit report the
+05:00 run stores for every publication day, and `/render-docx` renders meeting minutes. A fetcher
+outage does not lose the audit — the run stores the HTML alone and the dashboard marks that day
+`(html)` — but it does mean no PDF for that morning.
 
 ---
 
