@@ -46,7 +46,7 @@ export interface ArchitectureGraph {
 }
 
 export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
-  "generatedAt": "2026-08-31T03:58:04.183Z",
+  "generatedAt": "2026-08-31T04:05:58.259Z",
   "workflowCount": 15,
   "edgeCount": 53,
   "workflows": [
@@ -1056,8 +1056,62 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
           "alwaysOutputData": false
         },
         {
+          "id": "n1",
+          "name": "note-n1",
+          "type": "n8n-nodes-base.stickyNote",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "n2",
+          "name": "note-n2",
+          "type": "n8n-nodes-base.stickyNote",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "n3",
+          "name": "note-n3",
+          "type": "n8n-nodes-base.stickyNote",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "n4",
+          "name": "note-n4",
+          "type": "n8n-nodes-base.stickyNote",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "n5",
+          "name": "note-n5",
+          "type": "n8n-nodes-base.stickyNote",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "n6",
+          "name": "note-n6",
+          "type": "n8n-nodes-base.stickyNote",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
           "id": "reviewmodel",
-          "name": "Gemini 3.6 Flash",
+          "name": "Gemini 3.7 Flash",
           "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
           "actor": "ai",
           "reads": [],

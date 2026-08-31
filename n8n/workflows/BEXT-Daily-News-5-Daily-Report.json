@@ -6,12 +6,108 @@
   },
   "nodes": [
     {
+      "id": "n1",
+      "name": "note-n1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        -360
+      ],
+      "parameters": {
+        "content": "## 1 · Gather\nRuns 05:00 Melbourne, never UTC — hardcoding +10 makes this drift an hour when DST starts.\n\n**Top articles** takes the window `day_start - 2 days` to now, minus everything already in the `report_items` ledger. That two-day reach-back is why an article fetched yesterday can send today: nothing is lost for crossing midnight, and nothing sends twice.\n\nFour gates decide inclusion — scored 1 or better, not a reference or off-topic page, not site furniture, not older than 14 days. RenewEconomy is exempt: it always qualifies.",
+        "width": 700,
+        "height": 300,
+        "color": 4
+      }
+    },
+    {
+      "id": "n2",
+      "name": "note-n2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        700,
+        -360
+      ],
+      "parameters": {
+        "content": "## 2 · Assemble\n**Hermes** writes the intro locally (~7.5 tokens/sec), so a cloud outage cannot stop the send.\n\n**Check deliverability** confirms the Graph token and mailbox before anything expensive runs.\n\n**Fetch article images** is hard-capped: an odd day must not stall 05:00. It writes images down one branch and passes the sheet along the other.",
+        "width": 700,
+        "height": 300,
+        "color": 4
+      }
+    },
+    {
+      "id": "n3",
+      "name": "note-n3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1420,
+        -360
+      ],
+      "parameters": {
+        "content": "## 3 · The ledger\n**Record items sent** writes `report_items` BEFORE the send, not after.\n\nThat ordering is deliberate. A crash between here and Graph costs one duplicate at worst; writing afterwards would risk sending the same article twice on every retry, which the client sees and the ledger cannot undo.",
+        "width": 460,
+        "height": 300,
+        "color": 5
+      }
+    },
+    {
+      "id": "n4",
+      "name": "note-n4",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1900,
+        -360
+      ],
+      "parameters": {
+        "content": "## 4 · Review — the only gate that can stop a send\n**Gemini 3.7 Flash** reads the summaries and answers in JSON. It ADVISES ONLY. A model refusing to send at 05:00, with nobody awake to overrule it, is worse than a clumsy sentence going out.\n\n**Validate before send** owns the decision, on facts alone: summaries missing across a third of the sheet, encoding artefacts, double-escaped entities in the text, or fewer distinct summaries than items — the signature of a scoring batch that failed identically.\n\nIt FAILS OPEN. No key, spent quota, unreachable endpoint: the sheet still goes, carrying \"reviewer did not answer\". Only an explicit false holds it.",
+        "width": 700,
+        "height": 300,
+        "color": 3
+      }
+    },
+    {
+      "id": "n5",
+      "name": "note-n5",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2380,
+        -360
+      ],
+      "parameters": {
+        "content": "## 5 · Send, and prove it\nSent through Microsoft Graph, not SMTP.\n\nA **held** report stays `rendered`, so its articles are NOT marked sent and tomorrow's window carries them forward intact — a hold delays the news, it never loses it.\n\n**Heartbeat** is the last node on the success path. Kuma alarms on this ping NOT arriving, which is the only thing that distinguishes \"n8n is up\" from \"the report actually went out\". The 28 Aug send died silently and was found ten hours later by a person; this is why.",
+        "width": 980,
+        "height": 300,
+        "color": 6
+      }
+    },
+    {
+      "id": "n6",
+      "name": "note-n6",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2380,
+        460
+      ],
+      "parameters": {
+        "content": "### Checking it by hand\n`node graph/preview-report.js --date YYYY-MM-DD` renders a day without sending.\n\n`node n8n/validate-replay.js --verbose` replays the validator over reports already sent — preflight R036 fails the build if any would now be held.",
+        "width": 500,
+        "height": 180,
+        "color": 7
+      }
+    },
+    {
       "id": "trigger",
       "name": "Daily 05:00 AEST",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [
-        -400,
+        -260,
         0
       ],
       "parameters": {
@@ -31,7 +127,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        -180,
+        0,
         0
       ],
       "credentials": {
@@ -52,7 +148,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        60,
+        240,
         0
       ],
       "parameters": {
@@ -67,8 +163,8 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        170,
-        180
+        480,
+        0
       ],
       "parameters": {
         "mode": "runOnceForAllItems",
@@ -82,7 +178,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        140,
+        720,
         0
       ],
       "parameters": {
@@ -97,8 +193,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        140,
-        200
+        960,
+        240
       ],
       "credentials": {
         "postgres": {
@@ -120,7 +216,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        280,
+        960,
         0
       ],
       "parameters": {
@@ -135,7 +231,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        500,
+        1200,
         0
       ],
       "credentials": {
@@ -158,8 +254,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        520,
-        180
+        1440,
+        0
       ],
       "credentials": {
         "postgres": {
@@ -181,7 +277,7 @@
       "type": "@n8n/n8n-nodes-langchain.chainLlm",
       "typeVersion": 1.9,
       "position": [
-        610,
+        1680,
         0
       ],
       "onError": "continueRegularOutput",
@@ -193,12 +289,12 @@
     },
     {
       "id": "reviewmodel",
-      "name": "Gemini 3.6 Flash",
+      "name": "Gemini 3.7 Flash",
       "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
       "typeVersion": 1,
       "position": [
-        610,
-        180
+        1680,
+        260
       ],
       "credentials": {
         "googlePalmApi": {
@@ -207,7 +303,7 @@
         }
       },
       "parameters": {
-        "modelName": "models/gemini-3.6-flash",
+        "modelName": "models/gemini-3.7-flash",
         "options": {
           "temperature": 0.1
         }
@@ -219,7 +315,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        700,
+        1920,
         0
       ],
       "onError": "continueRegularOutput",
@@ -234,7 +330,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        790,
+        2160,
         0
       ],
       "parameters": {
@@ -264,8 +360,8 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        880,
-        180
+        2400,
+        260
       ],
       "credentials": {
         "postgres": {
@@ -288,7 +384,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        720,
+        2400,
         0
       ],
       "parameters": {
@@ -301,7 +397,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        940,
+        2640,
         0
       ],
       "credentials": {
@@ -324,7 +420,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        1160,
+        2880,
         0
       ],
       "credentials": {
@@ -348,7 +444,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
-        1400,
+        3120,
         0
       ],
       "onError": "continueRegularOutput",
@@ -478,7 +574,7 @@
         ]
       ]
     },
-    "Gemini 3.6 Flash": {
+    "Gemini 3.7 Flash": {
       "ai_languageModel": [
         [
           {

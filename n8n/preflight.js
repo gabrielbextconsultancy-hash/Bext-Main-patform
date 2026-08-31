@@ -793,6 +793,37 @@ check('R036', 'pre-send validator passes every report already sent', () => {
   }
 });
 
+// ── R037 ─ every connection must name a node that exists ──────────────
+// Renaming "Gemini 3.6 Flash" to "Gemini 3.7 Flash" changed the node and left
+// the connections keyed by the old name. n8n refused the deploy - "Connection
+// source does not reference an existing node" - but every local check passed
+// first, so the build reported success while the live workflow silently stayed
+// on the previous version. A rename that half-lands is worse than one that
+// fails, because nothing says so.
+//
+// Connections name nodes as strings, in both directions, so a rename can break
+// either end. This walks every workflow and asserts both.
+check('R037', 'no connection names a node that does not exist', () => {
+  const bad = [];
+  for (const f of fs.readdirSync(path.join(ROOT, 'n8n/workflows')).filter(f => f.endsWith('.json'))) {
+    const wf = JSON.parse(read(`n8n/workflows/${f}`));
+    const names = new Set((wf.nodes || []).map(n => n.name));
+    for (const [source, outputs] of Object.entries(wf.connections || {})) {
+      if (!names.has(source)) bad.push(`${wf.name}: source "${source}"`);
+      for (const groups of Object.values(outputs)) {
+        for (const group of groups || []) {
+          for (const link of group || []) {
+            if (!names.has(link.node)) bad.push(`${wf.name}: target "${link.node}" from "${source}"`);
+          }
+        }
+      }
+    }
+  }
+  return bad.length
+    ? { ok: false, detail: bad.slice(0, 4).join('; ') + (bad.length > 4 ? ` (+${bad.length - 4} more)` : '') }
+    : { ok: true, detail: 'every wire lands on a real node' };
+});
+
 // ── report ──────────────────────────────────────────────────────────────────
 const failed = results.filter(r => !r.ok);
 if (JSON_OUT) {

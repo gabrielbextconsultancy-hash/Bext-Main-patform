@@ -162,6 +162,15 @@ const LI_LIB = [
 
 const pos = (x, y) => [x, y];
 
+// A sticky note on the canvas. Unconnected, so it carries no data, cannot fail,
+// and is never reached by walkExecutionOrder — it costs the run nothing and
+// tells the next person what the wiring alone cannot.
+const note = (id, x, y, width, height, color, content) => ({
+  id, name: 'note-' + id, type: 'n8n-nodes-base.stickyNote', typeVersion: 1,
+  position: pos(x, y),
+  parameters: { content, width, height, color },
+});
+
 // ─── Heartbeat ───────────────────────────────────────────────────────────────
 //
 // The last node on a workflow's success path, and the only thing that can tell
@@ -1334,22 +1343,70 @@ function dailyReportWorkflow() {
     name: 'BEXT Daily News — 5 Daily Report',
     settings: { executionOrder: 'v1', timezone: 'Australia/Melbourne' },
     nodes: [
+      // ── notes on the canvas ────────────────────────────────────────────
+      // Unconnected by design: they carry no data and cannot fail. They are
+      // here because the shape of this workflow encodes decisions that are
+      // expensive to rediscover — which step is allowed to stop a send, why an
+      // article sent today was fetched yesterday, and what a held report does
+      // to tomorrow's window.
+      note('n1', -280, -360, 700, 300, 4,
+        '## 1 · Gather\n'
+        + 'Runs 05:00 Melbourne, never UTC — hardcoding +10 makes this drift an hour when DST starts.\n\n'
+        + '**Top articles** takes the window `day_start - 2 days` to now, minus everything already in the '
+        + '`report_items` ledger. That two-day reach-back is why an article fetched yesterday can send today: '
+        + 'nothing is lost for crossing midnight, and nothing sends twice.\n\n'
+        + 'Four gates decide inclusion — scored 1 or better, not a reference or off-topic page, not site '
+        + 'furniture, not older than 14 days. RenewEconomy is exempt: it always qualifies.'),
+      note('n2', 700, -360, 700, 300, 4,
+        '## 2 · Assemble\n'
+        + '**Hermes** writes the intro locally (~7.5 tokens/sec), so a cloud outage cannot stop the send.\n\n'
+        + '**Check deliverability** confirms the Graph token and mailbox before anything expensive runs.\n\n'
+        + '**Fetch article images** is hard-capped: an odd day must not stall 05:00. It writes images down '
+        + 'one branch and passes the sheet along the other.'),
+      note('n3', 1420, -360, 460, 300, 5,
+        '## 3 · The ledger\n'
+        + '**Record items sent** writes `report_items` BEFORE the send, not after.\n\n'
+        + 'That ordering is deliberate. A crash between here and Graph costs one duplicate at worst; '
+        + 'writing afterwards would risk sending the same article twice on every retry, which the client '
+        + 'sees and the ledger cannot undo.'),
+      note('n4', 1900, -360, 700, 300, 3,
+        '## 4 · Review — the only gate that can stop a send\n'
+        + '**Gemini 3.7 Flash** reads the summaries and answers in JSON. It ADVISES ONLY. A model refusing '
+        + 'to send at 05:00, with nobody awake to overrule it, is worse than a clumsy sentence going out.\n\n'
+        + '**Validate before send** owns the decision, on facts alone: summaries missing across a third of '
+        + 'the sheet, encoding artefacts, double-escaped entities in the text, or fewer distinct summaries '
+        + 'than items — the signature of a scoring batch that failed identically.\n\n'
+        + 'It FAILS OPEN. No key, spent quota, unreachable endpoint: the sheet still goes, carrying '
+        + '"reviewer did not answer". Only an explicit false holds it.'),
+      note('n5', 2380, -360, 980, 300, 6,
+        '## 5 · Send, and prove it\n'
+        + 'Sent through Microsoft Graph, not SMTP.\n\n'
+        + 'A **held** report stays `rendered`, so its articles are NOT marked sent and tomorrow\'s window '
+        + 'carries them forward intact — a hold delays the news, it never loses it.\n\n'
+        + '**Heartbeat** is the last node on the success path. Kuma alarms on this ping NOT arriving, which '
+        + 'is the only thing that distinguishes "n8n is up" from "the report actually went out". The 28 Aug '
+        + 'send died silently and was found ten hours later by a person; this is why.'),
+      note('n6', 2380, 460, 500, 180, 7,
+        '### Checking it by hand\n'
+        + '`node graph/preview-report.js --date YYYY-MM-DD` renders a day without sending.\n\n'
+        + '`node n8n/validate-replay.js --verbose` replays the validator over reports already sent — '
+        + 'preflight R036 fails the build if any would now be held.'),
       {
         id: 'trigger', name: 'Daily 05:00 AEST', type: 'n8n-nodes-base.scheduleTrigger',
-        typeVersion: 1.2, position: pos(-400, 0),
+        typeVersion: 1.2, position: pos(-260, 0),
         // Expressed in Australia/Melbourne (workflow timezone), so it follows DST
         // rather than drifting an hour when daylight saving starts.
         parameters: { rule: { interval: [{ field: 'cronExpression', expression: '0 5 * * *' }] } },
       },
       {
         id: 'pull', name: 'Top articles, prior day', type: 'n8n-nodes-base.postgres',
-        typeVersion: 2.5, position: pos(-180, 0),
+        typeVersion: 2.5, position: pos(0, 0),
         credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
         parameters: { operation: 'executeQuery', query: REPORT_SELECT, options: {} },
       },
       {
         id: 'brief', name: 'Hermes writes the brief', type: 'n8n-nodes-base.code',
-        typeVersion: 2, position: pos(60, 0),
+        typeVersion: 2, position: pos(240, 0),
         parameters: {
           mode: 'runOnceForAllItems', language: 'javaScript',
           jsCode: `
@@ -1415,7 +1472,7 @@ return [{ json: { empty: false, item_count: rows.length, sections, intro,
       },
       {
         id: 'deliv', name: 'Check deliverability', type: 'n8n-nodes-base.code',
-        typeVersion: 2, position: pos(170, 180),
+        typeVersion: 2, position: pos(480, 0),
         parameters: {
           mode: 'runOnceForAllItems', language: 'javaScript',
           jsCode: `
@@ -1500,7 +1557,7 @@ return [{ json: Object.assign({}, $input.first().json, {
       },
       {
         id: 'images', name: 'Fetch article images', type: 'n8n-nodes-base.code',
-        typeVersion: 2, position: pos(140, 0),
+        typeVersion: 2, position: pos(720, 0),
         parameters: {
           mode: 'runOnceForAllItems', language: 'javaScript',
           jsCode: `
@@ -1572,7 +1629,7 @@ return [{ json: Object.assign({}, d, {
       },
       {
         id: 'saveimages', name: 'Save article images', type: 'n8n-nodes-base.postgres',
-        typeVersion: 2.5, position: pos(140, 200),
+        typeVersion: 2.5, position: pos(960, 240),
         credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
         parameters: {
           operation: 'executeQuery',
@@ -1588,7 +1645,7 @@ WHERE a.url = v.url`,
       },
       {
         id: 'render', name: 'Render HTML', type: 'n8n-nodes-base.code',
-        typeVersion: 2, position: pos(280, 0),
+        typeVersion: 2, position: pos(960, 0),
         parameters: {
           mode: 'runOnceForAllItems', language: 'javaScript',
           jsCode: `
@@ -1827,7 +1884,7 @@ return [{ json: { html, text, items, subject: 'BEXT Industry Daily — ' + cover
       },
       {
         id: 'save', name: 'Save report', type: 'n8n-nodes-base.postgres',
-        typeVersion: 2.5, position: pos(500, 0),
+        typeVersion: 2.5, position: pos(1200, 0),
         credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
         parameters: {
           operation: 'executeQuery',
@@ -1856,7 +1913,7 @@ ON CONFLICT (report_date) DO UPDATE SET
       },
       {
         id: 'items', name: 'Record items sent', type: 'n8n-nodes-base.postgres',
-        typeVersion: 2.5, position: pos(520, 180),
+        typeVersion: 2.5, position: pos(1440, 0),
         credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
         parameters: {
           operation: 'executeQuery',
@@ -1883,7 +1940,7 @@ ON CONFLICT (report_id, article_id) DO NOTHING`,
         // health row, never the client's report.
         id: 'review', name: 'Gemini reviews the sheet',
         type: '@n8n/n8n-nodes-langchain.chainLlm', typeVersion: 1.9,
-        position: pos(610, 0),
+        position: pos(1680, 0),
         onError: 'continueRegularOutput',
         alwaysOutputData: true,
         parameters: { promptType: 'define', text: REVIEW_PROMPT },
@@ -1891,18 +1948,18 @@ ON CONFLICT (report_id, article_id) DO NOTHING`,
       {
         // The model behind it, wired in as a sub-node so the credential lives in
         // n8n's store and the model is swappable without touching this build.
-        id: 'reviewmodel', name: 'Gemini 3.6 Flash',
+        id: 'reviewmodel', name: 'Gemini 3.7 Flash',
         type: '@n8n/n8n-nodes-langchain.lmChatGoogleGemini', typeVersion: 1,
-        position: pos(610, 180),
+        position: pos(1680, 260),
         credentials: { googlePalmApi: { id: GEMINI_CRED, name: 'BEXT Gemini' } },
         parameters: {
-          modelName: 'models/gemini-3.6-flash',
+          modelName: 'models/gemini-3.7-flash',
           options: { temperature: 0.1 },
         },
       },
       {
         id: 'validate', name: 'Validate before send', type: 'n8n-nodes-base.code',
-        typeVersion: 2, position: pos(700, 0),
+        typeVersion: 2, position: pos(1920, 0),
         // A validator that crashes must not be able to stop the sheet, so its
         // own failure is an output, not an exception.
         onError: 'continueRegularOutput',
@@ -1911,7 +1968,7 @@ ON CONFLICT (report_id, article_id) DO NOTHING`,
       },
       {
         id: 'gate', name: 'Fit to send', type: 'n8n-nodes-base.if',
-        typeVersion: 2, position: pos(790, 0),
+        typeVersion: 2, position: pos(2160, 0),
         parameters: {
           conditions: {
             options: { caseSensitive: true, version: 2 },
@@ -1928,7 +1985,7 @@ ON CONFLICT (report_id, article_id) DO NOTHING`,
       },
       {
         id: 'held', name: 'Record held report', type: 'n8n-nodes-base.postgres',
-        typeVersion: 2.5, position: pos(880, 180),
+        typeVersion: 2.5, position: pos(2400, 260),
         credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
         alwaysOutputData: true,
         parameters: {
@@ -1950,7 +2007,7 @@ VALUES ('daily_report', 'degraded'::health_status, $1)`,
         // mailbox instead, which Microsoft signs, so it authenticates for both
         // recipients: Gmail and the bextconsultancy.com.au mailbox.
         id: 'send', name: 'Send via Graph', type: 'n8n-nodes-base.code',
-        typeVersion: 2, position: pos(720, 0),
+        typeVersion: 2, position: pos(2400, 0),
         parameters: {
           jsCode: `
 // The sandbox withholds the url globals; an unrequired URLSearchParams would
@@ -2025,7 +2082,7 @@ return [{ json: {
       },
       {
         id: 'mark', name: 'Mark sent', type: 'n8n-nodes-base.postgres',
-        typeVersion: 2.5, position: pos(940, 0),
+        typeVersion: 2.5, position: pos(2640, 0),
         credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
         parameters: {
           operation: 'executeQuery',
@@ -2036,7 +2093,7 @@ WHERE report_date = $1::date`,
       },
       {
         id: 'health', name: 'Record result', type: 'n8n-nodes-base.postgres',
-        typeVersion: 2.5, position: pos(1160, 0),
+        typeVersion: 2.5, position: pos(2880, 0),
         credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
         parameters: {
           operation: 'executeQuery',
@@ -2065,7 +2122,7 @@ VALUES ('daily_report', 'up', $1)`,
       'Gemini reviews the sheet': { main: [[{ node: 'Validate before send', type: 'main', index: 0 }]] },
       // A sub-node connection, not a step: the model hangs off the reviewer
       // rather than sitting in the chain, which is why it has no main wire.
-      'Gemini 3.6 Flash': {
+      'Gemini 3.7 Flash': {
         ai_languageModel: [[{ node: 'Gemini reviews the sheet', type: 'ai_languageModel', index: 0 }]],
       },
       'Validate before send': { main: [[{ node: 'Fit to send', type: 'main', index: 0 }]] },

@@ -633,3 +633,22 @@ if any would have been held. And escapes that must survive two levels of quoting
 do not belong in inlined code: test characters against a list
 (`['.', '!', '?', ...].indexOf(b.slice(-1))`), which cannot be mangled. That is
 R001 wearing different clothes.
+
+## R037 — a rename that half-landed
+
+Renaming the model node from "Gemini 3.6 Flash" to "Gemini 3.7 Flash" changed
+the node and left `connections` keyed by the old name. n8n refused the deploy —
+*Connection source "Gemini 3.6 Flash" does not reference an existing node* — but
+every local check had already passed, so the build printed no failure and the
+live workflow quietly stayed on the previous version. The repo said 3.7; the
+instance was still running 3.6. A rename that half-lands is worse than one that
+fails outright, because nothing announces it.
+
+Connections reference nodes by string, at both ends, so a rename can break the
+source key or a target. Preflight R037 walks every workflow and asserts both
+resolve to a node that exists. It is a three-line class of bug and it will recur
+every time a node is renamed, which is why it is a check and not a lesson.
+
+Related: when a deploy fails, the exported JSON has already been written. The
+repo is then ahead of the instance, and `git status` looks clean. Read the
+deploy output, not the file.
