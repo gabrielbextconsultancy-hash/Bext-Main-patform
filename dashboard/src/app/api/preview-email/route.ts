@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import fs from 'fs';
-import path from 'path';
 import { SESSION_COOKIE, verifySession } from '@/lib/auth';
 import { query } from '@/lib/db';
+import { REPORT_SELECT_SQL, REPORT_RENDER_CODE } from '@/lib/report-template.generated';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,10 +25,11 @@ export async function GET() {
   }
 
   try {
-    const wfPath = path.join(process.cwd(), '..', 'n8n', 'workflows', 'BEXT-Daily-News-5-Daily-Report.json');
-    const wf = JSON.parse(fs.readFileSync(wfPath, 'utf8'));
-    const selectSql: string = wf.nodes.find((n: { name: string }) => n.name === 'Top articles, prior day').parameters.query;
-    const renderCode: string = wf.nodes.find((n: { name: string }) => n.name === 'Render HTML').parameters.jsCode;
+    // Bundled at build time by n8n/build-architecture.js, because production
+    // runs the dashboard with no n8n/ directory beside it: the filesystem read
+    // this replaced returned ENOENT the first time the button was clicked live.
+    const selectSql: string = REPORT_SELECT_SQL;
+    const renderCode: string = REPORT_RENDER_CODE;
 
     // The deployed window covers yesterday (day_start = today - 1). The preview
     // covers today, which is what tomorrow's send will carry.

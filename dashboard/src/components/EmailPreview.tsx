@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { HIGHLIGHT_ID, markArticle } from './sheet-mark';
 
 /**
  * Tomorrow's sheet, as an email, before it is sent.
@@ -10,7 +11,15 @@ import { useEffect, useState } from 'react';
  * nothing in an article title can execute. The banner is part of the fetched
  * document's intro, so the preview can never be mistaken for a delivered sheet.
  */
-export function EmailPreview() {
+export function EmailPreview({
+  // When set, the preview opens scrolled to this article with it outlined —
+  // the same marking the delivered viewer applies, from the same module.
+  target,
+  compact = false,
+}: {
+  target?: string;
+  compact?: boolean;
+} = {}) {
   const [open, setOpen] = useState(false);
   const [html, setHtml] = useState<string | null>(null);
   const [count, setCount] = useState<number | null>(null);
@@ -38,15 +47,40 @@ export function EmailPreview() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  const marked = useMemo(
+    () => (html && target ? markArticle(html, target) : html),
+    [html, target]
+  );
+
+  // Blob URL for the same reason as the delivered viewer: srcDoc has no URL and
+  // so no fragment to scroll to — and charset is not optional on a blob.
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    if (!marked) { setSrc(null); return; }
+    const u = URL.createObjectURL(new Blob([marked], { type: 'text/html;charset=utf-8' }));
+    setSrc(target ? `${u}#${HIGHLIGHT_ID}` : u);
+    return () => URL.revokeObjectURL(u);
+  }, [marked, target]);
+
   return (
     <>
-      <button
-        onClick={load}
-        className="rounded-md border border-brief-a/40 bg-brief-a/10 px-3 py-1.5 text-sm font-medium
-                   text-brief-a transition hover:bg-brief-a/20"
-      >
-        Preview the email →
-      </button>
+      {compact ? (
+        <button
+          onClick={load}
+          className="whitespace-nowrap rounded-md border border-ink-700 px-2.5 py-1 text-xs
+                     text-ink-200 transition hover:border-brief-a hover:text-brief-a"
+        >
+          View in sheet →
+        </button>
+      ) : (
+        <button
+          onClick={load}
+          className="rounded-md border border-brief-a/40 bg-brief-a/10 px-3 py-1.5 text-sm font-medium
+                     text-brief-a transition hover:bg-brief-a/20"
+        >
+          Preview the email →
+        </button>
+      )}
 
       {open && (
         <div
@@ -78,10 +112,10 @@ export function EmailPreview() {
             <div className="flex-1 overflow-hidden bg-white">
               {error ? (
                 <p className="p-6 text-sm text-blocked">{error}</p>
-              ) : html === null ? (
+              ) : src === null ? (
                 <p className="p-6 text-sm text-ink-600">Rendering the sheet from live data…</p>
               ) : (
-                <iframe title="Email preview" srcDoc={html} sandbox="" className="h-full w-full border-0" />
+                <iframe title="Email preview" src={src} sandbox="" className="h-full w-full border-0" />
               )}
             </div>
           </div>

@@ -231,6 +231,7 @@ export async function ReportsView({
                       <th className="px-2 py-2">Section</th>
                       <th className="px-2 py-2">Written from</th>
                       <th className="px-2 py-2">Fetched</th>
+                      <th className="px-2 py-2">In the sheet</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -260,6 +261,12 @@ export async function ReportsView({
                         </td>
                         <td className="whitespace-nowrap px-2 py-2 text-xs text-ink-400">
                           {r.fetched_at}
+                        </td>
+                        {/* The same jump the delivered table has, one day
+                            earlier: open tomorrow's rendered sheet with this
+                            article outlined, before anything is sent. */}
+                        <td className="px-2 py-2">
+                          <EmailPreview target={r.url} compact />
                         </td>
                       </tr>
                     ))}
