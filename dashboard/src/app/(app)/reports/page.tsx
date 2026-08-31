@@ -137,7 +137,7 @@ export async function ReportsView({
   const willSend = preview?.rows.length ?? 0;
   const gate = ready
     ? willSend > 0
-      ? { pass: true, msg: `${willSend} articles would be emailed right now, across ${ready.categories} sections.` }
+      ? { pass: true, msg: `${willSend} articles are ready for the next 05:00 send, across ${ready.categories} sections.` }
       : ready.analysed_24h === 0
         ? { pass: false, msg: 'Nothing analysed in the last 24 hours — the analysis workflow has not scored new articles, so the report would be empty.' }
         : ready.qualifying > 0
@@ -163,7 +163,7 @@ export async function ReportsView({
                   be read as the second. */}
               <Stat label="Scored ≥1" value={ready.qualifying} />
               <Stat
-                label="Will send now"
+                label="Will send at 05:00"
                 value={willSend}
                 tone={willSend > 0 ? 'good' : 'bad'}
               />
@@ -206,9 +206,11 @@ export async function ReportsView({
                   </dd>
                 </div>
                 <div>
-                  <dt className="inline font-semibold text-ink-300">Will send now — </dt>
+                  <dt className="inline font-semibold text-ink-300">Will send at 05:00 — </dt>
                   <dd className="inline">
-                    what would actually be emailed if the send ran this moment: scored, with a
+                    what the next morning&rsquo;s send would carry as things stand. Nothing leaves
+                    before 05:00 Melbourne; this is the queue as it is right now, and it keeps
+                    changing until the day closes. To qualify an article must be scored, with a
                     publication date verified from its own page, not judged a reference or
                     off-topic page, not sent before, and inside the window — plus any article
                     from the two prior days that has still never gone out.
