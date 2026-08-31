@@ -40,14 +40,18 @@ function loadValidator() {
   const wf = JSON.parse(fs.readFileSync(WF, 'utf8'));
   const node = (wf.nodes || []).find(n => n.name === 'Validate before send');
   if (!node) throw new Error('the Daily Report has no "Validate before send" node');
-  // The node reads its input through $('Render HTML').first().json. Point that
-  // at a local stub holding the report as it was actually sent, and the rest of
-  // the node runs unaltered — which is the whole point of replaying it.
-  const body = node.parameters.jsCode.replace(
-    /\$\('Render HTML'\)\.first\(\)\.json/g,
-    '__rendered',
-  );
-  return new AsyncFn('$env', '__rendered', body);
+  // The node reads the sheet through $('Render HTML') and the reviewer's answer
+  // through $('Gemini reviews the sheet'). Point both at local stubs and the
+  // rest of the node runs unaltered — which is the whole point of replaying it.
+  //
+  // The reviewer stub answers nothing, so the model half reports "unavailable"
+  // and only the deterministic rules run. That is deliberate: those rules are
+  // the only ones with the authority to hold a send, so they are the only ones
+  // that need this guarantee, and the replay stays offline and repeatable.
+  const body = node.parameters.jsCode
+    .replace(/\$\('Render HTML'\)\.first\(\)\.json/g, '__rendered')
+    .replace(/\$\('Gemini reviews the sheet'\)\.first\(\)\.json/g, '__review');
+  return new AsyncFn('$env', '__rendered', '__review', body);
 }
 
 (async () => {
@@ -80,19 +84,22 @@ function loadValidator() {
 
   const blocked = [];
   for (const r of rows) {
-    // The blurb each item carried, reconstructed the way Render HTML builds it.
+    // The blurb the report actually carried, read from the ledger rather than
+    // rebuilt from article_analysis. Rebuilding was wrong: requeueing articles
+    // for rescoring deletes their analysis rows, and the replay then judged a
+    // sent report against text it never contained — it reported 2026-08-28 as
+    // "52% of items have no usable summary" minutes after a backfill requeued
+    // 88 articles. A check on history must read history.
     const it = await c.query(`
-      SELECT coalesce(an.summary, a.summary_raw, '') AS blurb, a.title
+      SELECT coalesce(ri.blurb, '') AS blurb, a.title
       FROM report_items ri
       JOIN articles a ON a.id = ri.article_id
-      LEFT JOIN article_analysis an ON an.article_id = a.id
       WHERE ri.report_id = $1`, [r.id]);
 
     const day = r.report_date.toISOString().slice(0, 10);
     let out;
     try {
-      // Empty $env withholds the API key, so the model half is skipped.
-      out = (await run({}, { items: it.rows, html: r.html || '' }))[0].json;
+      out = (await run({}, { items: it.rows, html: r.html || '' }, {}))[0].json;
     } catch (e) {
       console.log(`FAIL validator threw on ${day}: ${String(e.message).slice(0, 140)}`);
       await c.end();

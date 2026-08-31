@@ -22,6 +22,10 @@ const WEBHOOK_CRED = process.env.N8N_WEBHOOK_CREDENTIAL_ID;
 // IMAP credential for the newsletter mailbox — tier 0. Absent, that workflow is
 // not deployed at all; see the note where it is skipped.
 const IMAP_CRED = process.env.N8N_IMAP_CREDENTIAL_ID;
+// The Gemini credential behind the pre-send reviewer. Held in n8n's credential
+// store rather than passed as a key in code, which is what makes the reviewer a
+// node on the canvas instead of an HTTP call hidden inside one.
+const GEMINI_CRED = process.env.N8N_GEMINI_CREDENTIAL_ID;
 const TAG = 'BEXT Consultancy';
 
 // The workflows that between them produce the 05:00 sheet, in the order they
@@ -1198,6 +1202,25 @@ ORDER BY category, relevance_score DESC, shown_at DESC`;
 // happened on 25 Aug - the sheet still goes, carrying a note that it went
 // unvalidated. A validator that can silence the report is a validator that
 // eventually will.
+// What the reviewer is asked. Built with String.fromCharCode(10) rather than
+// escapes because this is an n8n expression inside a JS string inside a JSON
+// file, and a newline that has to survive three levels of quoting will not.
+const REVIEW_PROMPT = [
+  '=You are checking an industry news brief before it is emailed to a client in the',
+  'Australian energy and building sector. Below are summaries from the sheet.',
+  '',
+  'Answer ONLY with JSON: {"ok": true or false, "issues": ["..."]}',
+  '',
+  'Report an issue only for something a reader would notice as broken: text that is',
+  'garbled or truncated, summaries that say nothing about their article, obvious',
+  'duplication, or wording that is not English prose. Do not comment on newsworthiness,',
+  'relevance or editorial choice - those are decided elsewhere. If the sheet reads',
+  'normally, answer {"ok": true, "issues": []}.',
+  '',
+  'SUMMARIES:',
+  "{{ $('Render HTML').first().json.items.slice(0, 25).map((i, n) => (n + 1) + '. ' + String(i.blurb || '(no summary)').slice(0, 220)).join(String.fromCharCode(10)) }}",
+].join('\n');
+
 const VALIDATE_CODE = `
 const d = $('Render HTML').first().json;
 const items = d.items || [];
@@ -1262,45 +1285,34 @@ if (items.length && truncated.length / items.length > 0.4) {
 }
 
 // --- judgement, which only advises --------------------------------------
+// The reviewer is its own node on the canvas now, so its prompt and its answer
+// are visible in the execution and a failed review is its own red node rather
+// than a silent branch inside this one. It is wired to continue on error, so an
+// outage or a spent quota arrives here as an empty reply, not an exception.
+//
+// Read without a regex on purpose: this source is inlined into a Code node
+// through a template literal, which eats backslashes - the fault behind R036.
 let verdict = 'not run';
-const key = $env.GEMINI_API_KEY;
-if (key && items.length) {
-  try {
-    const sample = items.slice(0, 25).map(function (i, n) {
-      return (n + 1) + '. ' + String(i.blurb || '(no summary)').slice(0, 220);
-    }).join(String.fromCharCode(10));
-    const prompt = 'You are checking an industry news brief before it is emailed to a client in the '
-      + 'Australian energy and building sector. Below are summaries from the sheet.'
-      + String.fromCharCode(10) + String.fromCharCode(10)
-      + 'Answer ONLY with JSON: {"ok": true or false, "issues": ["..."]}'
-      + String.fromCharCode(10)
-      + 'Report an issue only for something a reader would notice as broken: text that is '
-      + 'garbled or truncated, summaries that say nothing about their article, obvious '
-      + 'duplication, or wording that is not English prose. Do not comment on newsworthiness, '
-      + 'relevance or editorial choice - those are decided elsewhere. If the sheet reads '
-      + 'normally, answer {"ok": true, "issues": []}.'
-      + String.fromCharCode(10) + String.fromCharCode(10) + 'SUMMARIES:' + String.fromCharCode(10) + sample;
+let reply = '';
+try { reply = String($('Gemini reviews the sheet').first().json.text || ''); } catch (e) { reply = ''; }
 
-    const r = await this.helpers.httpRequest({
-      method: 'POST',
-      url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=' + key,
-      json: true, timeout: 60000,
-      headers: { 'Content-Type': 'application/json' },
-      body: {
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.1, responseMimeType: 'application/json' },
-      },
-    });
-    const text = (((r || {}).candidates || [])[0] || {}).content
-      ? r.candidates[0].content.parts[0].text : '';
-    const parsed = JSON.parse(text);
+if (!reply) {
+  verdict = 'unavailable';
+  notes.push('reviewer did not answer');
+} else {
+  const open = reply.indexOf('{');
+  const close = reply.lastIndexOf('}');
+  try {
+    const parsed = JSON.parse(reply.slice(open, close + 1));
     verdict = parsed.ok ? 'clean' : 'flagged';
     if (!parsed.ok && Array.isArray(parsed.issues)) {
       parsed.issues.slice(0, 4).forEach(function (i) { notes.push('reviewer: ' + String(i).slice(0, 140)); });
     }
   } catch (e) {
-    verdict = 'unavailable';
-    notes.push('reviewer did not run: ' + String(e.message || e).slice(0, 80));
+    // A model that answered in prose said something, but nothing this can act
+    // on. It is recorded and ignored - it must never hold the sheet.
+    verdict = 'unreadable';
+    notes.push('reviewer did not answer in JSON');
   }
 }
 
@@ -1864,8 +1876,33 @@ ON CONFLICT (report_id, article_id) DO NOTHING`,
         },
       },
       {
+        // The reviewer, as a node. It reads the sheet's summaries and answers in
+        // JSON; it has no authority of its own, because "Validate before send"
+        // decides what its answer is worth. Continue-on-error is the whole
+        // safety property: Gemini being down at 05:00 must cost a note in the
+        // health row, never the client's report.
+        id: 'review', name: 'Gemini reviews the sheet',
+        type: '@n8n/n8n-nodes-langchain.chainLlm', typeVersion: 1.9,
+        position: pos(610, 0),
+        onError: 'continueRegularOutput',
+        alwaysOutputData: true,
+        parameters: { promptType: 'define', text: REVIEW_PROMPT },
+      },
+      {
+        // The model behind it, wired in as a sub-node so the credential lives in
+        // n8n's store and the model is swappable without touching this build.
+        id: 'reviewmodel', name: 'Gemini 3.6 Flash',
+        type: '@n8n/n8n-nodes-langchain.lmChatGoogleGemini', typeVersion: 1,
+        position: pos(610, 180),
+        credentials: { googlePalmApi: { id: GEMINI_CRED, name: 'BEXT Gemini' } },
+        parameters: {
+          modelName: 'models/gemini-3.6-flash',
+          options: { temperature: 0.1 },
+        },
+      },
+      {
         id: 'validate', name: 'Validate before send', type: 'n8n-nodes-base.code',
-        typeVersion: 2, position: pos(610, 0),
+        typeVersion: 2, position: pos(700, 0),
         // A validator that crashes must not be able to stop the sheet, so its
         // own failure is an output, not an exception.
         onError: 'continueRegularOutput',
@@ -1874,7 +1911,7 @@ ON CONFLICT (report_id, article_id) DO NOTHING`,
       },
       {
         id: 'gate', name: 'Fit to send', type: 'n8n-nodes-base.if',
-        typeVersion: 2, position: pos(665, 0),
+        typeVersion: 2, position: pos(790, 0),
         parameters: {
           conditions: {
             options: { caseSensitive: true, version: 2 },
@@ -1891,7 +1928,7 @@ ON CONFLICT (report_id, article_id) DO NOTHING`,
       },
       {
         id: 'held', name: 'Record held report', type: 'n8n-nodes-base.postgres',
-        typeVersion: 2.5, position: pos(720, 180),
+        typeVersion: 2.5, position: pos(880, 180),
         credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
         alwaysOutputData: true,
         parameters: {
@@ -2024,7 +2061,13 @@ VALUES ('daily_report', 'up', $1)`,
       },
       'Render HTML': { main: [[{ node: 'Save report', type: 'main', index: 0 }]] },
       'Save report': { main: [[{ node: 'Record items sent', type: 'main', index: 0 }]] },
-      'Record items sent': { main: [[{ node: 'Validate before send', type: 'main', index: 0 }]] },
+      'Record items sent': { main: [[{ node: 'Gemini reviews the sheet', type: 'main', index: 0 }]] },
+      'Gemini reviews the sheet': { main: [[{ node: 'Validate before send', type: 'main', index: 0 }]] },
+      // A sub-node connection, not a step: the model hangs off the reviewer
+      // rather than sitting in the chain, which is why it has no main wire.
+      'Gemini 3.6 Flash': {
+        ai_languageModel: [[{ node: 'Gemini reviews the sheet', type: 'ai_languageModel', index: 0 }]],
+      },
       'Validate before send': { main: [[{ node: 'Fit to send', type: 'main', index: 0 }]] },
       'Fit to send': {
         main: [

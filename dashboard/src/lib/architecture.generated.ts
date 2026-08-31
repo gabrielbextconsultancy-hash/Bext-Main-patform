@@ -46,7 +46,7 @@ export interface ArchitectureGraph {
 }
 
 export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
-  "generatedAt": "2026-08-31T03:37:31.738Z",
+  "generatedAt": "2026-08-31T03:58:04.183Z",
   "workflowCount": 15,
   "edgeCount": 53,
   "workflows": [
@@ -978,10 +978,19 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
           "alwaysOutputData": false
         },
         {
+          "id": "review",
+          "name": "Gemini reviews the sheet",
+          "type": "@n8n/n8n-nodes-langchain.chainLlm",
+          "actor": "ai",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": true
+        },
+        {
           "id": "validate",
           "name": "Validate before send",
           "type": "n8n-nodes-base.code",
-          "actor": "ai",
+          "actor": "system",
           "reads": [],
           "writes": [],
           "alwaysOutputData": true
@@ -1042,6 +1051,15 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
           "name": "Heartbeat",
           "type": "n8n-nodes-base.httpRequest",
           "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "reviewmodel",
+          "name": "Gemini 3.6 Flash",
+          "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+          "actor": "ai",
           "reads": [],
           "writes": [],
           "alwaysOutputData": false

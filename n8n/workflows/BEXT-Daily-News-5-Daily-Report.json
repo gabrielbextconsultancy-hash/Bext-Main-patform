@@ -176,10 +176,10 @@
       }
     },
     {
-      "id": "validate",
-      "name": "Validate before send",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "id": "review",
+      "name": "Gemini reviews the sheet",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
       "position": [
         610,
         0
@@ -187,7 +187,45 @@
       "onError": "continueRegularOutput",
       "alwaysOutputData": true,
       "parameters": {
-        "jsCode": "\nconst d = $('Render HTML').first().json;\nconst items = d.items || [];\nconst html = d.html || '';\n\nconst problems = [];\nconst notes = [];\n\n// What the reader actually sees. Checking the raw HTML instead tests the markup,\n// and markup legitimately carries what prose never would: publisher image URLs\n// arrive already containing &amp;, and escaping those for an attribute yields\n// &amp;amp; inside a src the browser still resolves. Replayed against the five\n// reports to 30 Aug, testing raw HTML would have blocked three - every match a\n// crop parameter in an image URL, none of it text a client reads. A gate that\n// stops a good report is worse than the flaw it was watching for.\nconst text = html.replace(/<[^>]*>/g, ' ');\n\n// --- facts, which may stop the send -------------------------------------\nconst empty = items.filter(function (i) { return !i.blurb || String(i.blurb).trim().length < 25; });\nif (items.length && empty.length / items.length > 0.3) {\n  problems.push(Math.round(empty.length / items.length * 100) + '% of items have no usable summary');\n}\n\n// Mojibake: UTF-8 read as Latin-1 leaves these signatures behind, and they are\n// the tell that an encoding step was skipped somewhere upstream.\nconst mojibake = (text.match(/Ã¢â‚¬|Ã¢|â€œ|â€|Ã©|Â»|Ã¯Â¿Â½|�/g) || []).length;\nif (mojibake > 5) problems.push(mojibake + ' encoding artefacts in the sheet text');\n\n// Entities that escaped twice read as literal text to the client.\nconst doubled = (text.match(/&amp;(amp|lt|gt|quot|#39);/g) || []).length;\nif (doubled > 3) problems.push(doubled + ' double-escaped HTML entities in the text');\n\n// The same fault inside markup is cosmetic, so it is reported and not enforced:\n// visible in the health row, unable to hold the sheet.\nconst doubledAttr = (html.match(/&amp;(amp|lt|gt|quot|#39);/g) || []).length - doubled;\nif (doubledAttr > 3) notes.push(doubledAttr + ' double-escaped entities in image URLs');\n\n// One failure mode of a broken scoring batch is every summary coming back the\n// same. Distinct summaries should roughly equal item count.\nconst distinct = {};\nitems.forEach(function (i) { distinct[String(i.blurb || '').slice(0, 80)] = 1; });\nconst distinctCount = Object.keys(distinct).length;\nif (items.length > 8 && distinctCount < items.length * 0.6) {\n  problems.push('only ' + distinctCount + ' distinct summaries across ' + items.length + ' items');\n}\n\n// A summary cut mid-word is the signature of a truncated model reply.\n//\n// Tested by character rather than by regex on purpose. This code is inlined into\n// a Code node through a template literal, and a literal eats the backslash in a\n// class like [.!?] - the class then closes at the first ] and the test matches\n// only text ending in a bracket, which read as \"100% truncated\" on all twelve\n// reports replayed. Escapes that must survive two levels of quoting are how\n// R001 happened; a plain list of characters cannot be mangled.\nconst ENDINGS = ['.', '!', '?', String.fromCharCode(34), String.fromCharCode(39), ')', ']'];\nconst truncated = items.filter(function (i) {\n  const b = String(i.blurb || '').trim();\n  return b.length > 40 && ENDINGS.indexOf(b.slice(-1)) === -1;\n});\nif (items.length && truncated.length / items.length > 0.4) {\n  notes.push(truncated.length + ' summaries end mid-sentence');\n}\n\n// --- judgement, which only advises --------------------------------------\nlet verdict = 'not run';\nconst key = $env.GEMINI_API_KEY;\nif (key && items.length) {\n  try {\n    const sample = items.slice(0, 25).map(function (i, n) {\n      return (n + 1) + '. ' + String(i.blurb || '(no summary)').slice(0, 220);\n    }).join(String.fromCharCode(10));\n    const prompt = 'You are checking an industry news brief before it is emailed to a client in the '\n      + 'Australian energy and building sector. Below are summaries from the sheet.'\n      + String.fromCharCode(10) + String.fromCharCode(10)\n      + 'Answer ONLY with JSON: {\"ok\": true or false, \"issues\": [\"...\"]}'\n      + String.fromCharCode(10)\n      + 'Report an issue only for something a reader would notice as broken: text that is '\n      + 'garbled or truncated, summaries that say nothing about their article, obvious '\n      + 'duplication, or wording that is not English prose. Do not comment on newsworthiness, '\n      + 'relevance or editorial choice - those are decided elsewhere. If the sheet reads '\n      + 'normally, answer {\"ok\": true, \"issues\": []}.'\n      + String.fromCharCode(10) + String.fromCharCode(10) + 'SUMMARIES:' + String.fromCharCode(10) + sample;\n\n    const r = await this.helpers.httpRequest({\n      method: 'POST',\n      url: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=' + key,\n      json: true, timeout: 60000,\n      headers: { 'Content-Type': 'application/json' },\n      body: {\n        contents: [{ parts: [{ text: prompt }] }],\n        generationConfig: { temperature: 0.1, responseMimeType: 'application/json' },\n      },\n    });\n    const text = (((r || {}).candidates || [])[0] || {}).content\n      ? r.candidates[0].content.parts[0].text : '';\n    const parsed = JSON.parse(text);\n    verdict = parsed.ok ? 'clean' : 'flagged';\n    if (!parsed.ok && Array.isArray(parsed.issues)) {\n      parsed.issues.slice(0, 4).forEach(function (i) { notes.push('reviewer: ' + String(i).slice(0, 140)); });\n    }\n  } catch (e) {\n    verdict = 'unavailable';\n    notes.push('reviewer did not run: ' + String(e.message || e).slice(0, 80));\n  }\n}\n\nconst blocked = problems.length > 0;\nconst summary = blocked\n  ? 'BLOCKED - ' + problems.join('; ')\n  : 'passed (' + verdict + ')' + (notes.length ? ' - ' + notes.join('; ') : '');\n\nreturn [{ json: {\n  validation_ok: !blocked,\n  validation_detail: summary.slice(0, 900),\n  validation_verdict: verdict,\n  item_count: items.length,\n} }];\n"
+        "promptType": "define",
+        "text": "=You are checking an industry news brief before it is emailed to a client in the\nAustralian energy and building sector. Below are summaries from the sheet.\n\nAnswer ONLY with JSON: {\"ok\": true or false, \"issues\": [\"...\"]}\n\nReport an issue only for something a reader would notice as broken: text that is\ngarbled or truncated, summaries that say nothing about their article, obvious\nduplication, or wording that is not English prose. Do not comment on newsworthiness,\nrelevance or editorial choice - those are decided elsewhere. If the sheet reads\nnormally, answer {\"ok\": true, \"issues\": []}.\n\nSUMMARIES:\n{{ $('Render HTML').first().json.items.slice(0, 25).map((i, n) => (n + 1) + '. ' + String(i.blurb || '(no summary)').slice(0, 220)).join(String.fromCharCode(10)) }}"
+      }
+    },
+    {
+      "id": "reviewmodel",
+      "name": "Gemini 3.6 Flash",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        610,
+        180
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": "vm3uHrpjgqbLQ532",
+          "name": "BEXT Gemini"
+        }
+      },
+      "parameters": {
+        "modelName": "models/gemini-3.6-flash",
+        "options": {
+          "temperature": 0.1
+        }
+      }
+    },
+    {
+      "id": "validate",
+      "name": "Validate before send",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "alwaysOutputData": true,
+      "parameters": {
+        "jsCode": "\nconst d = $('Render HTML').first().json;\nconst items = d.items || [];\nconst html = d.html || '';\n\nconst problems = [];\nconst notes = [];\n\n// What the reader actually sees. Checking the raw HTML instead tests the markup,\n// and markup legitimately carries what prose never would: publisher image URLs\n// arrive already containing &amp;, and escaping those for an attribute yields\n// &amp;amp; inside a src the browser still resolves. Replayed against the five\n// reports to 30 Aug, testing raw HTML would have blocked three - every match a\n// crop parameter in an image URL, none of it text a client reads. A gate that\n// stops a good report is worse than the flaw it was watching for.\nconst text = html.replace(/<[^>]*>/g, ' ');\n\n// --- facts, which may stop the send -------------------------------------\nconst empty = items.filter(function (i) { return !i.blurb || String(i.blurb).trim().length < 25; });\nif (items.length && empty.length / items.length > 0.3) {\n  problems.push(Math.round(empty.length / items.length * 100) + '% of items have no usable summary');\n}\n\n// Mojibake: UTF-8 read as Latin-1 leaves these signatures behind, and they are\n// the tell that an encoding step was skipped somewhere upstream.\nconst mojibake = (text.match(/Ã¢â‚¬|Ã¢|â€œ|â€|Ã©|Â»|Ã¯Â¿Â½|�/g) || []).length;\nif (mojibake > 5) problems.push(mojibake + ' encoding artefacts in the sheet text');\n\n// Entities that escaped twice read as literal text to the client.\nconst doubled = (text.match(/&amp;(amp|lt|gt|quot|#39);/g) || []).length;\nif (doubled > 3) problems.push(doubled + ' double-escaped HTML entities in the text');\n\n// The same fault inside markup is cosmetic, so it is reported and not enforced:\n// visible in the health row, unable to hold the sheet.\nconst doubledAttr = (html.match(/&amp;(amp|lt|gt|quot|#39);/g) || []).length - doubled;\nif (doubledAttr > 3) notes.push(doubledAttr + ' double-escaped entities in image URLs');\n\n// One failure mode of a broken scoring batch is every summary coming back the\n// same. Distinct summaries should roughly equal item count.\nconst distinct = {};\nitems.forEach(function (i) { distinct[String(i.blurb || '').slice(0, 80)] = 1; });\nconst distinctCount = Object.keys(distinct).length;\nif (items.length > 8 && distinctCount < items.length * 0.6) {\n  problems.push('only ' + distinctCount + ' distinct summaries across ' + items.length + ' items');\n}\n\n// A summary cut mid-word is the signature of a truncated model reply.\n//\n// Tested by character rather than by regex on purpose. This code is inlined into\n// a Code node through a template literal, and a literal eats the backslash in a\n// class like [.!?] - the class then closes at the first ] and the test matches\n// only text ending in a bracket, which read as \"100% truncated\" on all twelve\n// reports replayed. Escapes that must survive two levels of quoting are how\n// R001 happened; a plain list of characters cannot be mangled.\nconst ENDINGS = ['.', '!', '?', String.fromCharCode(34), String.fromCharCode(39), ')', ']'];\nconst truncated = items.filter(function (i) {\n  const b = String(i.blurb || '').trim();\n  return b.length > 40 && ENDINGS.indexOf(b.slice(-1)) === -1;\n});\nif (items.length && truncated.length / items.length > 0.4) {\n  notes.push(truncated.length + ' summaries end mid-sentence');\n}\n\n// --- judgement, which only advises --------------------------------------\n// The reviewer is its own node on the canvas now, so its prompt and its answer\n// are visible in the execution and a failed review is its own red node rather\n// than a silent branch inside this one. It is wired to continue on error, so an\n// outage or a spent quota arrives here as an empty reply, not an exception.\n//\n// Read without a regex on purpose: this source is inlined into a Code node\n// through a template literal, which eats backslashes - the fault behind R036.\nlet verdict = 'not run';\nlet reply = '';\ntry { reply = String($('Gemini reviews the sheet').first().json.text || ''); } catch (e) { reply = ''; }\n\nif (!reply) {\n  verdict = 'unavailable';\n  notes.push('reviewer did not answer');\n} else {\n  const open = reply.indexOf('{');\n  const close = reply.lastIndexOf('}');\n  try {\n    const parsed = JSON.parse(reply.slice(open, close + 1));\n    verdict = parsed.ok ? 'clean' : 'flagged';\n    if (!parsed.ok && Array.isArray(parsed.issues)) {\n      parsed.issues.slice(0, 4).forEach(function (i) { notes.push('reviewer: ' + String(i).slice(0, 140)); });\n    }\n  } catch (e) {\n    // A model that answered in prose said something, but nothing this can act\n    // on. It is recorded and ignored - it must never hold the sheet.\n    verdict = 'unreadable';\n    notes.push('reviewer did not answer in JSON');\n  }\n}\n\nconst blocked = problems.length > 0;\nconst summary = blocked\n  ? 'BLOCKED - ' + problems.join('; ')\n  : 'passed (' + verdict + ')' + (notes.length ? ' - ' + notes.join('; ') : '');\n\nreturn [{ json: {\n  validation_ok: !blocked,\n  validation_detail: summary.slice(0, 900),\n  validation_verdict: verdict,\n  item_count: items.length,\n} }];\n"
       }
     },
     {
@@ -196,7 +234,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
-        665,
+        790,
         0
       ],
       "parameters": {
@@ -226,7 +264,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.5,
       "position": [
-        720,
+        880,
         180
       ],
       "credentials": {
@@ -422,8 +460,30 @@
       "main": [
         [
           {
+            "node": "Gemini reviews the sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini reviews the sheet": {
+      "main": [
+        [
+          {
             "node": "Validate before send",
             "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini 3.6 Flash": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Gemini reviews the sheet",
+            "type": "ai_languageModel",
             "index": 0
           }
         ]
