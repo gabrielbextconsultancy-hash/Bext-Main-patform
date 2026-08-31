@@ -1987,6 +1987,10 @@ const lastHit = {};
 const hostOf = (u) => { try { return new URL(u).host; } catch (e) { return u; } };
 
 const updates = [];
+// Discovered articles, capped for the run. Depth one only: what a discovered
+// article links to is not followed in turn, so this cannot walk an archive.
+const discovered = [];
+const DISCOVERY_CAP = 80;
 const queue = rows.slice(0, 250);
 let idx = 0;
 
@@ -2019,6 +2023,18 @@ const worker = async () => {
         // the client's summaries, from that scrap.
         body = extractBody(r.html || '');
         bodyState = body ? 'found' : 'none';
+        // What this article points at on the same publication. A feed shows
+        // what the publisher pushed in its window; an article shows what the
+        // publisher thinks belongs beside it - which is how the stories a
+        // listing has already rolled past are still reached.
+        var rel = relatedLinks(r.html || '', a.url, { limit: 5 });
+        for (var ri = 0; ri < rel.length; ri++) {
+          discovered.push({
+            url: rel[ri].url, title: rel[ri].title,
+            source_id: Number(a.source_id),
+            content_hash: contentHash({ title: rel[ri].title, summary_raw: null }),
+          });
+        }
       }
     } catch (e) {
       state = 'blocked';
@@ -2042,14 +2058,25 @@ const blocked = updates.filter(u => u.date_state === 'blocked').length;
 const bodies = updates.filter(u => u.body_state === 'found').length;
 const rescore = updates.filter(u => u.rescore).length;
 
+// Unique by URL, then capped: one busy page can link the same story twice.
+const seenUrl = {};
+const newArticles = discovered.filter(function (d) {
+  if (!d.url || seenUrl[d.url]) return false;
+  seenUrl[d.url] = true;
+  return true;
+}).slice(0, DISCOVERY_CAP);
+
 return [{ json: {
   date_updates: JSON.stringify(updates),
+  discovered: JSON.stringify(newArticles),
+  discovered_count: newArticles.length,
   rescore_ids: JSON.stringify(updates.filter(u => u.rescore).map(u => u.id)),
   considered: queue.length,
   resolved: found,
   blocked: blocked,
   bodies: bodies,
   detail: 'dated ' + found + ', bodies ' + bodies + ', rescore ' + rescore
+    + ', discovered ' + newArticles.length
     + ', blocked ' + blocked + ', of ' + queue.length + ' opened',
 } }];
 `;
@@ -2302,7 +2329,7 @@ function newsQualityWorkflow() {
         alwaysOutputData: true,
         parameters: {
           operation: 'executeQuery',
-          query: `SELECT a.id, a.url,
+          query: `SELECT a.id, a.url, a.source_id,
        (a.published_at IS NULL) AS needs_date,
        (a.body_state = 'pending' OR a.body_state = 'blocked') AS needs_body,
        (an.article_id IS NOT NULL) AS already_scored
@@ -2506,6 +2533,26 @@ WHERE NOT EXISTS (
         parameters: { jsCode: DOCTOR_PAGE_CODE },
       },
       {
+        id: 'discover', name: 'Store discovered articles', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(340, 320),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          // A discovered article enters exactly like a fetched one: no date and
+          // no body yet, so the next pass reads both from its page and every
+          // downstream gate applies. ON CONFLICT means a story already known
+          // from the feed is left alone rather than duplicated.
+          query: `INSERT INTO articles (source_id, url, title, content_hash)
+SELECT x.source_id, x.url, x.title, x.content_hash
+FROM json_to_recordset($1::json)
+  AS x(source_id int, url text, title text, content_hash text)
+WHERE x.url IS NOT NULL AND x.content_hash IS NOT NULL AND x.source_id IS NOT NULL
+ON CONFLICT (url) DO NOTHING`,
+          options: { queryReplacement: '={{ $json.discovered }}' },
+        },
+      },
+      {
         id: 'rescore', name: 'Requeue rescored articles', type: 'n8n-nodes-base.postgres',
         typeVersion: 2.5, position: pos(340, 160),
         credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
@@ -2583,7 +2630,8 @@ ON CONFLICT (day) DO UPDATE SET tally = EXCLUDED.tally, html = EXCLUDED.html, up
       'Three times daily AEST': { main: [[{ node: 'Articles missing a date', type: 'main', index: 0 }]] },
       'Articles missing a date': { main: [[{ node: 'Read publish dates', type: 'main', index: 0 }]] },
       'Read publish dates': { main: [[{ node: 'Save publish dates', type: 'main', index: 0 }]] },
-      'Save publish dates': { main: [[{ node: 'Requeue rescored articles', type: 'main', index: 0 }]] },
+      'Save publish dates': { main: [[{ node: 'Store discovered articles', type: 'main', index: 0 }]] },
+      'Store discovered articles': { main: [[{ node: 'Requeue rescored articles', type: 'main', index: 0 }]] },
       'Requeue rescored articles': { main: [[{ node: 'Undated pages to judge', type: 'main', index: 0 }]] },
       'Undated pages to judge': { main: [[{ node: 'News or reference', type: 'main', index: 0 }]] },
       'News or reference': { main: [[{ node: 'Save the verdict', type: 'main', index: 0 }]] },

@@ -295,6 +295,63 @@ function looksLikeArticle(html) {
 }
 
 /**
+ * Other articles this article points at, on the same publication.
+ *
+ * A feed shows what a publisher pushed in its window; an article shows what the
+ * publisher thinks is related to it. RenewEconomy's storage page carried three
+ * days of stories the feed had already rolled past, and every one of them was
+ * linked from the articles we did have. Following those links reaches the
+ * coverage a listing alone cannot.
+ *
+ * Bounded on purpose, because an unbounded crawl of a news site is an archive
+ * flood waiting to happen:
+ *   - same host only, so a syndication link cannot drag in another publisher
+ *   - article-shaped paths only, judged by the same scorer the listings use
+ *   - the anchor text becomes the title, because a publisher linking a story
+ *     writes its headline
+ *   - a hard cap per article, and depth one: what a discovered article links to
+ *     is not followed in turn
+ *
+ * Everything discovered still faces every downstream gate - the real date is
+ * read, the stale-hold quarantines archive material, the judge and the scorer
+ * decide relevance - so a wrong guess here costs a row in the database, never a
+ * line in the client's sheet.
+ */
+function relatedLinks(html, baseUrl, opts) {
+  var options = opts || {};
+  var limit = Number(options.limit || 5);
+  var minScore = Number(options.minScore || 8);
+  if (!html) return [];
+
+  var origin = '';
+  try { origin = new URL(baseUrl).origin; } catch (e) { return []; }
+
+  // Only the article's own body: a page's navigation and its "most read" rail
+  // link the same handful of evergreen pages from every article on the site.
+  var region = html;
+  var m = html.match(/<article\b[^>]*>([\s\S]*?)<\/article>/i);
+  if (m && m[1] && m[1].length > 400) region = m[1];
+
+  var seen = {};
+  var out = [];
+  var re = /<a\b[^>]*href=["']([^"'#]+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  var hit;
+  while ((hit = re.exec(region)) !== null) {
+    var url = absolute(hit[1], baseUrl);
+    if (seen[url]) continue;
+    var text = strip(hit[2]);
+    if (!text || text.length < 20 || GENERIC.test(text)) continue;
+    // scoreLink already knows what an article URL looks like on any of these
+    // sites, and rejects navigation, assets and off-site links.
+    if (scoreLink(url, text, origin) < minScore) continue;
+    seen[url] = true;
+    out.push({ url: url, title: text.slice(0, 300) });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/**
  * The article's own text, pulled from its page.
  *
  * The feed excerpt averages three hundred characters and often ends in "The
@@ -532,4 +589,4 @@ function normalise(raw, source) {
     }));
 }
 
-module.exports = { parseFeed, parseIndex, normalise, contentHash, passesFilter, strip, absolute, cleanSyndicatedTitle, dateFromUrl, parseSitemap, publishedFromHtml, looksLikeArticle, anchorsFromMarkdown, extractBody };
+module.exports = { parseFeed, parseIndex, normalise, contentHash, passesFilter, strip, absolute, cleanSyndicatedTitle, dateFromUrl, parseSitemap, publishedFromHtml, looksLikeArticle, anchorsFromMarkdown, extractBody, relatedLinks };

@@ -46,7 +46,7 @@ export interface ArchitectureGraph {
 }
 
 export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
-  "generatedAt": "2026-08-31T02:42:40.053Z",
+  "generatedAt": "2026-08-31T02:56:53.726Z",
   "workflowCount": 15,
   "edgeCount": 53,
   "workflows": [
@@ -967,6 +967,17 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
             "report_items",
             "reports"
           ],
+          "writes": [
+            "articles"
+          ],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "discover",
+          "name": "Store discovered articles",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [],
           "writes": [
             "articles"
           ],
