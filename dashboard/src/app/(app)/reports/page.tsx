@@ -9,6 +9,7 @@ import {
 } from '@/lib/queries';
 import { Card, DatabaseDown, Empty } from '@/components/ui';
 import { ReportViewer } from '@/components/ReportViewer';
+import { EmailPreview } from '@/components/EmailPreview';
 import { SourceReferences } from '@/components/SourceReferences';
 
 /** Next 05:00 Australia/Melbourne, expressed in that zone. */
@@ -210,6 +211,11 @@ export async function ReportsView({
         title="Before — goes out tomorrow 05:00"
         subtitle={`The ${preview?.rows.length ?? 0} articles queued for the next send. Nothing here has been emailed yet.`}
       >
+        {/* The list says what; this shows how it will look in the inbox —
+            rendered by the workflow's own node code against live data. */}
+        <div className="mb-4">
+          <EmailPreview />
+        </div>
         {preview && preview.rows.length > 0 ? (
             <>
               <p className="mb-3 text-xs text-ink-400">
