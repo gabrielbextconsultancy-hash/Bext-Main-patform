@@ -46,7 +46,7 @@ export interface ArchitectureGraph {
 }
 
 export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
-  "generatedAt": "2026-08-31T02:56:53.726Z",
+  "generatedAt": "2026-08-31T03:06:46.280Z",
   "workflowCount": 15,
   "edgeCount": 53,
   "workflows": [
@@ -1084,6 +1084,38 @@ export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
           "actor": "system",
           "reads": [],
           "writes": [],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "synload",
+          "name": "Qualifying syndicated links",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [
+            "article_analysis",
+            "articles"
+          ],
+          "writes": [],
+          "alwaysOutputData": true
+        },
+        {
+          "id": "synres",
+          "name": "Resolve syndicated links",
+          "type": "n8n-nodes-base.code",
+          "actor": "system",
+          "reads": [],
+          "writes": [],
+          "alwaysOutputData": false
+        },
+        {
+          "id": "synsave",
+          "name": "Save resolved links",
+          "type": "n8n-nodes-base.postgres",
+          "actor": "system",
+          "reads": [],
+          "writes": [
+            "articles"
+          ],
           "alwaysOutputData": true
         },
         {

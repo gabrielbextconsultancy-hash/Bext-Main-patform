@@ -295,6 +295,48 @@ function looksLikeArticle(html) {
 }
 
 /**
+ * The publisher's own URL, recovered from a rendered syndication stub.
+ *
+ * Google News RSS links are redirect stubs that resolve only by running
+ * JavaScript, so neither an HTTP redirect nor the raw HTML reveals where they
+ * point. A rendered page does: every link on the resolved article belongs to
+ * the publisher, so the host appearing most often is the publisher's, and the
+ * article is the deepest path on it.
+ *
+ * Returns null rather than guessing. A wrong canonical URL would send the
+ * client to the wrong story, which is worse than sending them through a
+ * redirect that works.
+ */
+function publisherFromMarkdown(md) {
+  if (!md) return null;
+  var counts = {};
+  var byHost = {};
+  var re = /\]\((https?:\/\/[^\s)]+)\)/g;
+  var m;
+  while ((m = re.exec(String(md))) !== null) {
+    var href = m[1];
+    var host;
+    try { host = new URL(href).host; } catch (e) { continue; }
+    // The aggregator itself, and the asset hosts every page pulls from.
+    if (/(^|\.)google\.com$|googleusercontent|gstatic|doubleclick|facebook|twitter|linkedin|youtube/i.test(host)) continue;
+    counts[host] = (counts[host] || 0) + 1;
+    (byHost[host] = byHost[host] || []).push(href.split('#')[0]);
+  }
+  var best = null;
+  for (var h in counts) if (!best || counts[h] > counts[best]) best = h;
+  if (!best || counts[best] < 3) return null;
+
+  // The article is the deepest, longest path on the publisher's host - section
+  // and utility links are short.
+  var candidates = byHost[best].filter(function (u) {
+    try { return new URL(u).pathname.split('/').filter(Boolean).length >= 2; } catch (e) { return false; }
+  });
+  if (!candidates.length) return null;
+  candidates.sort(function (a, b) { return b.length - a.length; });
+  return candidates[0].slice(0, 600);
+}
+
+/**
  * Other articles this article points at, on the same publication.
  *
  * A feed shows what a publisher pushed in its window; an article shows what the
@@ -589,4 +631,4 @@ function normalise(raw, source) {
     }));
 }
 
-module.exports = { parseFeed, parseIndex, normalise, contentHash, passesFilter, strip, absolute, cleanSyndicatedTitle, dateFromUrl, parseSitemap, publishedFromHtml, looksLikeArticle, anchorsFromMarkdown, extractBody, relatedLinks };
+module.exports = { parseFeed, parseIndex, normalise, contentHash, passesFilter, strip, absolute, cleanSyndicatedTitle, dateFromUrl, parseSitemap, publishedFromHtml, looksLikeArticle, anchorsFromMarkdown, extractBody, relatedLinks, publisherFromMarkdown };

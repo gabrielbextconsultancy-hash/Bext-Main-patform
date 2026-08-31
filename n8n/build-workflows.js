@@ -24,6 +24,18 @@ const WEBHOOK_CRED = process.env.N8N_WEBHOOK_CREDENTIAL_ID;
 const IMAP_CRED = process.env.N8N_IMAP_CREDENTIAL_ID;
 const TAG = 'BEXT Consultancy';
 
+// The workflows that between them produce the 05:00 sheet, in the order they
+// run. Tagged together so the pipeline reads as one thing in the n8n list.
+const DAILY_TAG = 'Daily Report';
+const DAILY_PIPELINE = [
+  'BEXT — Source Ingest',      // hourly: every source down the retrieval ladder
+  'BEXT — Newsletter Intake',  // as mail arrives: the route past account walls
+  'BEXT — Article Analysis',   // every 30 min: relevance scoring
+  'BEXT — News Quality',       // 06:00/12:00/23:50: dates, bodies, links, judge, audit
+  'BEXT — Daily Report',       // 05:00: assemble and send
+  'BEXT — Daily News Card',    // 05:20: the Teams card
+];
+
 // The tested parser, minus its CommonJS export line, for embedding in a Code node.
 const INGEST_SRC = fs
   .readFileSync(path.join(__dirname, 'lib', 'ingest.js'), 'utf8')
@@ -1031,7 +1043,11 @@ WITH win AS (
            - interval '1 day' AS day_start
 ),
 ranked AS (
-  SELECT a.id, a.url, a.title,
+  SELECT a.id,
+         -- The publisher's own URL where a syndication stub was resolved, so
+         -- the client's link goes to reuters.com rather than through a redirect.
+         coalesce(a.canonical_url, a.url) AS url,
+         a.title,
          -- The publisher's own lead image, where they declare one. Carried here
          -- so the card layout has artwork, and image_state so an item without a
          -- picture is explicable rather than looking like a rendering fault.
@@ -2297,6 +2313,68 @@ return [{ json: {
 } }];
 `;
 
+// Syndication stubs, resolved only where it pays.
+//
+// Reuters arrives through a Google News feed whose links resolve only by
+// running JavaScript, so the fetched page is an interstitial: no body, and the
+// link in the client's email is a redirect rather than the publisher's. A
+// rendered browser resolves it, but that is a metered request against roughly
+// twenty-five Reuters items a day - and most score 0 and are never sent.
+//
+// So this runs on what has already qualified: scored 1 or better, recent, still
+// unresolved. Measured over three days that is about five articles, not
+// seventy-five. Ten a pass is the ceiling.
+const RESOLVE_CODE = `
+const { URL } = require('url');
+${INGEST_SRC}
+
+const helpers = this.helpers;
+const rows = $input.all().map(i => i.json).filter(r => r && r.url);
+const key = $env.FIRECRAWL_API_KEY;
+const updates = [];
+
+if (key) {
+  for (const a of rows.slice(0, 10)) {
+    try {
+      const r = await helpers.httpRequest({
+        method: 'POST', url: 'https://api.firecrawl.dev/v2/scrape',
+        json: true, timeout: 120000,
+        headers: { Authorization: 'Bearer ' + key },
+        body: { url: a.url, formats: ['markdown'], waitFor: 6000 },
+      });
+      if (!r || !r.success || !r.data) continue;
+      const md = r.data.markdown || '';
+      const canon = publisherFromMarkdown(md);
+      // The rendered markdown is the article; strip its navigation furniture
+      // the same way the body reader does, by keeping only prose-length lines.
+      const prose = md.split(String.fromCharCode(10))
+        .filter(function (l) {
+          const t = l.trim();
+          if (t.length < 80) return false;
+          if (t.indexOf('](') > -1 && t.length < 200) return false;
+          return true;
+        })
+        .join(String.fromCharCode(10) + String.fromCharCode(10))
+        .slice(0, 12000);
+      if (canon || prose.length > 200) {
+        updates.push({
+          id: Number(a.id),
+          canonical_url: canon,
+          body_text: prose.length > 200 ? prose : null,
+          body_state: prose.length > 200 ? 'found' : 'none',
+        });
+      }
+    } catch (e) { /* a stub that will not resolve is left for the next pass */ }
+  }
+}
+
+return [{ json: {
+  resolved_updates: JSON.stringify(updates),
+  resolved: updates.length,
+  detail: 'resolved ' + updates.length + ' syndicated links of ' + rows.length + ' qualifying',
+} }];
+`;
+
 function newsQualityWorkflow() {
   return {
     name: 'BEXT — News Quality',
@@ -2569,6 +2647,49 @@ WHERE article_id IN (SELECT x.id FROM json_to_recordset($1::json) AS x(id bigint
         },
       },
       {
+        id: 'synload', name: 'Qualifying syndicated links', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(340, 640),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          // Only what has earned the render: scored at or above the floor, recent
+          // enough to still reach a report, and not already resolved.
+          query: `SELECT a.id, a.url
+FROM articles a
+JOIN article_analysis an ON an.article_id = a.id
+WHERE a.url LIKE '%news.google.com%'
+  AND a.canonical_url IS NULL
+  AND an.relevance_score >= 1
+  AND a.fetched_at > now() - interval '3 days'
+ORDER BY an.relevance_score DESC
+LIMIT 10`,
+        },
+      },
+      {
+        id: 'synres', name: 'Resolve syndicated links', type: 'n8n-nodes-base.code',
+        typeVersion: 2, position: pos(560, 640),
+        parameters: { jsCode: RESOLVE_CODE },
+      },
+      {
+        id: 'synsave', name: 'Save resolved links', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(780, 640),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        alwaysOutputData: true,
+        parameters: {
+          operation: 'executeQuery',
+          // url is never touched: it is the conflict key and the ledger key.
+          query: `UPDATE articles a
+SET canonical_url = coalesce(v.canonical_url, a.canonical_url),
+    body_text     = coalesce(v.body_text, a.body_text),
+    body_state    = coalesce(v.body_state, a.body_state::text)::article_body_state
+FROM (SELECT * FROM json_to_recordset($1::json)
+      AS x(id bigint, canonical_url text, body_text text, body_state text)) v
+WHERE a.id = v.id`,
+          options: { queryReplacement: '={{ $json.resolved_updates }}' },
+        },
+      },
+      {
         id: 'audload', name: 'Load audit data', type: 'n8n-nodes-base.postgres',
         typeVersion: 2.5, position: pos(560, 480),
         credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
@@ -2640,7 +2761,10 @@ ON CONFLICT (day) DO UPDATE SET tally = EXCLUDED.tally, html = EXCLUDED.html, up
       'Quiet sources': { main: [[{ node: 'Diagnose quiet sources', type: 'main', index: 0 }]] },
       'Diagnose quiet sources': { main: [[{ node: 'Record incidents', type: 'main', index: 0 }]] },
       'Record incidents': { main: [[{ node: 'Page Teams', type: 'main', index: 0 }]] },
-      'Page Teams': { main: [[{ node: 'Load audit data', type: 'main', index: 0 }]] },
+      'Page Teams': { main: [[{ node: 'Qualifying syndicated links', type: 'main', index: 0 }]] },
+      'Qualifying syndicated links': { main: [[{ node: 'Resolve syndicated links', type: 'main', index: 0 }]] },
+      'Resolve syndicated links': { main: [[{ node: 'Save resolved links', type: 'main', index: 0 }]] },
+      'Save resolved links': { main: [[{ node: 'Load audit data', type: 'main', index: 0 }]] },
       'Load audit data': { main: [[{ node: 'Build day audit', type: 'main', index: 0 }]] },
       'Build day audit': { main: [[{ node: 'Save day audit', type: 'main', index: 0 }]] },
       'Save day audit': { main: [[{ node: 'Heartbeat', type: 'main', index: 0 }]] },
@@ -4297,12 +4421,31 @@ async function deploy(input) {
   if (!r.ok) { console.error(`  FAILED ${r.status}:`, JSON.stringify(j).slice(0, 400)); return null; }
   console.log(`  ${existing ? 'updated' : 'created'} ${j.id}`);
 
-  // Tag it — folders need an enterprise licence, tags do not.
-  const tags = await (await fetch(`${B}/api/v1/tags?limit=100`, { headers: H })).json();
-  const tag = tags.data?.find(t => t.name === TAG);
-  if (tag) {
+  // Tag it — folders and projects need an enterprise licence, tags do not, so
+  // tags are how this instance groups work. Every workflow carries the client
+  // tag; the six that produce the morning sheet also carry DAILY_TAG, which is
+  // the closest Community gets to putting a project in one place: filter the
+  // workflow list by it and the whole pipeline is there, in order, and nothing
+  // else is.
+  const wanted = [TAG];
+  if (DAILY_PIPELINE.includes(input.name)) wanted.push(DAILY_TAG);
+
+  let tags = (await (await fetch(`${B}/api/v1/tags?limit=100`, { headers: H })).json()).data || [];
+  const ids = [];
+  for (const name of wanted) {
+    let t = tags.find(x => x.name === name);
+    if (!t) {
+      // Create it once, then reuse: a missing tag silently dropped the grouping.
+      const made = await fetch(`${B}/api/v1/tags`, {
+        method: 'POST', headers: H, body: JSON.stringify({ name }),
+      });
+      if (made.ok) { t = await made.json(); tags.push(t); }
+    }
+    if (t && t.id) ids.push({ id: t.id });
+  }
+  if (ids.length) {
     await fetch(`${B}/api/v1/workflows/${j.id}/tags`, {
-      method: 'PUT', headers: H, body: JSON.stringify([{ id: tag.id }]),
+      method: 'PUT', headers: H, body: JSON.stringify(ids),
     });
   }
   return j.id;
