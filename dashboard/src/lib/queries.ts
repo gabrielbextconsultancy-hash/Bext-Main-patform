@@ -1056,6 +1056,10 @@ export interface SourcePulse {
   inactive: number;
   quiet_list: { brief_n: number | null; name: string; method: string;
     last_article: string | null; last_checked: string | null }[];
+  // Producing was a number with nothing behind it: the operator could see 59
+  // and not which 59. Same shape as the other two so one component renders all.
+  producing_list: { brief_n: number | null; name: string; method: string;
+    last_article: string | null; recent: number }[];
   inactive_list: { brief_n: number | null; name: string; note: string | null }[];
 }
 
@@ -1088,6 +1092,10 @@ export async function getSourcePulse(): Promise<SourcePulse | null> {
     quiet_list: quiet
       .map(r => ({ brief_n: r.brief_n, name: r.name, method: r.method,
         last_article: r.last_article, last_checked: r.last_checked }))
+      .sort((a, b) => (a.brief_n ?? 99) - (b.brief_n ?? 99)),
+    producing_list: active.filter(r => r.recent > 0)
+      .map(r => ({ brief_n: r.brief_n, name: r.name, method: r.method,
+        last_article: r.last_article, recent: r.recent }))
       .sort((a, b) => (a.brief_n ?? 99) - (b.brief_n ?? 99)),
     inactive_list: rows.filter(r => !r.active)
       .map(r => ({ brief_n: r.brief_n, name: r.name, note: r.note }))
