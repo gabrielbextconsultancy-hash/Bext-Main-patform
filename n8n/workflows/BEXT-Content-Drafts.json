@@ -174,6 +174,29 @@
       }
     },
     {
+      "id": "autoapprove",
+      "name": "Auto-approve draft",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        1040,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "0SoqGGqUOqbwYTmJ",
+          "name": "BEXT Postgres"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH d AS (\n  UPDATE linkedin_drafts l SET\n    status = 'approved',\n    final_copy = coalesce(l.final_copy, l.body),\n    post_at = now(),\n    approved_at = now(),\n    approved_by = 'auto',\n    updated_at = now()\n  WHERE l.cycle_id = $1 AND l.recommended = true AND l.status = 'draft'\n    AND (SELECT auto FROM content_cycles WHERE id = $1)\n  RETURNING l.id\n)\nUPDATE content_cycles SET status = 'approved'\nWHERE id = $1 AND auto = true AND EXISTS (SELECT 1 FROM d)\nRETURNING id",
+        "options": {
+          "queryReplacement": "={{ [$json.id] }}"
+        }
+      }
+    },
+    {
       "id": "kuma",
       "name": "Heartbeat",
       "type": "n8n-nodes-base.httpRequest",
@@ -281,6 +304,17 @@
         [
           {
             "node": "Save drafts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save drafts": {
+      "main": [
+        [
+          {
+            "node": "Auto-approve draft",
             "type": "main",
             "index": 0
           }

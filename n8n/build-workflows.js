@@ -5791,6 +5791,25 @@ RETURNING id, status`,
           options: { queryReplacement: '={{ [$json.topics, $json.cycle_id, $json.status, $json.error || ""] }}' },
         },
       },
+      {
+        // Auto mode only: pick the top-ranked topic and hand the cycle to the
+        // drafter without waiting for a human. A human-gated cycle (auto = false)
+        // is untouched and waits at topics_ready. The drafts poll claims it within
+        // three minutes.
+        id: 'autoselect', name: 'Auto-select topic', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(800, 40),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        parameters: {
+          operation: 'executeQuery',
+          query: `UPDATE content_cycles c SET
+  selected_topic_id = (SELECT t.id FROM content_topics t WHERE t.cycle_id = c.id ORDER BY t.rank LIMIT 1),
+  status = 'queued_drafts',
+  selected_at = now()
+WHERE c.id = $1 AND c.auto = true AND c.status = 'topics_ready'
+RETURNING c.id`,
+          options: { queryReplacement: '={{ [$json.id] }}' },
+        },
+      },
       // Own heartbeat, fired off the poll rather than off a work node, so the
       // monitor pings every three minutes whether or not there was a cycle to
       // process. Its presence also makes withHeartbeat leave this workflow alone.
@@ -5805,6 +5824,7 @@ RETURNING id, status`,
       'Load the window': { main: [[{ node: 'Carry the cycle', type: 'main', index: 0 }]] },
       'Carry the cycle': { main: [[{ node: 'Rank three topics', type: 'main', index: 0 }]] },
       'Rank three topics': { main: [[{ node: 'Save topics', type: 'main', index: 0 }]] },
+      'Save topics': { main: [[{ node: 'Auto-select topic', type: 'main', index: 0 }]] },
     },
   };
 }
@@ -6049,6 +6069,35 @@ RETURNING id`,
           options: { queryReplacement: '={{ [$json.drafts, $json.cycle_id, $json.topic_id] }}' },
         },
       },
+      {
+        // Auto mode only: approve the recommended draft and schedule it to post
+        // now, so LinkedIn Publish sends it on its next run. A human-gated cycle
+        // (auto = false) is untouched and waits at drafts_ready for a person to
+        // approve. Publishing still obeys LINKEDIN_PUBLISH_MODE — in manual mode
+        // this only readies the text and the Teams nudge.
+        id: 'autoapprove', name: 'Auto-approve draft', type: 'n8n-nodes-base.postgres',
+        typeVersion: 2.5, position: pos(1040, 0),
+        credentials: { postgres: { id: PG_CRED, name: 'BEXT Postgres' } },
+        parameters: {
+          operation: 'executeQuery',
+          query: `WITH d AS (
+  UPDATE linkedin_drafts l SET
+    status = 'approved',
+    final_copy = coalesce(l.final_copy, l.body),
+    post_at = now(),
+    approved_at = now(),
+    approved_by = 'auto',
+    updated_at = now()
+  WHERE l.cycle_id = $1 AND l.recommended = true AND l.status = 'draft'
+    AND (SELECT auto FROM content_cycles WHERE id = $1)
+  RETURNING l.id
+)
+UPDATE content_cycles SET status = 'approved'
+WHERE id = $1 AND auto = true AND EXISTS (SELECT 1 FROM d)
+RETURNING id`,
+          options: { queryReplacement: '={{ [$json.id] }}' },
+        },
+      },
       heartbeat('KUMA_PUSH_CONTENT_DRAFTS', -360, 200),
     ],
     connections: {
@@ -6059,6 +6108,7 @@ RETURNING id`,
       'Load the sources': { main: [[{ node: 'Assemble context', type: 'main', index: 0 }]] },
       'Assemble context': { main: [[{ node: 'Write two variants', type: 'main', index: 0 }]] },
       'Write two variants': { main: [[{ node: 'Save drafts', type: 'main', index: 0 }]] },
+      'Save drafts': { main: [[{ node: 'Auto-approve draft', type: 'main', index: 0 }]] },
     },
   };
 }
@@ -6085,10 +6135,11 @@ const action = String(body.action || '');
 
 const SQL = {
   start_cycle:
-    "INSERT INTO content_cycles (window_start, window_end, report_ids, trigger, status, requested_by, human_perspective) " +
+    "INSERT INTO content_cycles (window_start, window_end, report_ids, trigger, status, requested_by, human_perspective, auto) " +
     "SELECT (current_date - interval '14 days')::date, current_date, " +
     "  coalesce((SELECT array_agg(x::int) FROM json_array_elements_text(coalesce(($1::json)->'report_ids','[]'::json)) AS x), '{}'), " +
-    "  'manual', 'queued_topics', ($1::json)->>'requested_by', ($1::json)->>'perspective' " +
+    "  'manual', 'queued_topics', ($1::json)->>'requested_by', ($1::json)->>'perspective', " +
+    "  coalesce((($1::json)->>'auto')::boolean, false) " +
     "RETURNING id, status",
 
   set_perspective:

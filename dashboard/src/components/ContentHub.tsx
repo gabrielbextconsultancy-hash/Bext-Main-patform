@@ -29,6 +29,9 @@ export function ContentHub({ cycles, reports }: { cycles: CycleRow[]; reports: R
   // button starts a cycle for every report on the current page at once.
   const [mode, setMode] = useState<'one' | 'all'>('one');
   const [progress, setProgress] = useState<string | null>(null);
+  // Auto = no human in the loop: the cycle picks the top topic and approves the
+  // recommended draft itself, then it posts on the configured backend.
+  const [auto, setAuto] = useState(false);
 
   const pages = Math.max(1, Math.ceil(reports.length / PAGE_SIZE));
   const shown = reports.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
@@ -58,7 +61,7 @@ export function ContentHub({ cycles, reports }: { cycles: CycleRow[]; reports: R
     const res = await fetch('/api/content/action', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'start_cycle', report_ids: reportId ? [reportId] : [], requested_by: 'dashboard' }),
+      body: JSON.stringify({ action: 'start_cycle', report_ids: reportId ? [reportId] : [], requested_by: 'dashboard', auto }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'could not start the cycle');
@@ -126,6 +129,11 @@ export function ContentHub({ cycles, reports }: { cycles: CycleRow[]; reports: R
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* No human in the loop: auto-pick topic, auto-approve, post. */}
+          <label className="flex items-center gap-1.5 text-xs text-ink-400" title="Auto-pick the top topic and approve the recommended draft, then post on the configured backend. No review.">
+            <input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} className="accent-warn" />
+            Auto
+          </label>
           {/* Run one, or a batch across the reports shown. */}
           <div className="inline-flex rounded-lg border border-ink-700 p-0.5 text-xs">
             <button

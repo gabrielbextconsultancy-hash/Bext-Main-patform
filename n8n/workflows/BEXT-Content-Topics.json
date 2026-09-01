@@ -191,6 +191,29 @@
       }
     },
     {
+      "id": "autoselect",
+      "name": "Auto-select topic",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        800,
+        40
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "0SoqGGqUOqbwYTmJ",
+          "name": "BEXT Postgres"
+        }
+      },
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE content_cycles c SET\n  selected_topic_id = (SELECT t.id FROM content_topics t WHERE t.cycle_id = c.id ORDER BY t.rank LIMIT 1),\n  status = 'queued_drafts',\n  selected_at = now()\nWHERE c.id = $1 AND c.auto = true AND c.status = 'topics_ready'\nRETURNING c.id",
+        "options": {
+          "queryReplacement": "={{ [$json.id] }}"
+        }
+      }
+    },
+    {
       "id": "kuma",
       "name": "Heartbeat",
       "type": "n8n-nodes-base.httpRequest",
@@ -309,6 +332,17 @@
         [
           {
             "node": "Save topics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save topics": {
+      "main": [
+        [
+          {
+            "node": "Auto-select topic",
             "type": "main",
             "index": 0
           }
