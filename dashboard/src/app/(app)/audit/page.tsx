@@ -9,6 +9,7 @@ import {
 } from '@/lib/queries';
 import { Card, DatabaseDown, Empty } from '@/components/ui';
 import { ArticleDetails } from '@/components/ArticleDetails';
+import { SheetJump } from '@/components/SheetJump';
 import { FilterForm } from '@/components/FilterForm';
 
 export const dynamic = 'force-dynamic';
@@ -276,6 +277,7 @@ export async function AuditView({
                   <th className="px-2 py-2">Disposition</th>
                   <th className="px-2 py-2">Fetched</th>
                   <th className="px-2 py-2">Sent / will send</th>
+                  <th className="px-2 py-2">In the sheet</th>
                 </tr>
               </thead>
               <tbody>
@@ -341,6 +343,16 @@ export async function AuditView({
                       ) : (
                         <span className="text-ink-500">—</span>
                       )}
+                    </td>
+                    {/* The jump the management table never had: a SENT article
+                        opens the email it went out in, a QUEUED one the preview
+                        of the sheet it is about to go out in. */}
+                    <td className="px-2 py-2">
+                      <SheetJump
+                        disposition={r.disposition}
+                        url={r.url}
+                        sentReport={r.sent_report}
+                      />
                     </td>
                   </tr>
                 ))}
