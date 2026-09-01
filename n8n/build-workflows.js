@@ -1246,6 +1246,12 @@ ranked AS (
 )
 SELECT id, url, title, image_url, image_state, shown_at, date_is_exact, source_name, category,
        summary, relevance_score,
+       -- Selected in the ranked CTE and, until 1 Sep 2026, dropped here: the outer
+       -- list is explicit, so a column added to the CTE never arrives unless it
+       -- is named twice. Render HTML read undefined, coerced it to 0, and the
+       -- pre-send check held a sheet of 171 articles - 51 of which had bodies -
+       -- on the grounds that not one did.
+       body_chars,
        -- Carried on every row so the footer can state coverage without a
        -- second query: how many sources are being pulled right now.
        (SELECT count(*) FROM sources WHERE active) AS sources_monitored,
@@ -2031,7 +2037,10 @@ const items = d.sections.flatMap(sec =>
   sec.items.map((it, i) => ({
     article_id: it.id, category: sec.name, rank: i + 1,
     blurb: String(it.summary || '').slice(0, 500),
-    body_chars: Number(it.body_chars || 0),
+    // Only when the query actually supplied it. Coercing undefined to 0 made
+    // "we did not measure" indistinguishable from "we measured none", which is
+    // exactly the confusion that held the 1 Sep sheet.
+    ...(it.body_chars == null ? {} : { body_chars: Number(it.body_chars) }),
   }))
 );
 return [{ json: { html, text, items, subject: 'BEXT Industry Daily — ' + coverage,

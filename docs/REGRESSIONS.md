@@ -733,3 +733,33 @@ R004 caught it, but only after `build-workflows.js` had already deployed. Build
 and deploy are one command; preflight runs after. So the strip now removes the
 whole statement however it is written, and the lesson is that a text transform
 over source code must match the construct, not the line it usually occupies.
+
+## R041 — a column that never left the query, and a zero that meant "unknown"
+
+The 1 September send was blocked by its own pre-send check: *"not one item was
+written from an article body — retrieval has failed"*. The sheet held 171
+articles and 51 of them carried full text, up to 7,420 characters. Nothing had
+failed except the measurement.
+
+`body_chars` was computed inside the `ranked` CTE and never named in the outer
+`SELECT`. The outer list is explicit, so a column added to the CTE does not
+arrive unless it is written twice — and nothing complains, because SQL has no
+opinion about a column you did not ask for.
+
+That alone would have been harmless. What made it stop a client deliverable was
+the next line: `body_chars: Number(it.body_chars || 0)`. The coercion turned
+*undefined* into a hard `0`, so "we did not measure this" became "we measured
+none" for all 171 items. The validator's own guard — count only items where
+`body_chars` is a number — had been written precisely to prevent this, and the
+coercion defeated it before it could run.
+
+Two rules. A field consumed downstream must be asserted end to end, not at the
+point it is produced: the preview query carried it correctly all along, which is
+why the dashboard showed character counts while the sheet saw zeros. And a
+missing measurement must never be coerced into a measured zero — absence and
+zero are different facts, and any rule that treats them alike will eventually
+fire on the wrong one.
+
+Recovered with `n8n/resend-held-report.js`, which sends the stored HTML rather
+than re-rendering, refuses a report already marked sent, and marks sent only
+after Graph confirms delivery.

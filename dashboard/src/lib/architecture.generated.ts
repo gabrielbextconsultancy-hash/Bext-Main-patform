@@ -46,7 +46,7 @@ export interface ArchitectureGraph {
 }
 
 export const ARCHITECTURE_GRAPH: ArchitectureGraph = {
-  "generatedAt": "2026-08-31T12:37:48.423Z",
+  "generatedAt": "2026-09-01T02:26:53.130Z",
   "workflowCount": 15,
   "edgeCount": 53,
   "workflows": [
