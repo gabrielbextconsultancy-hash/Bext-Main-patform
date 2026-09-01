@@ -72,18 +72,23 @@ var plan = function (draft, env) {
   }
 
   if (mode === 'publora') {
+    // Publora's real API (verified against sergebulaev/linkedin-skills
+    // lib/publora_client.py, 2026-05): POST /create-post, auth via the
+    // x-publora-key header, and `platforms` is a list of connection-id STRINGS
+    // like "linkedin-xxx" — the older {platform, platformId} dict shape returns
+    // HTTP 400 "Invalid platform ID format". Omitting scheduledTime posts now.
     return {
       mode: 'publora',
       request: {
-        url: 'https://api.publora.com/api/v1/posts',
+        url: 'https://api.publora.com/api/v1/create-post',
         method: 'POST',
         headers: {
-          'Authorization': 'Bearer ' + (env.PUBLORA_API_KEY || ''),
+          'x-publora-key': env.PUBLORA_API_KEY || '',
           'Content-Type': 'application/json',
         },
         body: {
           content: text,
-          platforms: [{ platform: 'linkedin', platformId: env.LINKEDIN_PLATFORM_ID }],
+          platforms: [env.LINKEDIN_PLATFORM_ID],
         },
       },
     };
