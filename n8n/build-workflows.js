@@ -5287,7 +5287,11 @@ if (!rows.length || !rows[0].report_date) {
   return [{ json: { skip: true, detail: 'no sent report to accompany' } }];
 }
 
-const day = rows[0].report_date;
+// The day REPORTED ON, not the day it was sent. The query already computes
+// covers = report_date - 1; heading the card with report_date labelled a card
+// about 31 August as "Tuesday 1 September", disagreeing with the email sheet
+// beside it, which dates itself by the day it covers.
+const day = rows[0].covers || rows[0].report_date;
 const coverage = new Date(day).toLocaleDateString('en-AU',
   { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Australia/Melbourne' });
 
