@@ -52,11 +52,25 @@ export function markArticle(html: string, url: string): string {
     }
 
     card.setAttribute('id', HIGHLIGHT_ID);
+    // Outline AND fill. The outline alone was correct and invisible: the sheet
+    // runs to 287 KB, the marked card is usually far below the fold, and the
+    // iframe is sandboxed with no scripts — so the #fragment is the only way to
+    // scroll it, and nothing can force the scroll if the browser declines. A
+    // tint survives that, because the reader finds it by scanning rather than
+    // by landing on it.
     card.setAttribute(
       'style',
       `${card.getAttribute('style') ?? ''};outline:3px solid #ef4444;outline-offset:4px;` +
-        'border-radius:6px;scroll-margin-top:24px;'
+        'background:#fff1f2;border-radius:6px;scroll-margin-top:24px;'
     );
+
+    // A label inside the card, so the marking is unambiguous once found.
+    const tag = doc.createElement('div');
+    tag.setAttribute('style',
+      'background:#ef4444;color:#fff;font:700 10px/1.6 Arial,sans-serif;letter-spacing:.08em;'
+      + 'text-transform:uppercase;padding:2px 8px;border-radius:3px;display:inline-block;margin:6px 0');
+    tag.textContent = 'the article you selected';
+    card.insertBefore(tag, card.firstChild);
 
     // A note at the top, so it is obvious the outline is ours and not the
     // client's copy. Placed in the body, not the stored row.
@@ -66,8 +80,12 @@ export function markArticle(html: string, url: string): string {
       'background:#fee2e2;color:#991b1b;font:600 12px/1.5 Arial,sans-serif;' +
         'padding:8px 12px;border-bottom:1px solid #fecaca;'
     );
-    banner.textContent =
-      'Dashboard view only — the outlined article is the one you selected. The emailed report carried no highlight.';
+    // Name the article in the banner: "an article is outlined below" is useless
+    // in a sheet of 170; the title tells the reader what to scan for.
+    const headline = (link.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 90);
+    banner.textContent = headline
+      ? `Dashboard view only — showing “${headline}”, outlined in red below. The emailed report carried no highlight.`
+      : 'Dashboard view only — the outlined article is the one you selected. The emailed report carried no highlight.';
     doc.body.insertBefore(banner, doc.body.firstChild);
 
     return '<!doctype html>' + doc.documentElement.outerHTML;
