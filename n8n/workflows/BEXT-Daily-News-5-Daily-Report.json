@@ -284,7 +284,7 @@
       "alwaysOutputData": true,
       "parameters": {
         "promptType": "define",
-        "text": "=You are checking an industry news brief before it is emailed to a client in the\nAustralian energy and building sector. Below are summaries from the sheet.\n\nAnswer ONLY with JSON: {\"ok\": true or false, \"issues\": [\"...\"]}\n\nReport an issue only for something a reader would notice as broken: text that is\ngarbled or truncated, summaries that say nothing about their article, obvious\nduplication, or wording that is not English prose. Do not comment on newsworthiness,\nrelevance or editorial choice - those are decided elsewhere. If the sheet reads\nnormally, answer {\"ok\": true, \"issues\": []}.\n\nSUMMARIES:\n{{ $('Render HTML').first().json.items.slice(0, 25).map((i, n) => (n + 1) + '. ' + String(i.blurb || '(no summary)').slice(0, 220)).join(String.fromCharCode(10)) }}"
+        "text": "=You are checking an industry news brief before it is emailed to a client in the\nAustralian energy and building sector. Below are summaries from the sheet.\n\nAnswer ONLY with JSON: {\"ok\": true or false, \"issues\": [\"...\"]}\n\nReport an issue only for something a reader would notice as broken: text that is\ngarbled or truncated, summaries that say nothing about their article, obvious\nduplication, or wording that is not English prose. Do not comment on newsworthiness,\nrelevance or editorial choice - those are decided elsewhere. If the sheet reads\nnormally, answer {\"ok\": true, \"issues\": []}.\n\nSUMMARIES:\n{{ $('Render HTML').first().json.items.slice(0, 25).map((i, n) => (n + 1) + '. ' + String(i.blurb || '(no summary)')).join(String.fromCharCode(10)) }}"
       }
     },
     {

@@ -1321,7 +1321,12 @@ const REVIEW_PROMPT = [
   'normally, answer {"ok": true, "issues": []}.',
   '',
   'SUMMARIES:',
-  "{{ $('Render HTML').first().json.items.slice(0, 25).map((i, n) => (n + 1) + '. ' + String(i.blurb || '(no summary)').slice(0, 220)).join(String.fromCharCode(10)) }}",
+  // The blurb WHOLE, not sliced. Cutting each summary to 220 characters before
+  // asking "is anything truncated?" manufactured the very fault being looked
+  // for: on 1 Sep the reviewer reported ten summaries truncated mid-word, every
+  // one of them cut by this line and none by the writer. The blurb is already
+  // capped at 500 upstream, so twenty-five of them is a small prompt.
+  "{{ $('Render HTML').first().json.items.slice(0, 25).map((i, n) => (n + 1) + '. ' + String(i.blurb || '(no summary)')).join(String.fromCharCode(10)) }}",
 ].join('\n');
 
 const VALIDATE_CODE = `
