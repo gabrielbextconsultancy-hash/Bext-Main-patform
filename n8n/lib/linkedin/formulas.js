@@ -280,6 +280,16 @@ FORMULAS.forEach(function (f) { if (BY_GOAL[f.goal]) BY_GOAL[f.goal].push(f); })
 // human asks for those rather than the picker reaching for them unprompted.
 var AUTO_EXCLUDED = ['F6', 'F9', 'F13'];
 
+// Fully-automated posts (no human reviewing the text) must not invent a
+// first-person experience — a fabricated anecdote under a real name is a
+// credibility risk the human gate would otherwise catch. FACTUAL is the subset
+// that analyses or explains the source news without narrating a personal scene:
+// contrarian-with-receipts, explain-it-plainly, false-binary, diverging-curves,
+// paid-vs-free framework. The confession, emotional cold-open, year-over-year "I
+// changed", named-gratitude and self-proving formulas all imply lived experience
+// and are kept for human-reviewed cycles only.
+var FACTUAL = ['F10', 'F15', 'F18', 'F20', 'F8'];
+
 /**
  * Pick `count` distinct (formula, goal, pillar) triples for one generation job.
  *
@@ -294,23 +304,27 @@ var AUTO_EXCLUDED = ['F6', 'F9', 'F13'];
  * `pillars` is the voice profile's pillar list; `planPillar` is what the weekly
  * plan wants emphasised, if anything.
  */
-var pick = function (count, recent, pillars, planPillar) {
+var pick = function (count, recent, pillars, planPillar, factualOnly) {
   var n = count || 5;
   var used = recencyMap(recent);
   var out = [];
   var taken = {};
+  // In factual-only mode (no human reviewing the post) the whole pool is the
+  // FACTUAL subset, so no goal-bank or fallback can reach an anecdote formula.
+  var allow = factualOnly ? function (f) { return FACTUAL.indexOf(f.id) !== -1; } : function () { return true; };
+  var bankFor = function (list) { return (list || []).filter(allow); };
 
   var goals = ['comments', 'reposts', 'likes', 'saves'];
   for (var g = 0; g < goals.length && out.length < n; g++) {
-    var f = leastRecent(BY_GOAL[goals[g]], used, taken);
+    var f = leastRecent(bankFor(BY_GOAL[goals[g]]), used, taken);
     if (!f) continue;
     taken[f.id] = true;
     out.push({ formula: f.id, name: f.name, goal: f.goal, pillar: pillarFor(out.length, pillars, planPillar), shape: f.shape, why: f.why });
   }
 
-  // Any remaining variants: whatever is least recently used across the whole bank.
+  // Any remaining variants: whatever is least recently used across the allowed bank.
   while (out.length < n) {
-    var extra = leastRecent(FORMULAS, used, taken);
+    var extra = leastRecent(bankFor(FORMULAS), used, taken);
     if (!extra) break;
     taken[extra.id] = true;
     out.push({ formula: extra.id, name: extra.name, goal: extra.goal, pillar: pillarFor(out.length, pillars, planPillar), shape: extra.shape, why: extra.why });
@@ -367,4 +381,4 @@ var formulaPromptBlock = function (choice) {
   return lines.join('\n');
 };
 
-module.exports = { FORMULAS: FORMULAS, BY_ID: BY_ID, BY_GOAL: BY_GOAL, AUTO_EXCLUDED: AUTO_EXCLUDED, pick: pick, formulaPromptBlock: formulaPromptBlock };
+module.exports = { FORMULAS: FORMULAS, BY_ID: BY_ID, BY_GOAL: BY_GOAL, AUTO_EXCLUDED: AUTO_EXCLUDED, FACTUAL: FACTUAL, pick: pick, formulaPromptBlock: formulaPromptBlock };

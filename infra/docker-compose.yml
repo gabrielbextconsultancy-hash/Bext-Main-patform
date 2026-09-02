@@ -210,6 +210,10 @@ services:
       # Content generation → LinkedIn. Unset defaults to manual publishing (the
       # cron nudges Teams, a human posts). publora/linkedin turn on auto-posting.
       LINKEDIN_PUBLISH_MODE: ${LINKEDIN_PUBLISH_MODE:-manual}
+      # When "1", the drafter uses only factual formulas (no invented first-person
+      # anecdotes) even for human-reviewed cycles — a trust-building setting while
+      # the client watches the output. Auto-mode cycles are factual regardless.
+      CONTENT_FACTUAL_ONLY: ${CONTENT_FACTUAL_ONLY:-}
       PUBLORA_API_KEY: ${PUBLORA_API_KEY:-}
       LINKEDIN_PLATFORM_ID: ${LINKEDIN_PLATFORM_ID:-}
       LINKEDIN_API_TOKEN: ${LINKEDIN_API_TOKEN:-}

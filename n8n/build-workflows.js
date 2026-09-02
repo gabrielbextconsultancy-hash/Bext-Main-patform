@@ -5850,7 +5850,8 @@ const voice = merge(voiceRow);
 // Two variants: the recommended one earns comments (the reaction that compounds
 // into reach), the alternative earns saves. Distinct formulas, chosen away from
 // anything used recently.
-const picks = pick(2, recent, voice.pillars, topic.pillar || null);
+const factualOnly = cycle.auto === true || $env.CONTENT_FACTUAL_ONLY === '1';
+const picks = pick(2, recent, voice.pillars, topic.pillar || null, factualOnly);
 const wantGoals = ['comments', 'saves'];
 const chosen = wantGoals.map((g, i) => picks[i] || picks[0]).slice(0, 2);
 
@@ -5975,7 +5976,7 @@ RETURNING id, human_perspective, selected_topic_id`,
           // the cycle, the selected topic, the voice profile, and the formulas
           // used in the last fortnight so the picker can avoid repeating a shape.
           query: `SELECT
-  c.id AS cycle_id, c.human_perspective,
+  c.id AS cycle_id, c.human_perspective, c.auto,
   t.id AS topic_id, t.title AS topic_title, t.angle AS topic_angle,
   t.article_ids,
   (SELECT to_json(v) FROM linkedin_voice v WHERE v.id = 1) AS voice,
@@ -6019,7 +6020,7 @@ WHERE t.id = $1`,
 const sources = $input.all().map(i => i.json).filter(s => s && s.article_id);
 if (!ctxRow || !ctxRow.cycle_id) return [];
 const first = sources[0] ? Object.assign({}, sources[0]) : {};
-first.__cycle = { id: ctxRow.cycle_id, human_perspective: ctxRow.human_perspective };
+first.__cycle = { id: ctxRow.cycle_id, human_perspective: ctxRow.human_perspective, auto: ctxRow.auto === true };
 first.__topic = { id: ctxRow.topic_id, title: ctxRow.topic_title, angle: ctxRow.topic_angle, pillar: null };
 first.__voice = ctxRow.voice || {};
 first.__recent = ctxRow.recent || [];
